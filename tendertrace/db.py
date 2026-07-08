@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+from contextlib import contextmanager
+import json
+import sqlite3
+from pathlib import Path
+from typing import Iterator
+
+from tendertrace.config import Settings
+
+
+SCHEMA_VERSION = 7
+
+
+DDL = (
+    """
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS subscriptions (
+        id TEXT PRIMARY KEY,
+        original_query TEXT NOT NULL,
+        bidql_json TEXT NOT NULL,
+        schedule_kind TEXT NOT NULL,
+        cron TEXT,
+        timezone TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_run_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ingest_subscriptions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        topics_json TEXT NOT NULL DEFAULT '[]',
+        regions_json TEXT NOT NULL DEFAULT '[]',
+        cron TEXT NOT NULL,
+        timezone TEXT NOT NULL,
+        window_days INTEGER NOT NULL DEFAULT 30,
+        max_pages INTEGER NOT NULL DEFAULT 1,
+        max_results INTEGER NOT NULL DEFAULT 20,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_run_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS runs (
+        id TEXT PRIMARY KEY,
+        subscription_id TEXT,
+        original_query TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        window_start TEXT,
+        window_end TEXT,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        finished_at TEXT,
+        output_docx_path TEXT,
+        stats_json TEXT NOT NULL DEFAULT '{}',
+        error TEXT,
+        FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS notices (
+        id TEXT PRIMARY KEY,
+        source_site TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        canonical_url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        publish_time TEXT,
+        region TEXT,
+        purchaser TEXT,
+        content_text TEXT,
+        core_content TEXT,
+        attachments_json TEXT NOT NULL DEFAULT '[]',
+        fields_json TEXT NOT NULL DEFAULT '{}',
+        snapshot_sha256 TEXT,
+        simhash64 TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS clusters (
+        cluster_key TEXT PRIMARY KEY,
+        primary_notice_id TEXT,
+        project_no TEXT,
+        title_norm TEXT,
+        publish_time TEXT,
+        related_sources_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (primary_notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS evidence_items (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        cluster_key TEXT NOT NULL,
+        source_site TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        snapshot_sha256 TEXT NOT NULL,
+        excerpt TEXT NOT NULL,
+        attachments_json TEXT NOT NULL DEFAULT '[]',
+        fact_checks_json TEXT NOT NULL DEFAULT '[]',
+        quality_score REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS attachment_snapshots (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        cluster_key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        type TEXT,
+        status TEXT NOT NULL,
+        local_path TEXT,
+        sha256 TEXT,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        text_excerpt TEXT,
+        text_length INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS sent_history (
+        subscription_id TEXT NOT NULL,
+        cluster_key TEXT NOT NULL,
+        first_sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+        run_id TEXT NOT NULL,
+        docx_path TEXT,
+        PRIMARY KEY (subscription_id, cluster_key),
+        FOREIGN KEY (subscription_id) REFERENCES subscriptions(id),
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS adapter_registry (
+        site TEXT NOT NULL,
+        version TEXT NOT NULL,
+        contract_json TEXT NOT NULL,
+        fixture_hash TEXT,
+        drift_score REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (site, version)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS run_checkpoints (
+        run_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        node TEXT NOT NULL,
+        state_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (run_id, seq)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS trace_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        node TEXT,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (run_id, seq)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS outbox_messages (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        subscription_id TEXT,
+        docx_path TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ready',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (run_id) REFERENCES runs(id),
+        FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS model_audits (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT,
+        status TEXT NOT NULL,
+        latency_ms INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        prompt_sha256 TEXT,
+        response_sha256 TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS notice_embeddings (
+        notice_id TEXT PRIMARY KEY,
+        model TEXT NOT NULL,
+        dim INTEGER NOT NULL,
+        text_sha256 TEXT NOT NULL,
+        vector_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+)
+
+
+FTS_DDL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS notices_fts USING fts5(
+    notice_id UNINDEXED,
+    title,
+    content_text
+)
+"""
+
+
+INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_runs_subscription ON runs(subscription_id)",
+    "CREATE INDEX IF NOT EXISTS idx_notices_publish_time ON notices(publish_time)",
+    "CREATE INDEX IF NOT EXISTS idx_notices_source_site ON notices(source_site)",
+    "CREATE INDEX IF NOT EXISTS idx_clusters_project_no ON clusters(project_no)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_items_cluster ON evidence_items(cluster_key)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_items_notice ON evidence_items(notice_id)",
+    "CREATE INDEX IF NOT EXISTS idx_attachment_snapshots_notice ON attachment_snapshots(notice_id)",
+    "CREATE INDEX IF NOT EXISTS idx_attachment_snapshots_cluster ON attachment_snapshots(cluster_key)",
+    "CREATE INDEX IF NOT EXISTS idx_run_checkpoints_run ON run_checkpoints(run_id, seq)",
+    "CREATE INDEX IF NOT EXISTS idx_trace_events_run ON trace_events(run_id, seq)",
+    "CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_messages(status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_model_audits_run ON model_audits(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_model_audits_status ON model_audits(status)",
+    "CREATE INDEX IF NOT EXISTS idx_ingest_subscriptions_status ON ingest_subscriptions(status)",
+    "CREATE INDEX IF NOT EXISTS idx_notice_embeddings_model ON notice_embeddings(model)",
+)
+
+REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
+    "notices": (
+        "purchaser TEXT",
+        "core_content TEXT",
+        "attachments_json TEXT NOT NULL DEFAULT '[]'",
+    ),
+}
+
+
+def connect(db_path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    return conn
+
+
+@contextmanager
+def connection(settings: Settings) -> Iterator[sqlite3.Connection]:
+    settings.ensure_directories()
+    conn = connect(settings.db_path)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def init_db(settings: Settings) -> None:
+    settings.ensure_directories()
+    with connection(settings) as conn:
+        for statement in DDL:
+            conn.execute(statement)
+        _ensure_required_columns(conn)
+        _ensure_fts(conn)
+        for statement in INDEXES:
+            conn.execute(statement)
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)",
+            (SCHEMA_VERSION,),
+        )
+
+
+def database_health(settings: Settings) -> dict[str, object]:
+    if not settings.db_path.exists():
+        return {"initialized": False, "path": str(settings.db_path)}
+    with connection(settings) as conn:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        ).fetchall()
+        migrations = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
+    return {
+        "initialized": True,
+        "path": str(settings.db_path),
+        "sqlite_user_version": version,
+        "schema_versions": [row["version"] for row in migrations],
+        "tables": [row["name"] for row in tables],
+    }
+
+
+def json_dumps(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _ensure_required_columns(conn: sqlite3.Connection) -> None:
+    for table, columns in REQUIRED_COLUMNS.items():
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for column in columns:
+            name = column.split(" ", 1)[0]
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column}")
+
+
+def _ensure_fts(conn: sqlite3.Connection) -> bool:
+    try:
+        conn.execute(FTS_DDL)
+        return True
+    except sqlite3.OperationalError:
+        return False

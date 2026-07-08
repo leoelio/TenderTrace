@@ -1,0 +1,2 @@
+"""Word report generation."""
+
