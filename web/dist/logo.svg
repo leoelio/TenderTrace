@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title>TenderTrace</title>
+  <rect width="256" height="256" rx="16" fill="#0b376f"/>
+  <path d="M42 58h172v34H138v108h-36V92H42z" fill="#fff"/>
+  <path d="M148 110h64v34h-28v56h-36z" fill="#fff"/>
+</svg>

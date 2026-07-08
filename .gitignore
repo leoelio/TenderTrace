@@ -25,7 +25,7 @@ outbox/
 snapshots/
 traces/
 logs/
-dist/
+/dist/
 *.docx
 *.mp4
 *.mov
@@ -38,3 +38,4 @@ dist/
 
 # Frontend dependencies
 web/node_modules/
+

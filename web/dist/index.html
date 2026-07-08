@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TenderTrace 工作台</title>
+    <link rel="icon" href="/logo.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <img class="brand-logo" src="/logo.svg" alt="TenderTrace" />
+          <div>
+            <strong>TenderTrace</strong>
+            <span>招投标智能聚合平台</span>
+          </div>
+        </div>
+
+        <nav class="topnav" aria-label="主导航">
+          <button class="nav-tab active" type="button" data-view="workbenchView">工作台</button>
+          <button class="nav-tab" type="button" data-view="historyView">历史运行</button>
+          <button class="nav-tab" type="button" data-view="subscriptionsView">订阅管理</button>
+          <button class="nav-tab" type="button" data-view="sourcesView">数据源</button>
+          <button class="nav-tab" type="button" data-view="evaluationView">Agent评测</button>
+          <button class="nav-tab" type="button" data-view="settingsView">设置</button>
+        </nav>
+
+        <div class="topbar-actions">
+          <span id="apiStatus" class="status-dot status-muted"></span>
+          <span id="apiStatusText">连接中</span>
+          <button
+            id="notificationButton"
+            class="icon-button"
+            type="button"
+            title="通知"
+            aria-label="通知"
+            aria-expanded="false"
+            aria-controls="notificationMenu"
+          >
+            <span id="notificationBadge" hidden>0</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16zM9 21h6"></path></svg>
+          </button>
+          <button
+            id="themeToggleButton"
+            class="icon-button"
+            type="button"
+            title="深色模式"
+            aria-label="深色模式"
+            aria-pressed="false"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8 8 0 1 1 11.2 3 6.5 6.5 0 0 0 21 12.8z"></path></svg>
+          </button>
+          <button
+            id="helpButton"
+            class="icon-button"
+            type="button"
+            title="帮助"
+            aria-label="帮助"
+            aria-expanded="false"
+            aria-controls="helpPanel"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.8 9a2.2 2.2 0 1 1 3.6 1.7c-.9.7-1.4 1.1-1.4 2.3"></path><path d="M12 17h.01"></path></svg>
+          </button>
+          <button
+            id="userMenuButton"
+            class="user-chip"
+            type="button"
+            aria-label="账户菜单"
+            aria-expanded="false"
+            aria-controls="userMenu"
+          >
+            <span id="userLabel">admin</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+
+          <div id="notificationMenu" class="topbar-popover notification-popover" hidden>
+            <div class="popover-heading">
+              <strong>通知</strong>
+              <button id="refreshNotificationsButton" class="ghost-button" type="button">刷新</button>
+            </div>
+            <div id="notificationList" class="popover-list empty-state">加载中</div>
+          </div>
+
+          <div id="helpPanel" class="topbar-popover help-popover" hidden>
+            <div class="popover-heading">
+              <strong>帮助</strong>
+              <button class="ghost-button" type="button" data-close-popover>关闭</button>
+            </div>
+            <div id="helpPanelContent" class="popover-list"></div>
+          </div>
+
+          <div id="userMenu" class="topbar-popover user-popover" hidden>
+            <div class="popover-heading">
+              <strong>账户</strong>
+              <button class="ghost-button" type="button" data-close-popover>关闭</button>
+            </div>
+            <div id="userMenuContent" class="popover-list"></div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page">
+        <section id="workbenchView" class="view active">
+          <div class="workbench-grid">
+            <section class="panel chat-panel" aria-labelledby="queryTitle">
+              <div id="chatStream" class="chat-stream" aria-live="polite">
+                <article class="message message-assistant">
+                  <span class="avatar bot-avatar">TT</span>
+                  <div class="bubble">
+                    <strong>好的，我会为你检索招投标信息。</strong>
+                    <p>输入自然语言需求后，我会解析区域、主题、时间、频率，并生成可下载 Word。</p>
+                  </div>
+                </article>
+              </div>
+
+              <form id="runForm" class="composer">
+                <label class="sr-only" for="queryInput">自然语言问题</label>
+                <textarea
+                  id="queryInput"
+                  name="query"
+                  rows="3"
+                  spellcheck="false"
+                  required
+                >最近36个月杭州市的空调或者服务器投标信息都有哪些</textarea>
+
+                <div id="intentPreview" class="intent-preview empty-state">等待解析</div>
+
+                <div class="composer-controls">
+                  <div class="segmented" role="group" aria-label="运行模式">
+                    <label>
+                      <input type="radio" name="actionMode" value="run" checked />
+                      <span>立即运行</span>
+                    </label>
+                    <label>
+                      <input type="radio" name="actionMode" value="subscribe" />
+                      <span>创建订阅</span>
+                    </label>
+                  </div>
+
+                  <div id="subscriptionControls" class="subscription-controls" hidden>
+                    <label>
+                      推送频率
+                      <select id="scheduleFrequency">
+                        <option value="daily">每天</option>
+                        <option value="weekly">每周一</option>
+                        <option value="monthly">每月1日</option>
+                        <option value="once_at">今天一次</option>
+                      </select>
+                    </label>
+                    <label>
+                      推送时间
+                      <input id="scheduleTime" type="time" value="09:00" />
+                    </label>
+                  </div>
+
+                  <div class="model-switch" role="group" aria-label="模型策略">
+                    <label><input type="radio" name="modelStrategy" value="config" checked /><span>跟随配置</span></label>
+                    <label><input type="radio" name="modelStrategy" value="rules" /><span>本地规则</span></label>
+                    <label><input type="radio" name="modelStrategy" value="local" /><span>本地模型</span></label>
+                    <label><input type="radio" name="modelStrategy" value="cloud" /><span>云端模型</span></label>
+                    <label><input type="radio" name="modelStrategy" value="hybrid" /><span>规则 + 云端</span></label>
+                  </div>
+
+                  <label class="depth-control">
+                    搜索深度
+                    <select id="searchDepthSelect">
+                      <option value="quick">快速：1页 / 5条</option>
+                      <option value="standard" selected>标准：3页 / 8条</option>
+                      <option value="deep">深入：5页 / 15条</option>
+                    </select>
+                    <small>覆盖常用来源，平衡速度与结果。</small>
+                  </label>
+
+                  <details class="advanced-limits">
+                    <summary>高级采集范围</summary>
+                    <div class="form-grid">
+                      <label>
+                        翻页数
+                        <input id="maxPagesInput" name="max_pages" type="number" min="1" max="8" value="3" />
+                      </label>
+                      <label>
+                        结果数
+                        <input id="maxResultsInput" name="max_results" type="number" min="1" max="30" value="8" />
+                      </label>
+                    </div>
+                  </details>
+
+                  <div class="button-stack">
+                    <button id="runButton" class="primary-button" type="submit">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                      开始运行
+                    </button>
+                    <button id="subscribeButton" class="secondary-button" type="button">创建订阅</button>
+                  </div>
+                </div>
+              </form>
+            </section>
+
+            <aside class="right-rail">
+              <section class="panel run-panel" aria-labelledby="runTitle">
+                <div class="panel-heading">
+                  <div>
+                    <h2 id="runTitle">运行进度</h2>
+                    <span class="panel-meta">真实 checkpoint 驱动</span>
+                  </div>
+                  <span id="runStatusBadge" class="badge badge-muted">未运行</span>
+                </div>
+
+                <ol class="pipeline" aria-label="任务流水线">
+                  <li id="stepIntent">
+                    <span class="step-dot"></span>
+                    <div>
+                      <strong>意图解析</strong>
+                      <span>区域、主题、时间、频率</span>
+                    </div>
+                  </li>
+                  <li id="stepCollect">
+                    <span class="step-dot"></span>
+                    <div>
+                      <strong>数据采集</strong>
+                      <span>多源检索与登录源</span>
+                    </div>
+                  </li>
+                  <li id="stepEvidence">
+                    <span class="step-dot"></span>
+                    <div>
+                      <strong>去重清洗</strong>
+                      <span>内容抽取与证据校验</span>
+                    </div>
+                  </li>
+                  <li id="stepReport">
+                    <span class="step-dot"></span>
+                    <div>
+                      <strong>生成报告</strong>
+                      <span>Word 与 outbox</span>
+                    </div>
+                  </li>
+                </ol>
+
+                <div class="metrics compact-metrics">
+                  <div class="metric metric-wide"><span>Run ID</span><strong id="runIdValue">-</strong></div>
+                  <div class="metric"><span>结果数</span><strong id="noticeCountValue">0</strong></div>
+                  <div class="metric"><span>Trace</span><strong id="traceCountValue">0</strong></div>
+                  <div class="metric"><span>证据通过</span><strong id="evidencePassedValue">0</strong></div>
+                  <div class="metric"><span>证据预警</span><strong id="evidenceWarningsValue">0</strong></div>
+                  <div class="metric"><span>附件正文</span><strong id="attachmentsExtractedValue">0</strong></div>
+                </div>
+              </section>
+
+              <section class="panel sources-panel" aria-labelledby="sourcesTitle">
+                <div class="panel-heading">
+                  <div>
+                    <h2 id="sourcesTitle">数据源状态</h2>
+                    <span class="panel-meta">公开源与登录源</span>
+                  </div>
+                  <button id="refreshSourcesButton" class="ghost-button" type="button">刷新</button>
+                </div>
+                <div id="sourceList" class="source-list empty-state">加载中</div>
+              </section>
+
+              <section class="panel model-panel" aria-labelledby="modelTitle">
+                <div class="panel-heading">
+                  <div>
+                    <h2 id="modelTitle">模型医生</h2>
+                    <span class="panel-meta">本地 / 云端连通性</span>
+                  </div>
+                  <button id="modelDoctorButton" class="ghost-button" type="button">重新检测</button>
+                </div>
+                <div id="modelStatus" class="source-list empty-state">Loading</div>
+                <div id="modelDoctorResult" class="source-list empty-state">Not checked</div>
+              </section>
+
+              <section class="panel output-panel" aria-labelledby="outputTitle">
+                <div class="panel-heading">
+                  <div>
+                    <h2 id="outputTitle">报告输出</h2>
+                    <span class="panel-meta">最新 Word</span>
+                  </div>
+                  <button id="refreshOutboxButton" class="ghost-button" type="button">刷新</button>
+                </div>
+                <div class="download-strip" id="latestDownload" hidden></div>
+              </section>
+            </aside>
+          </div>
+
+          <div class="bottom-grid">
+            <section class="panel subscription-panel" aria-labelledby="subscriptionTitle">
+              <div class="panel-heading">
+                <div>
+                  <h2 id="subscriptionTitle">我的订阅</h2>
+                  <span class="panel-meta">增量推送由 sent_history 控制</span>
+                </div>
+                <button id="refreshSubscriptionsButton" class="ghost-button" type="button">刷新</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>订阅名称</th>
+                      <th>查询条件</th>
+                      <th>频率</th>
+                      <th>状态</th>
+                      <th>最近运行</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="subscriptionBody">
+                    <tr><td colspan="6" class="empty-cell">加载中</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel outbox-panel" aria-labelledby="outboxTitle">
+              <div class="panel-heading">
+                <div>
+                  <h2 id="outboxTitle">Word 报告（Outbox）</h2>
+                  <span class="panel-meta">可下载、可追踪、可删除</span>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>文件名</th>
+                      <th>生成时间</th>
+                      <th>状态</th>
+                      <th>大小</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="outboxBody">
+                    <tr><td colspan="5" class="empty-cell">加载中</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="historyView" class="view">
+          <section class="panel page-panel">
+            <div class="panel-heading">
+              <div>
+                <h1>历史运行</h1>
+                <span class="panel-meta">运行记录、状态、报告和删除操作</span>
+              </div>
+              <button id="refreshRunsButton" class="ghost-button" type="button">刷新</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>问题</th>
+                    <th>状态</th>
+                    <th>结果数</th>
+                    <th>Trace</th>
+                    <th>开始时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="runHistoryBody">
+                  <tr><td colspan="6" class="empty-cell">加载中</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div class="history-detail-grid">
+            <section class="panel trace-panel" aria-labelledby="traceTitle">
+              <div class="panel-heading">
+                <div>
+                  <h2 id="traceTitle">事件流</h2>
+                  <span class="panel-meta">点击历史记录的“追踪”后加载</span>
+                </div>
+                <button id="refreshTraceButton" class="ghost-button" type="button">刷新</button>
+              </div>
+              <div id="traceTimeline" class="timeline empty-state">暂无事件</div>
+            </section>
+
+            <section class="panel checkpoint-panel" aria-labelledby="checkpointTitle">
+              <div class="panel-heading">
+                <div>
+                  <h2 id="checkpointTitle">检查点</h2>
+                  <span class="panel-meta"><span id="checkpointCount">0</span> 个节点</span>
+                </div>
+              </div>
+              <div id="checkpointList" class="checkpoint-list empty-state">暂无检查点</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="subscriptionsView" class="view">
+          <section class="panel page-panel">
+            <div class="panel-heading">
+              <div>
+                <h1>订阅管理</h1>
+                <span class="panel-meta">查看、手动触发、删除增量任务</span>
+              </div>
+              <button class="ghost-button" type="button" data-view="workbenchView">回到工作台创建</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>订阅名称</th>
+                    <th>查询条件</th>
+                    <th>频率</th>
+                    <th>状态</th>
+                    <th>最近运行</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="subscriptionPageBody">
+                  <tr><td colspan="6" class="empty-cell">加载中</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="sourcesView" class="view">
+          <section class="panel page-panel">
+            <div class="panel-heading">
+              <div>
+                <h1>数据源</h1>
+                <span class="panel-meta">公开网站、登录源、模型连接状态</span>
+              </div>
+              <button class="ghost-button" type="button" data-refresh-sources>刷新</button>
+            </div>
+            <div id="sourcePageList" class="source-list source-grid empty-state">加载中</div>
+          </section>
+        </section>
+
+        <section id="evaluationView" class="view">
+          <section class="panel page-panel">
+            <div class="panel-heading">
+              <div>
+                <h1>Agent 评测</h1>
+                <span class="panel-meta">RAG、Agent、Harness、召回覆盖率与可追溯指标</span>
+              </div>
+              <button id="refreshEvaluationButton" class="primary-lite-button" type="button">运行评测</button>
+            </div>
+            <div id="evaluationSummary" class="eval-summary empty-state">等待评测</div>
+            <div class="eval-grid">
+              <div id="ragMetrics" class="eval-card"></div>
+              <div id="agentMetrics" class="eval-card"></div>
+              <div id="harnessMetrics" class="eval-card"></div>
+              <div id="recallMetrics" class="eval-card"></div>
+            </div>
+            <div class="eval-detail-grid">
+              <div class="eval-card">
+                <h2>Golden Cases</h2>
+                <div id="evaluationCases" class="case-list empty-state">暂无用例</div>
+              </div>
+              <div class="eval-card">
+                <h2>评测说明</h2>
+                <div id="evaluationNotes" class="case-list empty-state">暂无说明</div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="settingsView" class="view">
+          <section class="panel page-panel">
+            <div class="panel-heading">
+              <div>
+                <h1>设置</h1>
+                <span class="panel-meta">运行环境、目录和模型配置摘要</span>
+              </div>
+            </div>
+            <div id="settingsSummary" class="settings-grid empty-state">加载中</div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <span><span id="footerStatusDot" class="status-dot status-muted"></span> 系统状态：<span id="footerStatusText">连接中</span></span>
+        <span>版本：v0.1.0</span>
+        <span>时区：<span id="footerTimezoneText">-</span></span>
+        <span>© 2026 TenderTrace</span>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
