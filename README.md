@@ -76,16 +76,6 @@ tests/                   # 单元测试
 docs/                    # 设计、操作、教学和评测文档
 ```
 
-## 交付文档
-
-主要交付文档路径：
-
-- `docs/design/详设文档.md`
-- `docs/operation/操作文档.md`
-- `docs/demo/Demo演示脚本.md`
-- `docs/delivery/交付清单.md`
-- `docs/delivery/完成度审计.md`
-
 ## 快速开始
 
 ```powershell
@@ -375,16 +365,6 @@ web/dist/                # Static Web UI
 tests/                   # Unit tests
 docs/                    # Design, operation, teaching, and evaluation docs
 ```
-
-## Delivery Documents
-
-Main delivery document paths:
-
-- `docs/design/详设文档.md`
-- `docs/operation/操作文档.md`
-- `docs/demo/Demo演示脚本.md`
-- `docs/delivery/交付清单.md`
-- `docs/delivery/完成度审计.md`
 
 ## Quick Start
 
