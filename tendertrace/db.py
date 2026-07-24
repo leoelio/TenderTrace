@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 
 
 DDL = (
@@ -222,6 +222,38 @@ DDL = (
         FOREIGN KEY (notice_id) REFERENCES notices(id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS user_activity_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'admin',
+        event_type TEXT NOT NULL,
+        target TEXT,
+        label TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        created_date TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS weekly_reports (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'admin',
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        report_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (user_id, week_start, week_end)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_memory_profiles (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'admin',
+        profile_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (user_id)
+    )
+    """,
 )
 
 
@@ -250,6 +282,10 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_model_audits_status ON model_audits(status)",
     "CREATE INDEX IF NOT EXISTS idx_ingest_subscriptions_status ON ingest_subscriptions(status)",
     "CREATE INDEX IF NOT EXISTS idx_notice_embeddings_model ON notice_embeddings(model)",
+    "CREATE INDEX IF NOT EXISTS idx_user_activity_user_date ON user_activity_events(user_id, created_date)",
+    "CREATE INDEX IF NOT EXISTS idx_user_activity_type_time ON user_activity_events(event_type, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_weekly_reports_user_period ON weekly_reports(user_id, week_start, week_end)",
+    "CREATE INDEX IF NOT EXISTS idx_user_memory_profiles_user ON user_memory_profiles(user_id)",
 )
 
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {

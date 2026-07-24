@@ -1,4 +1,4 @@
-﻿# Python caches
+# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -13,29 +13,19 @@ venv/
 .env.*
 !.env.example
 secrets/
-*.pem
-*.key
-*.crt
-*storage_state*.json
 
-# Runtime data and generated artifacts
+# Runtime data
 data/
 outputs/
 outbox/
 snapshots/
 traces/
 logs/
-/dist/
-*.docx
-*.mp4
-*.mov
-*.mkv
-*.avi
-*.webm
-*.zip
-*.sqlite3
-*.db
+dist/
 
-# Frontend dependencies
+# Frontend
 web/node_modules/
 
+# Documents and office temporary files
+~$*.docx
+*.tmp

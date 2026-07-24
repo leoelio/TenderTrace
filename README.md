@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P23</strong> · Gold-set Recall@K · Local-first Retrieval · Ingest Subscriptions · Optional Vector Search
+  <strong>Current stage: P24</strong> · User Memory Knowledge Base · Generative Advice · Local-first Retrieval · Gold-set Recall@K
 </p>
 
 ---
@@ -35,6 +35,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - Word 报告：输出标题、发布时间、来源链接、核心内容和附件链接。
 - 模型增强：支持规则模式、本地 Ollama 模式、OpenAI 兼容云端模式。
 - Agent 评测：覆盖 RAG、Agent、Harness、Recall Proxy、金标 Recall@K。
+- 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议。
 - 可选向量检索：安装 `.[vector]` 后可用 BGE 类模型生成本地向量，与 FTS 做 RRF 融合。
 
 ## 技术栈
@@ -67,6 +68,7 @@ tendertrace/
   scheduling/            # 用户订阅、采集订阅、sent_history
   vault/                 # 千里马 storage_state 管理
   db.py                  # SQLite schema 与迁移
+  memory.py              # 用户记忆库、知识画像和生成式建议
   retrieval.py           # FTS5 / LIKE / 向量融合检索
   runner.py              # 一次完整运行流程
   gold.py                # 金标 Recall@K 评测
@@ -187,6 +189,12 @@ python -m tendertrace model-status
 python -m tendertrace model-doctor
 ```
 
+生成用户记忆周报与画像快照：
+
+```powershell
+python -m tendertrace memory-weekly --days 7 --save
+```
+
 千里马登录态保存与验证：
 
 ```powershell
@@ -218,6 +226,7 @@ Web UI 覆盖以下视图：
 - 订阅管理：管理用户定时报告订阅。
 - 数据源：查看公开源和千里马登录态状态。
 - Agent 评测：查看 RAG、Agent、Harness、Recall、金标评测和向量覆盖率。
+- 用户记忆：查看使用画像、知识偏好、风险信号和生成式行动建议。
 - 设置：查看运行配置与模型连通性。
 
 ## 本地库检索流程
@@ -283,8 +292,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P23
-- 103 unit tests pass.
+- Current stage: P24
+- 105 unit tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -325,6 +334,7 @@ The current architecture is local-first: background ingestion continuously store
 - Word report generation with title, publish time, source link, core content, and attachment links.
 - Rule-only, local Ollama, and OpenAI-compatible cloud model enhancement modes.
 - Agent evaluation covering RAG, agent execution, intent harness, recall proxy, and gold Recall@K.
+- User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then generates preference profiles, risk signals, and actionable advice.
 - Optional vector retrieval via `sentence-transformers`, fused with FTS by RRF.
 
 ## Tech Stack
@@ -357,6 +367,7 @@ tendertrace/
   scheduling/            # User subscriptions, ingest subscriptions, sent_history
   vault/                 # Qianlima storage_state vault
   db.py                  # SQLite schema and migrations
+  memory.py              # User memory, knowledge profile, and generated advice
   retrieval.py           # FTS5 / LIKE / vector-fused retrieval
   runner.py              # End-to-end run orchestration
   gold.py                # Gold-set Recall@K evaluation
@@ -477,6 +488,12 @@ python -m tendertrace model-status
 python -m tendertrace model-doctor
 ```
 
+Build and persist a user-memory weekly profile snapshot:
+
+```powershell
+python -m tendertrace memory-weekly --days 7 --save
+```
+
 Save and verify Qianlima login state:
 
 ```powershell
@@ -508,6 +525,7 @@ The Web UI includes:
 - Subscription management: manage scheduled user report subscriptions.
 - Data sources: inspect public sources and Qianlima login-state status.
 - Agent evaluation: inspect RAG, agent, harness, recall, gold-set metrics, and vector coverage.
+- User memory: inspect usage profiles, knowledge preferences, risk signals, and generated next-step advice.
 - Settings: inspect runtime configuration and model connectivity.
 
 ## Local-First Retrieval Flow
@@ -573,8 +591,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P23
-- 103 unit tests pass.
+- Current stage: P24
+- 105 unit tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

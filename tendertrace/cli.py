@@ -16,6 +16,7 @@ from tendertrace.ingest import run_ingest_cycle
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
+from tendertrace.memory import build_weekly_report, persist_weekly_report
 from tendertrace.runner import run_once
 from tendertrace.runtime.bus import EventBus
 from tendertrace.runtime.checkpoint import SqliteCheckpointer
@@ -187,6 +188,23 @@ def cmd_gold_candidates(args: argparse.Namespace) -> int:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     payload["output_path"] = str(path)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_memory_weekly(args: argparse.Namespace) -> int:
+    settings = _settings()
+    init_db(settings)
+    report = build_weekly_report(settings, user_id=args.user_id, days=args.days)
+    if args.save:
+        report = persist_weekly_report(settings, report)
+    if args.out:
+        path = Path(args.out)
+        if not path.is_absolute():
+            path = settings.workspace_root / path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["output_path"] = str(path)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -488,6 +506,15 @@ def build_parser() -> argparse.ArgumentParser:
     gold_candidates.add_argument("--max-pages", type=int, default=1)
     gold_candidates.add_argument("--max-results", type=int, default=20)
     gold_candidates.set_defaults(func=cmd_gold_candidates)
+    memory_weekly = sub.add_parser(
+        "memory-weekly",
+        help="Build the local user-memory weekly report from recorded activity events.",
+    )
+    memory_weekly.add_argument("--user-id", default="admin")
+    memory_weekly.add_argument("--days", type=int, default=7)
+    memory_weekly.add_argument("--save", action="store_true", help="Persist this report snapshot.")
+    memory_weekly.add_argument("--out", help="Optional JSON output path.")
+    memory_weekly.set_defaults(func=cmd_memory_weekly)
     create_ingest_sub = sub.add_parser(
         "create-ingest-subscription",
         help="Create a background ingest subscription that only grows the local notices DB.",

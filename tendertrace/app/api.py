@@ -13,6 +13,12 @@ from tendertrace.evaluation import build_agent_evaluation_report
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
+from tendertrace.memory import (
+    build_weekly_report,
+    load_memory_profile,
+    persist_weekly_report,
+    record_activity,
+)
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import run_once
 from tendertrace.runtime.checkpoint import SqliteCheckpointer
@@ -107,7 +113,7 @@ def create_app():
         now_raw = request.get("now")
         now = datetime.fromisoformat(str(now_raw)) if now_raw else None
         max_pages, max_results = _parse_limits(request)
-        return run_once(
+        result = run_once(
             settings=settings,
             query=query,
             now=now,
@@ -115,6 +121,14 @@ def create_app():
             max_results=max_results,
             model_strategy=_model_strategy_from_request(request),
         ).to_dict()
+        record_activity(
+            settings,
+            event_type="run_start",
+            target="api",
+            label=query,
+            metadata={"query": query, "run_id": result.get("run_id"), "sync": True},
+        )
+        return result
 
     @app.post("/api/runs/start")
     def start_run_api(
@@ -141,6 +155,13 @@ def create_app():
             daemon=True,
         )
         thread.start()
+        record_activity(
+            settings,
+            event_type="run_start",
+            target="web",
+            label=query,
+            metadata={"query": query, "run_id": run_id, "async": True},
+        )
         return {"run_id": run_id, "status": "queued"}
 
     @app.post("/api/subscriptions")
@@ -165,6 +186,13 @@ def create_app():
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if app.state.scheduler is not None:
             schedule_subscription(app.state.scheduler, settings, subscription)
+        record_activity(
+            settings,
+            event_type="subscription_create",
+            target="web",
+            label=query,
+            metadata={"query": query, "subscription_id": subscription.id},
+        )
         return subscription.to_dict()
 
     @app.get("/api/subscriptions")
@@ -220,9 +248,17 @@ def create_app():
     @app.post("/api/subscriptions/{subscription_id}/run")
     def run_subscription_api(subscription_id: str) -> dict[str, object]:
         try:
-            return run_subscription(settings, subscription_id=subscription_id).to_dict()
+            result = run_subscription(settings, subscription_id=subscription_id).to_dict()
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="subscription_run",
+            target="subscription",
+            label=subscription_id,
+            metadata={"subscription_id": subscription_id, "run_id": result.get("run_id")},
+        )
+        return result
 
     @app.delete("/api/subscriptions/{subscription_id}")
     def delete_subscription_api(subscription_id: str) -> dict[str, object]:
@@ -247,6 +283,13 @@ def create_app():
                 scheduler.remove_job(f"subscription:{subscription_id}")
             except Exception:
                 pass
+        record_activity(
+            settings,
+            event_type="subscription_delete",
+            target="subscription",
+            label=subscription_id,
+            metadata={"subscription_id": subscription_id},
+        )
         return {"status": "deleted", "id": subscription_id}
 
     @app.get("/api/runs")
@@ -302,6 +345,13 @@ def create_app():
                 """,
                 (run_id,),
             )
+        record_activity(
+            settings,
+            event_type="run_delete",
+            target="run",
+            label=run_id,
+            metadata={"run_id": run_id},
+        )
         return {"status": "deleted", "id": run_id}
 
     @app.get("/api/outbox")
@@ -349,6 +399,13 @@ def create_app():
             raise HTTPException(status_code=400, detail="invalid outbox path")
         if not path.exists():
             raise HTTPException(status_code=404, detail="file not found")
+        record_activity(
+            settings,
+            event_type="download",
+            target="outbox",
+            label=path.name,
+            metadata={"filename": path.name},
+        )
         return FileResponse(path, filename=path.name)
 
     @app.delete("/api/outbox/{filename}")
@@ -367,11 +424,70 @@ def create_app():
             for row in rows:
                 if Path(row["docx_path"]).name == filename:
                     conn.execute("DELETE FROM outbox_messages WHERE id = ?", (row["id"],))
+        record_activity(
+            settings,
+            event_type="outbox_delete",
+            target="outbox",
+            label=filename,
+            metadata={"filename": filename, "file_deleted": deleted_file},
+        )
         return {"status": "deleted", "filename": filename, "file_deleted": deleted_file}
 
     @app.get("/api/evaluations/agent")
     def agent_evaluation() -> dict[str, object]:
         return build_agent_evaluation_report(settings)
+
+    @app.post("/api/memory/events")
+    def memory_event(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        event_type = str(request.get("event_type") or "").strip()
+        if not event_type:
+            raise HTTPException(status_code=400, detail="event_type is required")
+        metadata = request.get("metadata")
+        if metadata is not None and not isinstance(metadata, dict):
+            raise HTTPException(status_code=400, detail="metadata must be an object")
+        try:
+            return record_activity(
+                settings,
+                event_type=event_type,
+                target=str(request.get("target") or ""),
+                label=str(request.get("label") or ""),
+                metadata=metadata,
+                user_id=str(request.get("user_id") or "admin"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/memory/weekly")
+    def weekly_memory(user_id: str = "admin", days: int = 7, save: bool = False) -> dict[str, object]:
+        if days < 1 or days > 31:
+            raise HTTPException(status_code=400, detail="days must be between 1 and 31")
+        report = build_weekly_report(settings, user_id=user_id, days=days)
+        if save:
+            return persist_weekly_report(settings, report)
+        return report
+
+    @app.post("/api/memory/weekly")
+    def save_weekly_memory(request: dict[str, object] | None = Body(default=None)) -> dict[str, object]:
+        request = request or {}
+        try:
+            days = int(request.get("days") or 7)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="days must be an integer") from exc
+        if days < 1 or days > 31:
+            raise HTTPException(status_code=400, detail="days must be between 1 and 31")
+        report = build_weekly_report(
+            settings,
+            user_id=str(request.get("user_id") or "admin"),
+            days=days,
+        )
+        return persist_weekly_report(settings, report)
+
+    @app.get("/api/memory/profile")
+    def memory_profile(user_id: str = "admin") -> dict[str, object]:
+        profile = load_memory_profile(settings, user_id=user_id)
+        if profile is None:
+            return {"user_id": user_id, "status": "empty"}
+        return {"status": "ready", **profile}
 
     @app.get("/api/traces/{run_id}")
     def trace_events(run_id: str) -> dict[str, object]:
