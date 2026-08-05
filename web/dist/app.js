@@ -7,9 +7,11 @@ const state = {
   outbox: [],
   subscriptions: [],
   sources: [],
-  model: null,
-  modelDoctor: null,
   evaluation: null,
+  memory: null,
+  outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
+  runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
+  actionModeTouched: false,
   theme: "light",
 };
 
@@ -25,6 +27,11 @@ const pipelineStages = [
   { key: "evidence", label: "去重清洗", detail: "清洗、去重、证据校验" },
   { key: "report", label: "生成报告", detail: "Word 与 outbox" },
 ];
+
+const collapsedLimits = {
+  outbox: 6,
+  runs: 8,
+};
 
 const el = {
   apiStatus: document.querySelector("#apiStatus"),
@@ -48,6 +55,10 @@ const el = {
   form: document.querySelector("#runForm"),
   queryInput: document.querySelector("#queryInput"),
   chatStream: document.querySelector("#chatStream"),
+  smartStartPanel: document.querySelector("#smartStartPanel"),
+  smartStartMeta: document.querySelector("#smartStartMeta"),
+  smartLatestReport: document.querySelector("#smartLatestReport"),
+  smartRecommendation: document.querySelector("#smartRecommendation"),
   intentPreview: document.querySelector("#intentPreview"),
   searchDepthSelect: document.querySelector("#searchDepthSelect"),
   scheduleFrequency: document.querySelector("#scheduleFrequency"),
@@ -65,24 +76,25 @@ const el = {
   evidenceWarningsValue: document.querySelector("#evidenceWarningsValue"),
   attachmentsExtractedValue: document.querySelector("#attachmentsExtractedValue"),
   latestDownload: document.querySelector("#latestDownload"),
+  memoryDigest: document.querySelector("#memoryDigest"),
   traceTimeline: document.querySelector("#traceTimeline"),
   checkpointList: document.querySelector("#checkpointList"),
   checkpointCount: document.querySelector("#checkpointCount"),
-  outboxBody: document.querySelector("#outboxBody"),
   refreshTraceButton: document.querySelector("#refreshTraceButton"),
   refreshOutboxButton: document.querySelector("#refreshOutboxButton"),
-  refreshSubscriptionsButton: document.querySelector("#refreshSubscriptionsButton"),
   refreshSourcesButton: document.querySelector("#refreshSourcesButton"),
   refreshRunsButton: document.querySelector("#refreshRunsButton"),
   refreshEvaluationButton: document.querySelector("#refreshEvaluationButton"),
-  modelDoctorButton: document.querySelector("#modelDoctorButton"),
-  subscriptionBody: document.querySelector("#subscriptionBody"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
+  runSearchInput: document.querySelector("#runSearchInput"),
+  runStatusFilter: document.querySelector("#runStatusFilter"),
+  runSortSelect: document.querySelector("#runSortSelect"),
+  toggleRunsButton: document.querySelector("#toggleRunsButton"),
+  clearRunFiltersButton: document.querySelector("#clearRunFiltersButton"),
+  runListHint: document.querySelector("#runListHint"),
   sourceList: document.querySelector("#sourceList"),
   sourcePageList: document.querySelector("#sourcePageList"),
-  modelStatus: document.querySelector("#modelStatus"),
-  modelDoctorResult: document.querySelector("#modelDoctorResult"),
   evaluationSummary: document.querySelector("#evaluationSummary"),
   ragMetrics: document.querySelector("#ragMetrics"),
   agentMetrics: document.querySelector("#agentMetrics"),
@@ -90,6 +102,19 @@ const el = {
   recallMetrics: document.querySelector("#recallMetrics"),
   evaluationCases: document.querySelector("#evaluationCases"),
   evaluationNotes: document.querySelector("#evaluationNotes"),
+  refreshMemoryButton: document.querySelector("#refreshMemoryButton"),
+  saveMemoryButton: document.querySelector("#saveMemoryButton"),
+  memorySummary: document.querySelector("#memorySummary"),
+  memoryUsageMetrics: document.querySelector("#memoryUsageMetrics"),
+  memoryReportMetrics: document.querySelector("#memoryReportMetrics"),
+  memorySubscriptionMetrics: document.querySelector("#memorySubscriptionMetrics"),
+  memoryDailyMetrics: document.querySelector("#memoryDailyMetrics"),
+  memoryProfile: document.querySelector("#memoryProfile"),
+  memoryGeneratedAdvice: document.querySelector("#memoryGeneratedAdvice"),
+  memoryQueries: document.querySelector("#memoryQueries"),
+  memorySuggestions: document.querySelector("#memorySuggestions"),
+  memoryEvents: document.querySelector("#memoryEvents"),
+  memoryAnalysis: document.querySelector("#memoryAnalysis"),
   settingsSummary: document.querySelector("#settingsSummary"),
   toast: document.querySelector("#toast"),
 };
@@ -111,6 +136,66 @@ async function api(path, options = {}) {
     throw new Error(readApiError(text) || `HTTP ${response.status}`);
   }
   return response.json();
+}
+
+function trackActivity(eventType, detail = {}) {
+  const payload = JSON.stringify({
+    event_type: eventType,
+    target: detail.target || "",
+    label: detail.label || "",
+    metadata: detail.metadata || {},
+    user_id: el.userLabel?.textContent?.trim() || "admin",
+  });
+  if (navigator.sendBeacon) {
+    const blob = new Blob([payload], { type: "application/json" });
+    navigator.sendBeacon("/api/memory/events", blob);
+    return;
+  }
+  fetch("/api/memory/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload,
+    keepalive: true,
+  }).catch(() => {});
+}
+
+function trackClick(event) {
+  if (!(event.target instanceof Element)) return;
+  const target = event.target.closest("button, a");
+  if (!target) return;
+  const href = target.getAttribute("href") || "";
+  const action =
+    target.dataset.view ||
+    target.dataset.popoverView ||
+    target.dataset.runId ||
+    target.dataset.subscriptionId ||
+    target.id ||
+    href ||
+    target.className ||
+    "unknown";
+  trackActivity("click", {
+    target: String(action).slice(0, 120),
+    label: target.textContent.trim().slice(0, 120),
+    metadata: {
+      view: activeViewId(),
+      href,
+      button_id: target.id || "",
+    },
+  });
+  if (href.startsWith("/api/outbox/")) {
+    trackActivity("download", {
+      target: "outbox",
+      label: decodeURIComponent(href.split("/").pop() || ""),
+      metadata: {
+        view: activeViewId(),
+        href,
+      },
+    });
+  }
+}
+
+function activeViewId() {
+  return document.querySelector(".view.active")?.id || "workbenchView";
 }
 
 function readApiError(text) {
@@ -137,6 +222,16 @@ function statusLabel(status) {
     pass: "通过",
     warn: "提醒",
     skipped: "跳过",
+    click: "点击",
+    download: "下载",
+    run_start: "启动运行",
+    run_delete: "删除运行",
+    subscription_create: "创建订阅",
+    subscription_run: "触发订阅",
+    subscription_delete: "删除订阅",
+    outbox_delete: "删除文件",
+    weekly_report_view: "查看周报",
+    quick_example: "示例输入",
   };
   return labels[status] || status || labels.muted;
 }
@@ -235,6 +330,7 @@ function setRunning(isRunning) {
 }
 
 function showView(viewId) {
+  window.scrollTo(0, 0);
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("active", view.id === viewId);
   });
@@ -243,8 +339,12 @@ function showView(viewId) {
   });
   if (viewId === "historyView") refreshRuns().catch(toastError("历史运行加载失败"));
   if (viewId === "subscriptionsView") refreshSubscriptions().catch(toastError("订阅加载失败"));
-  if (viewId === "sourcesView") refreshSourcesAndModel().catch(toastError("数据源加载失败"));
+  if (viewId === "sourcesView") refreshSourcesPanel().catch(toastError("数据源加载失败"));
   if (viewId === "evaluationView") refreshEvaluation().catch(toastError("评测加载失败"));
+  if (viewId === "memoryView") {
+    trackActivity("weekly_report_view", { target: "memoryView", label: "用户记忆" });
+    refreshMemoryWeekly().catch(toastError("用户记忆加载失败"));
+  }
   if (viewId === "settingsView") refreshSettings().catch(toastError("设置加载失败"));
 }
 
@@ -398,23 +498,54 @@ function renderStats(stats = {}) {
   setText(el.attachmentsExtractedValue, stats.attachments_extracted ?? 0);
 }
 
+function renderLatestDownload(item) {
+  if (!el.latestDownload) return;
+  if (!item) {
+    el.latestDownload.hidden = false;
+    el.latestDownload.className = "download-strip empty-download";
+    el.latestDownload.innerHTML = `
+      <div>
+        <strong>暂无可下载报告</strong>
+        <span>完成一次运行后会同步到这里</span>
+      </div>
+    `;
+    return;
+  }
+  const rawName = item.name || fileName(item.outbox_path || "");
+  const name = escapeHtml(rawName);
+  const runId = item.run_id ? escapeHtml(item.run_id) : "";
+  const createdAt = escapeHtml(item.created_at || "刚刚生成");
+  const size = item.size ? ` · ${escapeHtml(formatBytes(item.size))}` : "";
+  const downloadUrl = item.download_url || `/api/outbox/${encodeURIComponent(rawName)}`;
+  el.latestDownload.hidden = false;
+  el.latestDownload.className = "download-strip";
+  el.latestDownload.innerHTML = `
+    <div class="download-main">
+      <strong title="${name}">${name}</strong>
+      <span>${createdAt}${size}${runId ? ` · Run ${runId}` : ""}</span>
+    </div>
+    <div class="action-group">
+      <a class="link-button" href="${escapeHtml(downloadUrl)}" data-download-outbox-name="${name}">下载</a>
+      ${runId ? `<button class="ghost-button" type="button" data-run-id="${runId}">追踪</button>` : ""}
+      <button class="danger-button" type="button" data-delete-outbox-name="${name}">删除</button>
+    </div>
+  `;
+}
+
 function renderRunSummary(result) {
   const run = normalizeRunDetail(result);
   state.currentRunId = run.run_id;
   setText(el.runIdValue, run.run_id || "-");
   renderStats({ ...run.stats, notice_count: run.notice_count, trace_events: run.trace_events });
   setRunStatus(run.status || "muted");
-  if (!run.outbox_path || !el.latestDownload) return;
+  if (!run.outbox_path) return;
   const name = fileName(run.outbox_path);
-  el.latestDownload.hidden = false;
-  el.latestDownload.innerHTML = `
-    <strong>${escapeHtml(name)}</strong>
-    <div class="action-group">
-      <a class="link-button" href="/api/outbox/${encodeURIComponent(name)}">下载</a>
-      <button class="ghost-button" type="button" data-run-id="${escapeHtml(run.run_id)}">追踪</button>
-      <button class="danger-button" type="button" data-delete-outbox-name="${escapeHtml(name)}">删除文件</button>
-    </div>
-  `;
+  renderLatestDownload({
+    name,
+    download_url: `/api/outbox/${encodeURIComponent(name)}`,
+    run_id: run.run_id,
+    created_at: "刚刚生成",
+  });
 }
 
 function renderTimeline(events) {
@@ -465,44 +596,105 @@ function renderCheckpoints(checkpoints) {
 }
 
 function renderOutbox(items) {
-  if (!el.outboxBody) return;
-  if (!items.length) {
-    el.outboxBody.innerHTML = '<tr><td colspan="5" class="empty-cell">暂无 Word 文件</td></tr>';
-    return;
-  }
-  el.outboxBody.innerHTML = items
-    .map((item) => {
-      const name = escapeHtml(item.name);
-      return `
-        <tr>
-          <td class="file-cell"><span class="file-name" title="${name}">${name}</span></td>
-          <td>${escapeHtml(item.created_at || "-")}</td>
-          <td><span class="badge badge-${escapeHtml(item.status || "muted")}">${escapeHtml(statusLabel(item.status))}</span></td>
-          <td>${escapeHtml(formatBytes(item.size))}</td>
-          <td>
-            <div class="action-group">
-              <a class="link-button" href="${escapeHtml(item.download_url)}">下载</a>
-              ${
-                item.run_id
-                  ? `<button class="ghost-button" type="button" data-run-id="${escapeHtml(item.run_id)}">追踪</button>`
-                  : ""
-              }
-              <button class="danger-button" type="button" data-delete-outbox-name="${name}">删除</button>
-            </div>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
+  renderLatestDownload(items[0]);
+  renderSmartStart();
 }
 
 function renderSubscriptions(items) {
-  renderSubscriptionTable(el.subscriptionBody, items);
   renderSubscriptionTable(el.subscriptionPageBody, items);
+}
+
+function filterOutboxItems(items) {
+  const query = normalizeSearch(state.outboxFilters.query);
+  const status = state.outboxFilters.status;
+  return [...items]
+    .filter((item) => {
+      if (status !== "all" && item.status !== status) return false;
+      if (!query) return true;
+      return normalizeSearch(
+        [
+          item.name,
+          item.run_id,
+          item.subscription_id,
+          item.status,
+          statusLabel(item.status),
+          item.created_at,
+        ].join(" "),
+      ).includes(query);
+    })
+    .sort((left, right) => compareOutbox(left, right, state.outboxFilters.sort));
+}
+
+function compareOutbox(left, right, sort) {
+  if (sort === "created_asc") return dateValue(left.created_at) - dateValue(right.created_at);
+  if (sort === "name_asc") return String(left.name || "").localeCompare(String(right.name || ""));
+  if (sort === "size_desc") return Number(right.size || 0) - Number(left.size || 0);
+  return dateValue(right.created_at) - dateValue(left.created_at);
+}
+
+function filterRunItems(items) {
+  const query = normalizeSearch(state.runFilters.query);
+  const status = state.runFilters.status;
+  return [...items]
+    .filter((item) => {
+      if (status !== "all" && item.status !== status) return false;
+      if (!query) return true;
+      return normalizeSearch(
+        [
+          item.id,
+          item.original_query,
+          item.status,
+          statusLabel(item.status),
+          item.started_at,
+          item.finished_at,
+          item.stats?.notice_count,
+          item.stats?.trace_events,
+        ].join(" "),
+      ).includes(query);
+    })
+    .sort((left, right) => compareRun(left, right, state.runFilters.sort));
+}
+
+function compareRun(left, right, sort) {
+  if (sort === "started_asc") return dateValue(left.started_at) - dateValue(right.started_at);
+  if (sort === "notice_desc") {
+    return Number(right.stats?.notice_count || 0) - Number(left.stats?.notice_count || 0);
+  }
+  if (sort === "status_asc") return String(left.status || "").localeCompare(String(right.status || ""));
+  return dateValue(right.started_at) - dateValue(left.started_at);
+}
+
+function visibleListItems(items, expanded, limit) {
+  return expanded ? items : items.slice(0, limit);
+}
+
+function updateListHint(target, total, matched, shown, unit, expanded) {
+  if (!target) return;
+  const filteredText = matched === total ? "" : `，筛选命中 ${matched}`;
+  const modeText = expanded ? "已展开" : "已折叠";
+  target.textContent = `${modeText}展示 ${shown} / ${total} ${unit}${filteredText}`;
+}
+
+function normalizeSearch(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function dateValue(value) {
+  const parsed = Date.parse(String(value || "").replace(" ", "T"));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shortIdentifier(value) {
+  const text = String(value || "");
+  return text.length > 10 ? `${text.slice(0, 8)}...` : text;
 }
 
 function renderSubscriptionTable(target, items) {
   if (!target) return;
+  if (target.classList.contains("data-list")) {
+    renderSubscriptionCards(target, items);
+    return;
+  }
   if (!items.length) {
     target.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无订阅任务</td></tr>';
     return;
@@ -529,6 +721,66 @@ function renderSubscriptionTable(target, items) {
       `;
     })
     .join("");
+}
+
+function renderSubscriptionCards(target, items) {
+  if (!items.length) {
+    target.innerHTML = '<div class="empty-cell">暂无订阅任务</div>';
+    return;
+  }
+  const rows = items
+    .map((item) => {
+      const query = escapeHtml(item.original_query);
+      const title = escapeHtml(subscriptionTitle(item));
+      const schedule = escapeHtml(scheduleText(item));
+      const status = escapeHtml(item.status || "muted");
+      return `
+        <article class="data-row subscription-row" role="row">
+          <div class="compact-cell compact-main" role="cell" data-label="订阅">
+            <span class="cell-label">订阅</span>
+            <div class="cell-value">
+              <strong title="${title}">${title}</strong>
+              <span class="compact-subvalue" title="${query}">
+                <span class="subvalue-label">查询</span>
+                <span>${query}</span>
+              </span>
+            </div>
+          </div>
+          <div class="compact-cell" role="cell" data-label="计划">
+            <span class="cell-label">计划</span>
+            <span class="cell-value">${schedule}</span>
+          </div>
+          <div class="compact-cell" role="cell" data-label="状态">
+            <span class="cell-label">状态</span>
+            <span class="cell-value"><span class="badge badge-${status}">${escapeHtml(statusLabel(item.status))}</span></span>
+          </div>
+          <div class="compact-cell" role="cell" data-label="最近运行">
+            <span class="cell-label">最近运行</span>
+            <span class="cell-value">${escapeHtml(item.last_run_at || "未运行")}</span>
+          </div>
+          <div class="compact-cell compact-actions" role="cell" data-label="操作">
+            <span class="cell-label">操作</span>
+            <span class="cell-value action-value">
+            <button class="ghost-button" type="button" data-subscription-id="${escapeHtml(item.id)}">运行</button>
+            <button class="danger-button" type="button" data-delete-subscription-id="${escapeHtml(item.id)}">删除</button>
+            </span>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  target.innerHTML = `
+    <div class="compact-table subscription-table" role="table" aria-label="我的订阅">
+      <div class="compact-table-head" role="row">
+        <span role="columnheader">订阅</span>
+        <span role="columnheader">计划</span>
+        <span role="columnheader">状态</span>
+        <span role="columnheader">最近运行</span>
+        <span role="columnheader">操作</span>
+      </div>
+      ${rows}
+    </div>
+  `;
 }
 
 function renderSources(items) {
@@ -568,57 +820,27 @@ function renderSourceList(target, items) {
     .join("");
 }
 
-function renderModelStatus(item) {
-  if (!el.modelStatus) return;
-  if (!item) {
-    el.modelStatus.className = "source-list empty-state";
-    el.modelStatus.textContent = "Unavailable";
-    return;
-  }
-  const status = item.configured ? "configured" : "login_required";
-  el.modelStatus.className = "source-list";
-  el.modelStatus.innerHTML = `
-    <div class="source-row">
-      <strong>${escapeHtml(item.provider || "none")} · ${escapeHtml(item.mode || "-")}</strong>
-      <span><span class="badge badge-${status}">${escapeHtml(statusLabel(status))}</span></span>
-      <span>model: ${escapeHtml(item.model || "-")}</span>
-      <span>enhancement: ${escapeHtml(item.enhancement_enabled ? "enabled" : "disabled")}</span>
-    </div>
-  `;
-}
-
-function renderModelDoctor(report) {
-  if (!el.modelDoctorResult) return;
-  if (!report) {
-    el.modelDoctorResult.className = "source-list empty-state";
-    el.modelDoctorResult.textContent = "Not checked";
-    return;
-  }
-  const checks = report.checks || [];
-  el.modelDoctorResult.className = checks.length ? "source-list" : "source-list empty-state";
-  el.modelDoctorResult.innerHTML = checks.length
-    ? checks
-        .map((check) => {
-          const status = escapeHtml(check.status || "muted");
-          return `
-            <div class="source-row">
-              <strong>${escapeHtml(check.name || "-")}</strong>
-              <span><span class="badge badge-${status}">${escapeHtml(statusLabel(check.status))}</span></span>
-              <span>${escapeHtml(check.detail || "")}</span>
-            </div>
-          `;
-        })
-        .join("")
-    : "暂无检测项";
-}
-
 function renderRuns(items) {
   if (!el.runHistoryBody) return;
-  if (!items.length) {
-    el.runHistoryBody.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无运行记录</td></tr>';
+  const filtered = filterRunItems(items);
+  const visible = visibleListItems(filtered, state.runFilters.expanded, collapsedLimits.runs);
+  updateListHint(
+    el.runListHint,
+    items.length,
+    filtered.length,
+    visible.length,
+    "条运行",
+    state.runFilters.expanded,
+  );
+  if (el.toggleRunsButton) {
+    el.toggleRunsButton.hidden = filtered.length <= collapsedLimits.runs;
+    el.toggleRunsButton.textContent = state.runFilters.expanded ? "收起" : "展开全部";
+  }
+  if (!filtered.length) {
+    el.runHistoryBody.innerHTML = '<tr><td colspan="6" class="empty-cell">没有匹配的运行记录</td></tr>';
     return;
   }
-  el.runHistoryBody.innerHTML = items
+  el.runHistoryBody.innerHTML = visible
     .map((item) => {
       const id = escapeHtml(item.id);
       const query = escapeHtml(item.original_query || "-");
@@ -634,7 +856,11 @@ function renderRuns(items) {
           <td>
             <div class="action-group">
               <button class="ghost-button" type="button" data-run-id="${id}">追踪</button>
-              ${outboxName ? `<a class="link-button" href="/api/outbox/${encodeURIComponent(outboxName)}">下载</a>` : ""}
+              ${
+                outboxName
+                  ? `<a class="link-button" href="/api/outbox/${encodeURIComponent(outboxName)}" data-download-outbox-name="${escapeHtml(outboxName)}">下载</a>`
+                  : ""
+              }
               <button class="danger-button" type="button" data-delete-run-id="${id}">删除记录</button>
             </div>
           </td>
@@ -665,7 +891,6 @@ function notificationIssues() {
   const failedRuns = state.runs.filter((item) => item.status === "failed");
   const runningRuns = state.runs.filter((item) => item.status === "running" || item.status === "queued");
   const sourceIssues = state.sources.filter((item) => !["configured", "ready", "active"].includes(item.status));
-  const modelChecks = (state.modelDoctor?.checks || []).filter((item) => !["pass", "skipped"].includes(item.status));
   const issues = [];
   if (failedRuns.length) {
     issues.push({
@@ -686,20 +911,6 @@ function notificationIssues() {
       title: `${sourceIssues.length} 个数据源需要处理`,
       detail: sourceIssues.map((item) => item.site || item.engine || item.status).join("、"),
       view: "sourcesView",
-    });
-  }
-  if (state.model && !state.model.configured) {
-    issues.push({
-      title: "模型配置未就绪",
-      detail: `${state.model.mode || "-"} / ${state.model.provider || "-"}`,
-      view: "settingsView",
-    });
-  }
-  if (modelChecks.length) {
-    issues.push({
-      title: `${modelChecks.length} 个模型自检项需要关注`,
-      detail: modelChecks.map((item) => `${item.name}: ${statusLabel(item.status)}`).join("；"),
-      view: "settingsView",
     });
   }
   if (state.evaluation?.status === "warn") {
@@ -768,6 +979,7 @@ function renderHelpPanel() {
         <button class="ghost-button" type="button" data-popover-view="historyView">历史运行</button>
         <button class="ghost-button" type="button" data-popover-view="sourcesView">数据源</button>
         <button class="ghost-button" type="button" data-popover-view="evaluationView">Agent评测</button>
+        <button class="ghost-button" type="button" data-popover-view="memoryView">用户记忆</button>
       </div>
     </div>
     <div class="popover-row">
@@ -797,6 +1009,7 @@ function renderUserMenu() {
       <div class="action-group">
         <button class="ghost-button" type="button" data-popover-view="settingsView">设置</button>
         <button class="ghost-button" type="button" data-popover-view="evaluationView">评测</button>
+        <button class="ghost-button" type="button" data-popover-view="memoryView">记忆周报</button>
         <button class="ghost-button" type="button" data-refresh-all>刷新全部</button>
       </div>
     </div>
@@ -870,6 +1083,224 @@ function renderEvaluation(report) {
       ? notes.map((note) => `<div class="note-row">${escapeHtml(note)}</div>`).join("")
       : "暂无说明";
   }
+}
+
+function renderMemory(report) {
+  if (!report) return;
+  const summary = report.summary || {};
+  const period = report.period || {};
+  const profile = report.knowledge_profile || {};
+  const behavior = profile.behavior || {};
+  const queryPatterns = profile.query_patterns || {};
+  const recommendationPlan = report.recommendation_plan || [];
+  const generatedAdvice = report.generated_advice || {};
+  const riskSignals = report.risk_signals || [];
+  renderMemoryDigest(report);
+  if (el.memorySummary) {
+    el.memorySummary.className = "eval-summary";
+    el.memorySummary.innerHTML = [
+      summaryTile("周期", `${period.from || "-"} 至 ${period.to || "-"}`),
+      summaryTile("核心主题", firstCounterName(profile.topics, "暂无")),
+      summaryTile("核心区域", firstCounterName(profile.regions, "暂无")),
+      summaryTile("下载转化", percent(behavior.download_rate || 0)),
+      summaryTile("建议数", recommendationPlan.length),
+    ].join("");
+  }
+  renderMetricCard(el.memoryUsageMetrics, "使用行为", [
+    ["总事件", summary.total_events ?? 0],
+    ["活跃天数", summary.active_days ?? 0],
+    ["点击次数", summary.clicks ?? 0],
+    ["查看周报", summary.weekly_reports_viewed ?? 0],
+  ]);
+  renderMetricCard(el.memoryReportMetrics, "报告转化", [
+    ["启动运行", summary.runs_started ?? 0],
+    ["完成运行", summary.runs_finished ?? 0],
+    ["失败运行", summary.failed_runs ?? 0],
+    ["下载转化", percent(behavior.download_rate || 0)],
+  ]);
+  renderMetricCard(el.memorySubscriptionMetrics, "知识偏好", [
+    ["新增订阅", summary.subscriptions_created ?? 0],
+    ["重复查询", queryPatterns.repeat_queries?.length ?? 0],
+    ["定时意图", queryPatterns.scheduled_intent_count ?? 0],
+    ["澄清风险", queryPatterns.clarify_risk_count ?? 0],
+  ]);
+  renderMetricCard(el.memoryDailyMetrics, "每日节奏", memoryDailyRows(report.daily || []));
+  renderMemoryProfile(profile);
+  renderGeneratedAdvice(generatedAdvice, recommendationPlan);
+  renderMemoryList(
+    el.memoryQueries,
+    report.top_queries || [],
+    (item) => `<div class="case-row"><strong>${escapeHtml(item.query)}</strong><span>${escapeHtml(item.count)} 次</span></div>`,
+    "暂无查询",
+  );
+  renderMemoryList(
+    el.memorySuggestions,
+    recommendationPlan.length ? recommendationPlan : report.suggestions || [],
+    (item) => {
+      if (typeof item === "string") return `<div class="note-row">${escapeHtml(item)}</div>`;
+      return `
+        <div class="case-row recommendation-row">
+          <strong>${priorityBadge(item.priority)}${escapeHtml(item.title || "建议")}</strong>
+          <span>${escapeHtml(item.reason || "")}</span>
+          <span>${escapeHtml(item.action || "")}</span>
+        </div>
+      `;
+    },
+    "暂无建议",
+  );
+  renderMemoryList(
+    el.memoryEvents,
+    report.recent_events || [],
+    (item) => `
+      <div class="case-row">
+        <strong>${escapeHtml(statusLabel(item.event_type))} · ${escapeHtml(item.target || "-")}</strong>
+        <span>${escapeHtml(item.label || "-")}</span>
+        <span>${escapeHtml(item.created_at || "")}</span>
+      </div>
+    `,
+    "暂无事件",
+  );
+  renderMemoryList(
+    el.memoryAnalysis,
+    [...(report.analysis || []), ...riskSignals.map((item) => `${item.title}：${item.detail}`)],
+    (item) => `<div class="note-row">${escapeHtml(item)}</div>`,
+    "暂无分析",
+  );
+  renderSmartStart();
+}
+
+function renderSmartStart() {
+  if (!el.smartStartPanel) return;
+  const query = el.queryInput?.value.trim() || "";
+  const mode = checkedValue("actionMode") === "subscribe" ? "订阅模式" : "立即运行";
+  const strategy = modelStrategyLabel(checkedValue("modelStrategy") || "config");
+  if (el.smartStartMeta) {
+    el.smartStartMeta.textContent = query
+      ? `${mode} · ${strategy} · 已准备解析当前问题`
+      : `${mode} · ${strategy} · 请输入查询问题`;
+  }
+  const latest = state.outbox[0];
+  if (el.smartLatestReport) {
+    el.smartLatestReport.textContent = latest
+      ? `${latest.name} · ${formatBytes(latest.size)}`
+      : "暂无可下载 Word";
+  }
+  const suggestion =
+    state.memory?.generated_advice?.headline ||
+    state.memory?.recommendation_plan?.[0]?.action ||
+    state.memory?.suggestions?.[0];
+  if (el.smartRecommendation) {
+    el.smartRecommendation.textContent =
+      suggestion || "完成一次查询并下载 Word 后，我会依据你的行为生成下一步建议。";
+  }
+}
+
+function renderMemoryDigest(report) {
+  if (!el.memoryDigest) return;
+  const summary = report.summary || {};
+  const advice = report.generated_advice || {};
+  const plan = report.recommendation_plan || [];
+  const profile = report.knowledge_profile || {};
+  const topQuery = report.top_queries?.[0]?.query || advice.headline || "暂无高频查询";
+  el.memoryDigest.className = "source-list";
+  el.memoryDigest.innerHTML = `
+    <div class="insight-row">
+      <strong>本周 ${escapeHtml(summary.total_events ?? 0)} 次交互</strong>
+      <span>${escapeHtml(summary.downloads ?? 0)} 次下载，${escapeHtml(summary.runs_finished ?? 0)} 次完成运行</span>
+    </div>
+    <div class="insight-row">
+      <strong>${escapeHtml(topQuery)}</strong>
+      <span>${escapeHtml(plan[0]?.action || advice.summary || "继续积累使用记录，系统会给出更准确的建议。")}</span>
+    </div>
+    <div class="insight-row">
+      <strong>${escapeHtml(firstCounterName(profile.topics, "暂无稳定主题"))}</strong>
+      <span>${escapeHtml(firstCounterName(profile.regions, "暂无稳定区域"))}</span>
+    </div>
+  `;
+}
+
+function memoryDailyRows(daily) {
+  const active = daily.filter((item) => item.events || item.runs);
+  const latest = daily[daily.length - 1] || {};
+  const busiest = active.reduce((best, item) => (item.events > (best.events || 0) ? item : best), {});
+  return [
+    ["今日事件", latest.events ?? 0],
+    ["今日运行", latest.runs ?? 0],
+    ["最高活跃日", busiest.date || "-"],
+    ["最高日事件", busiest.events ?? 0],
+  ];
+}
+
+function renderMemoryProfile(profile = {}) {
+  if (!el.memoryProfile) return;
+  const rows = [
+    ["主题偏好", counterSummary(profile.topics, "暂无主题偏好")],
+    ["区域偏好", counterSummary(profile.regions, "暂无区域偏好")],
+    ["定时模式", counterSummary(profile.schedules, "暂无定时偏好")],
+    ["来源命中", counterSummary(profile.sources, "暂无来源样本")],
+  ];
+  el.memoryProfile.className = "case-list profile-list";
+  el.memoryProfile.innerHTML = rows
+    .map(
+      ([label, value]) => `
+        <div class="profile-row">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderGeneratedAdvice(advice = {}, plan = []) {
+  if (!el.memoryGeneratedAdvice) return;
+  const actions = Array.isArray(advice.next_actions) ? advice.next_actions.filter(Boolean) : [];
+  const fallbackActions = plan.map((item) => item.action).filter(Boolean).slice(0, 3);
+  const nextActions = actions.length ? actions : fallbackActions;
+  el.memoryGeneratedAdvice.className = "case-list advice-list";
+  el.memoryGeneratedAdvice.innerHTML = `
+    <div class="advice-hero">
+      <strong>${escapeHtml(advice.headline || "暂无稳定建议")}</strong>
+      <span>${escapeHtml(advice.summary || "完成更多查询、下载和订阅后，系统会生成更具体的建议。")}</span>
+    </div>
+    ${
+      nextActions.length
+        ? nextActions
+            .map(
+              (item, index) => `
+                <div class="advice-action">
+                  <span>${index + 1}</span>
+                  <strong>${escapeHtml(item)}</strong>
+                </div>
+              `,
+            )
+            .join("")
+        : '<div class="note-row">暂无下一步动作</div>'
+    }
+  `;
+}
+
+function firstCounterName(items, fallback) {
+  return Array.isArray(items) && items.length ? items[0].name : fallback;
+}
+
+function counterSummary(items, fallback) {
+  if (!Array.isArray(items) || !items.length) return fallback;
+  return items
+    .slice(0, 3)
+    .map((item) => `${item.name} ${item.count}`)
+    .join(" / ");
+}
+
+function priorityBadge(priority) {
+  const label = { high: "高", medium: "中", low: "低" }[priority] || "低";
+  return `<span class="priority-badge priority-${escapeHtml(priority || "low")}">${escapeHtml(label)}</span>`;
+}
+
+function renderMemoryList(target, items, renderer, emptyText) {
+  if (!target) return;
+  target.className = items.length ? "case-list" : "case-list empty-state";
+  target.innerHTML = items.length ? items.map(renderer).join("") : emptyText;
 }
 
 function renderMetricCard(target, title, rows) {
@@ -950,6 +1381,16 @@ function renderIntentPreview(bidql) {
   `;
 }
 
+function autoSelectActionMode(bidql) {
+  if (state.actionModeTouched) return;
+  setActionMode(hasScheduledIntent(bidql) ? "subscribe" : "run", { touched: false });
+}
+
+function hasScheduledIntent(bidql) {
+  const schedule = bidql?.schedule || {};
+  return Boolean(schedule.kind && schedule.kind !== "immediate");
+}
+
 function clarificationQuestions(bidql) {
   const questions = bidql?.meta?.clarification_questions;
   if (Array.isArray(questions) && questions.length) return questions;
@@ -967,6 +1408,7 @@ async function ensureIntentReady(query) {
     body: JSON.stringify({ query }),
   });
   renderIntentPreview(bidql);
+  autoSelectActionMode(bidql);
   const clarifications = clarificationQuestions(bidql);
   if (!clarifications.length) return true;
   const message = clarifications.map((item) => item.question).join("；");
@@ -1012,20 +1454,8 @@ async function refreshSources() {
   renderNotifications();
 }
 
-async function refreshModel() {
-  state.model = await api("/api/model");
-  renderModelStatus(state.model);
-  renderNotifications();
-}
-
-async function refreshModelDoctor() {
-  state.modelDoctor = await api("/api/model/doctor");
-  renderModelDoctor(state.modelDoctor);
-  renderNotifications();
-}
-
-async function refreshSourcesAndModel() {
-  await Promise.all([refreshSources(), refreshModel(), refreshModelDoctor()]);
+async function refreshSourcesPanel() {
+  await refreshSources();
 }
 
 async function refreshRuns() {
@@ -1039,6 +1469,20 @@ async function refreshEvaluation() {
   state.evaluation = await api("/api/evaluations/agent");
   renderEvaluation(state.evaluation);
   renderNotifications();
+}
+
+async function refreshMemoryWeekly() {
+  state.memory = await api("/api/memory/weekly");
+  renderMemory(state.memory);
+}
+
+async function saveMemoryWeekly() {
+  state.memory = await api("/api/memory/weekly", {
+    method: "POST",
+    body: JSON.stringify({ days: 7, user_id: "admin" }),
+  });
+  renderMemory(state.memory);
+  showToast("用户记忆周报快照已保存");
 }
 
 async function refreshSettings() {
@@ -1083,6 +1527,7 @@ async function refreshIntentPreview() {
       body: JSON.stringify({ query }),
     });
     renderIntentPreview(bidql);
+    autoSelectActionMode(bidql);
   } catch (error) {
     if (el.intentPreview) {
       el.intentPreview.className = "intent-preview empty-state";
@@ -1272,10 +1717,18 @@ function checkedValue(name) {
   return document.querySelector(`input[name="${name}"]:checked`)?.value || "";
 }
 
+function setActionMode(value, { touched = true } = {}) {
+  const input = document.querySelector(`input[name="actionMode"][value="${value}"]`);
+  if (!input) return;
+  input.checked = true;
+  if (touched) state.actionModeTouched = true;
+  syncActionMode();
+}
+
 function downloadLinkHtml(path) {
   if (!path) return "";
   const name = fileName(path);
-  return `<a class="inline-link" href="/api/outbox/${encodeURIComponent(name)}">下载 Word</a>`;
+  return `<a class="inline-link" href="/api/outbox/${encodeURIComponent(name)}" data-download-outbox-name="${escapeHtml(name)}">下载 Word</a>`;
 }
 
 function completionMessageHtml(result) {
@@ -1311,9 +1764,58 @@ function subscriptionTitle(item) {
 
 function scheduleText(item) {
   const schedule = item.bidql?.schedule || {};
-  if (item.cron) return item.cron;
-  if (schedule.frequency && schedule.time) return `${schedule.frequency} ${schedule.time}`;
+  if (item.cron) return cronText(item.cron);
+  if (schedule.frequency && schedule.time) return `${frequencyText(schedule.frequency)} ${schedule.time}`;
   return schedule.time || item.schedule_kind || "-";
+}
+
+function cronText(value) {
+  const parts = String(value || "").trim().split(/\s+/);
+  if (parts.length !== 5) return value || "-";
+  const [minute, hour, day, month, weekday] = parts;
+  const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  if (day === "*" && month === "*" && weekday === "*") return `每天 ${time}`;
+  if (day === "*" && month === "*" && weekday !== "*") return `每周${weekdayText(weekday)} ${time}`;
+  if (day !== "*" && month === "*" && weekday === "*") return `每月${day}日 ${time}`;
+  return value;
+}
+
+function frequencyText(value) {
+  return (
+    {
+      daily: "每天",
+      weekly: "每周",
+      monthly: "每月",
+      once_at: "一次",
+    }[value] || value
+  );
+}
+
+function weekdayText(value) {
+  return (
+    {
+      "0": "日",
+      "1": "一",
+      "2": "二",
+      "3": "三",
+      "4": "四",
+      "5": "五",
+      "6": "六",
+      "7": "日",
+    }[String(value)] || value
+  );
+}
+
+function modelStrategyLabel(value) {
+  return (
+    {
+      config: "跟随配置",
+      rules: "本地规则",
+      local: "本地模型",
+      cloud: "云端模型",
+      hybrid: "规则 + 云端",
+    }[value] || "跟随配置"
+  );
 }
 
 function sourceStatsText(stats) {
@@ -1390,15 +1892,43 @@ function applyDepthProfile(value) {
   if (el.maxResultsInput) el.maxResultsInput.value = String(profile.results);
 }
 
+function applyExampleQuery(query) {
+  if (!query || !el.queryInput) return;
+  el.queryInput.value = query;
+  state.actionModeTouched = false;
+  syncActionMode();
+  refreshIntentPreview().catch(toastError("示例解析失败"));
+  el.queryInput.focus();
+  trackActivity("quick_example", {
+    target: "smartStart",
+    label: query,
+    metadata: { query },
+  });
+}
+
 function syncActionMode() {
   const subscribe = checkedValue("actionMode") === "subscribe";
-  if (el.subscriptionControls) el.subscriptionControls.hidden = !subscribe;
+  if (el.subscriptionControls) {
+    el.subscriptionControls.hidden = !subscribe;
+    el.subscriptionControls.setAttribute("aria-disabled", String(!subscribe));
+    el.subscriptionControls.querySelectorAll("select, input").forEach((node) => {
+      node.disabled = !subscribe;
+    });
+  }
   if (el.subscribeButton) el.subscribeButton.hidden = true;
   el.form?.classList.toggle("subscribe-mode", subscribe);
+  renderSmartStart();
   if (!el.runButton || state.running) return;
+  const hasQuery = Boolean(el.queryInput?.value.trim());
+  el.runButton.disabled = !hasQuery;
+  el.runButton.title = hasQuery
+    ? subscribe
+      ? "按计划启用增量订阅，后续只推送新增内容"
+      : "立即运行一次检索并生成 Word"
+    : "先输入招投标查询问题";
   el.runButton.innerHTML = subscribe
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>创建订阅'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>开始运行';
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>启用订阅'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>立即生成 Word';
 }
 
 async function refreshAll() {
@@ -1408,15 +1938,26 @@ async function refreshAll() {
     refreshIntentPreview(),
     refreshOutbox(),
     refreshSubscriptions(),
-    refreshSourcesAndModel(),
+    refreshSourcesPanel(),
     refreshRuns(),
     refreshEvaluation(),
+    refreshMemoryWeekly(),
   ]);
   const failed = results.filter((item) => item.status === "rejected");
   if (failed.length) showToast(`${failed.length} 个面板刷新失败，请查看网络或服务状态`);
   renderNotifications();
   renderHelpPanel();
   renderUserMenu();
+}
+
+function normalizeWorkbenchLayout() {
+  const grid = document.querySelector(".workbench-grid");
+  const chatPanel = document.querySelector(".chat-panel");
+  if (!grid || !chatPanel || document.querySelector(".main-stack")) return;
+  const stack = document.createElement("div");
+  stack.className = "main-stack";
+  grid.insertBefore(stack, chatPanel);
+  stack.append(chatPanel);
 }
 
 function bindEvents() {
@@ -1442,6 +1983,7 @@ function bindEvents() {
     refreshAll().catch(toastError("通知刷新失败"));
   });
   document.addEventListener("click", (event) => {
+    trackClick(event);
     const closeTarget = event.target.closest("[data-close-popover]");
     if (closeTarget) {
       closePopovers();
@@ -1493,30 +2035,74 @@ function bindEvents() {
   });
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);
+  el.queryInput?.addEventListener("input", () => {
+    syncActionMode();
+    renderSmartStart();
+  });
   el.queryInput?.addEventListener("input", debounce(refreshIntentPreview, 450));
   el.searchDepthSelect?.addEventListener("change", () => applyDepthProfile(el.searchDepthSelect.value));
   document.querySelectorAll('input[name="actionMode"]').forEach((input) => {
-    input.addEventListener("change", syncActionMode);
+    input.addEventListener("change", () => {
+      state.actionModeTouched = true;
+      syncActionMode();
+    });
+  });
+  document.querySelectorAll('input[name="modelStrategy"]').forEach((input) => {
+    input.addEventListener("change", renderSmartStart);
+  });
+  document.querySelectorAll("[data-example-query]").forEach((button) => {
+    button.addEventListener("click", () => applyExampleQuery(button.dataset.exampleQuery || ""));
   });
   el.refreshOutboxButton?.addEventListener("click", () => refreshOutbox().catch(toastError("Outbox 刷新失败")));
   el.refreshTraceButton?.addEventListener("click", () => refreshTrace().catch(toastError("事件流刷新失败")));
-  el.refreshSubscriptionsButton?.addEventListener("click", () =>
-    refreshSubscriptions().catch(toastError("订阅刷新失败")),
-  );
   el.refreshSourcesButton?.addEventListener("click", () =>
-    refreshSourcesAndModel().catch(toastError("来源刷新失败")),
+    refreshSourcesPanel().catch(toastError("来源刷新失败")),
   );
   el.refreshRunsButton?.addEventListener("click", () => refreshRuns().catch(toastError("历史刷新失败")));
   el.refreshEvaluationButton?.addEventListener("click", () =>
     refreshEvaluation().catch(toastError("评测刷新失败")),
   );
-  el.modelDoctorButton?.addEventListener("click", () => refreshModelDoctor().catch(toastError("模型自检失败")));
+  el.refreshMemoryButton?.addEventListener("click", () =>
+    refreshMemoryWeekly().catch(toastError("用户记忆刷新失败")),
+  );
+  el.saveMemoryButton?.addEventListener("click", () =>
+    saveMemoryWeekly().catch(toastError("用户记忆保存失败")),
+  );
+  el.runSearchInput?.addEventListener(
+    "input",
+    debounce(() => {
+      state.runFilters.query = el.runSearchInput.value;
+      state.runFilters.expanded = false;
+      renderRuns(state.runs);
+    }, 120),
+  );
+  el.runStatusFilter?.addEventListener("change", () => {
+    state.runFilters.status = el.runStatusFilter.value;
+    state.runFilters.expanded = false;
+    renderRuns(state.runs);
+  });
+  el.runSortSelect?.addEventListener("change", () => {
+    state.runFilters.sort = el.runSortSelect.value;
+    renderRuns(state.runs);
+  });
+  el.toggleRunsButton?.addEventListener("click", () => {
+    state.runFilters.expanded = !state.runFilters.expanded;
+    renderRuns(state.runs);
+  });
+  el.clearRunFiltersButton?.addEventListener("click", () => {
+    state.runFilters = { query: "", status: "all", sort: "started_desc", expanded: false };
+    if (el.runSearchInput) el.runSearchInput.value = "";
+    if (el.runStatusFilter) el.runStatusFilter.value = "all";
+    if (el.runSortSelect) el.runSortSelect.value = "started_desc";
+    renderRuns(state.runs);
+  });
   document.querySelectorAll("[data-refresh-sources]").forEach((button) => {
-    button.addEventListener("click", () => refreshSourcesAndModel().catch(toastError("来源刷新失败")));
+    button.addEventListener("click", () => refreshSourcesPanel().catch(toastError("来源刷新失败")));
   });
 }
 
 async function init() {
+  normalizeWorkbenchLayout();
   bindEvents();
   applyTheme(loadTheme());
   applyDepthProfile(el.searchDepthSelect?.value || "standard");

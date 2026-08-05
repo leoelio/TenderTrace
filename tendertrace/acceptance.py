@@ -9,7 +9,7 @@ from typing import Any
 from docx import Document
 
 from tendertrace.config import Settings
-from tendertrace.db import connection, database_health
+from tendertrace.db import SCHEMA_VERSION, connection, database_health
 from tendertrace.llm.gateway import model_status
 from tendertrace.submission import forbidden_package_entries
 from tendertrace.vault.qianlima import QianlimaSessionVault
@@ -77,6 +77,9 @@ REQUIRED_TABLES = {
     "attachment_snapshots",
     "model_audits",
     "outbox_messages",
+    "user_activity_events",
+    "weekly_reports",
+    "user_memory_profiles",
 }
 
 SECRET_SCAN_PATHS = (
@@ -204,8 +207,14 @@ def _check_database(settings: Settings) -> list[AcceptanceCheck]:
     if missing:
         return [AcceptanceCheck("database", "fail", f"missing tables: {', '.join(missing)}")]
     versions = health.get("schema_versions", [])
-    if 7 not in versions:
-        return [AcceptanceCheck("database", "fail", "schema version 7 is missing")]
+    if SCHEMA_VERSION not in versions:
+        return [
+            AcceptanceCheck(
+                "database",
+                "fail",
+                f"schema version {SCHEMA_VERSION} is missing",
+            )
+        ]
     return [AcceptanceCheck("database", "pass", "required tables and schema version present")]
 
 
