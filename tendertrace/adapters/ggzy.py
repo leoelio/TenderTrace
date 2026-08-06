@@ -6,7 +6,6 @@ import re
 from typing import Any
 from urllib.parse import urljoin
 
-import httpx
 from selectolax.parser import HTMLParser
 
 from tendertrace.adapters.ccgp import (
@@ -16,6 +15,9 @@ from tendertrace.adapters.ccgp import (
     _matches_bidql,
     _summarize,
 )
+from tendertrace.fetching import FetchError, FetchPolicy, FetchResult, ManagedFetcher
+from tendertrace.parsing import ContentSelection, select_main_content
+from tendertrace.pipeline.artifacts import page_artifact_from_fetch
 
 
 GGZY_BASE_URL = "https://www.ggzy.gov.cn"
@@ -59,7 +61,12 @@ def build_search_body(
         "PAGENUMBER": str(page),
     }
     window = bidql.get("time", {}).get("resolved_window")
-    if isinstance(window, dict) and window.get("from") and window.get("to") and _site_accepts_window(window):
+    if (
+        isinstance(window, dict)
+        and window.get("from")
+        and window.get("to")
+        and _site_accepts_window(window)
+    ):
         body["TIMEBEGIN"] = str(window["from"])
         body["TIMEEND"] = str(window["to"])
     else:
@@ -104,7 +111,9 @@ def parse_records(records: list[dict[str, Any]]) -> list[Notice]:
                 region=province,
                 purchaser=platform or province,
                 source_url=source_url,
-                core_content=_clean_spaces(" ".join(part for part in (business_type, information_type) if part)),
+                core_content=_clean_spaces(
+                    " ".join(part for part in (business_type, information_type) if part)
+                ),
                 fields={
                     "cluster_key": f"ggzy:{notice_id}",
                     "business_type": business_type,
@@ -123,12 +132,14 @@ def _detail_body_path(html: str) -> str | None:
 
 
 def _extract_content(parser: HTMLParser) -> str:
-    node = parser.css_first("#mycontent") or parser.css_first(".detail_content") or parser.css_first(".detail")
-    if node is None:
-        return ""
-    for bad in node.css("script,style"):
-        bad.decompose()
-    return _clean_spaces(node.text(separator=" "))
+    return _select_content(parser).text
+
+
+def _select_content(parser: HTMLParser) -> ContentSelection:
+    return select_main_content(
+        parser,
+        ("#mycontent", ".detail_content", ".detail", "#noticeArea", ".content"),
+    )
 
 
 def _extract_attachments(parser: HTMLParser, detail_url: str) -> list[Attachment]:
@@ -139,7 +150,9 @@ def _extract_attachments(parser: HTMLParser, detail_url: str) -> list[Attachment
         if not href:
             continue
         lowered = href.lower()
-        if not any(ext in lowered for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")):
+        if not any(
+            ext in lowered for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")
+        ):
             continue
         attachments.append(
             Attachment(name=text or href.rsplit("/", 1)[-1], url=urljoin(detail_url, href))
@@ -147,15 +160,25 @@ def _extract_attachments(parser: HTMLParser, detail_url: str) -> list[Attachment
     return attachments
 
 
-def enrich_from_detail(notice: Notice, html: str, detail_url: str | None = None) -> Notice:
+def enrich_from_detail(
+    notice: Notice,
+    html: str,
+    detail_url: str | None = None,
+    fetch_result: FetchResult | None = None,
+) -> Notice:
     parser = HTMLParser(html)
-    content = _extract_content(parser)
+    selection = _select_content(parser)
+    content = selection.text
     final_url = detail_url or notice.source_url
     original_anchor = parser.css_first("span.detail_url a")
     original_url = original_anchor.attributes.get("href") if original_anchor is not None else ""
     fields = {**notice.fields, "content_length": len(content)}
+    fields["content_selector"] = selection.selector
+    fields["content_fallback"] = selection.fallback_used
     if original_url:
         fields["original_url"] = original_url
+    if fetch_result is not None:
+        fields["page_artifact"] = page_artifact_from_fetch(notice.source_site, fetch_result)
     return Notice(
         id=notice.id,
         source_site=notice.source_site,
@@ -171,6 +194,17 @@ def enrich_from_detail(notice: Notice, html: str, detail_url: str | None = None)
     )
 
 
+def _notice_with_detail_error(notice: Notice, exc: Exception) -> Notice:
+    fields = {**notice.fields, "detail_error": str(exc)}
+    return Notice(
+        **{
+            **asdict(notice),
+            "attachments": notice.attachments,
+            "fields": fields,
+        }
+    )
+
+
 class GgzyAdapter:
     name = "ggzy"
 
@@ -183,64 +217,91 @@ class GgzyAdapter:
             "Referer": GGZY_DEAL_LIST_URL,
         }
         self.timeout = timeout
+        self.policy = FetchPolicy(
+            headers=self.headers,
+            timeout=timeout,
+            max_retries=2,
+            browser_fallback=True,
+        )
+        self.last_fetch_stats: dict[str, object] = {}
 
-    def collect(self, bidql: dict[str, Any], *, max_pages: int = 1, max_results: int = 10) -> list[Notice]:
-        with httpx.Client(headers=self.headers, timeout=self.timeout, follow_redirects=True) as client:
-            matched: list[Notice] = []
-            seen: set[str] = set()
-            keywords = _topic_keywords(bidql)
-            search_terms = keywords or [""]
+    def collect(
+        self, bidql: dict[str, Any], *, max_pages: int = 1, max_results: int = 10
+    ) -> list[Notice]:
+        with ManagedFetcher(self.policy) as fetcher:
+            try:
+                return self._collect_with_fetcher(
+                    fetcher,
+                    bidql,
+                    max_pages=max_pages,
+                    max_results=max_results,
+                )
+            finally:
+                self.last_fetch_stats = fetcher.stats.to_dict()
+
+    def _collect_with_fetcher(
+        self,
+        fetcher: ManagedFetcher,
+        bidql: dict[str, Any],
+        *,
+        max_pages: int,
+        max_results: int,
+    ) -> list[Notice]:
+        matched: list[Notice] = []
+        seen: set[str] = set()
+        keywords = _topic_keywords(bidql)
+        search_terms = keywords or [""]
+        matched.extend(
+            self._collect_matching(
+                fetcher,
+                bidql,
+                search_terms=search_terms,
+                max_pages=max_pages,
+                max_results=max_results,
+                seen=seen,
+            )
+        )
+        if not matched and keywords:
             matched.extend(
                 self._collect_matching(
-                    client,
+                    fetcher,
                     bidql,
-                    search_terms=search_terms,
+                    search_terms=[""],
                     max_pages=max_pages,
                     max_results=max_results,
                     seen=seen,
                 )
             )
-            if not matched and keywords:
-                matched.extend(
-                    self._collect_matching(
-                        client,
-                        bidql,
-                        search_terms=[""],
-                        max_pages=max_pages,
-                        max_results=max_results,
-                        seen=seen,
-                    )
-                )
 
-            enriched: list[Notice] = []
-            for notice in matched[:max_results]:
-                try:
-                    detail = client.get(notice.source_url)
-                    detail.raise_for_status()
-                    body_path = _detail_body_path(detail.text)
-                    if body_path:
-                        body_url = urljoin(GGZY_BASE_URL, body_path)
-                        body = client.get(body_url)
-                        body.raise_for_status()
-                        enriched.append(enrich_from_detail(notice, body.text, body_url))
-                    else:
-                        enriched.append(enrich_from_detail(notice, detail.text, notice.source_url))
-                except (httpx.HTTPError, RuntimeError) as exc:
-                    fields = {**notice.fields, "detail_error": str(exc)}
-                    enriched.append(
-                        Notice(
-                            **{
-                                **asdict(notice),
-                                "attachments": notice.attachments,
-                                "fields": fields,
-                            }
-                        )
+        batch = matched[:max_results]
+        enriched_by_index: list[Notice | None] = [None] * len(batch)
+        body_jobs: list[tuple[int, Notice, str]] = []
+        detail_results = fetcher.batch_get([notice.source_url for notice in batch])
+        for index, (notice, detail) in enumerate(zip(batch, detail_results, strict=True)):
+            try:
+                detail.raise_for_status()
+                body_path = _detail_body_path(detail.text)
+                if body_path:
+                    body_url = urljoin(GGZY_BASE_URL, body_path)
+                    body_jobs.append((index, notice, body_url))
+                else:
+                    enriched_by_index[index] = enrich_from_detail(
+                        notice, detail.text, notice.source_url, detail
                     )
-            return enriched
+            except (FetchError, RuntimeError) as exc:
+                enriched_by_index[index] = _notice_with_detail_error(notice, exc)
+        body_results = fetcher.batch_get([body_url for _, _, body_url in body_jobs])
+        for (index, notice, body_url), body in zip(body_jobs, body_results, strict=True):
+            try:
+                body.raise_for_status()
+                enriched_by_index[index] = enrich_from_detail(notice, body.text, body_url, body)
+            except (FetchError, RuntimeError) as exc:
+                enriched_by_index[index] = _notice_with_detail_error(notice, exc)
+        return [notice for notice in enriched_by_index if notice is not None]
 
     def _collect_matching(
         self,
-        client: httpx.Client,
+        fetcher: ManagedFetcher,
         bidql: dict[str, Any],
         *,
         search_terms: list[str],
@@ -251,7 +312,7 @@ class GgzyAdapter:
         matched: list[Notice] = []
         for keyword in search_terms:
             for page in range(1, max_pages + 1):
-                response = client.post(
+                response = fetcher.post(
                     GGZY_LIST_API,
                     data=build_search_body(bidql, page=page, keyword=keyword),
                 )

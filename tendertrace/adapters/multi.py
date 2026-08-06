@@ -28,6 +28,7 @@ class SourceRunStat:
     count: int = 0
     error: str | None = None
     relaxed_city: bool = False
+    fetch_stats: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -36,6 +37,7 @@ class SourceRunStat:
             "count": self.count,
             "error": self.error,
             "relaxed_city": self.relaxed_city,
+            "fetch_stats": self.fetch_stats or {},
         }
 
 
@@ -87,6 +89,7 @@ class MultiSourceAdapter:
                         source=source_name,
                         status="failed",
                         error=f"{type(exc).__name__}: {exc}",
+                        fetch_stats=_fetch_stats(adapter),
                     )
                 )
                 results_by_source.append([])
@@ -104,6 +107,7 @@ class MultiSourceAdapter:
                     status="finished",
                     count=len(unique),
                     relaxed_city=relaxed_city,
+                    fetch_stats=_fetch_stats(adapter),
                 )
             )
             results_by_source.append(unique)
@@ -114,6 +118,11 @@ def _notice_key(notice: Notice) -> str:
     if notice.fields.get("cluster_key"):
         return str(notice.fields["cluster_key"])
     return f"{notice.source_site}:{notice.id}" if notice.id else notice.source_url
+
+
+def _fetch_stats(adapter: SourceAdapter) -> dict[str, object]:
+    stats = getattr(adapter, "last_fetch_stats", {})
+    return stats if isinstance(stats, dict) else {}
 
 
 def _round_robin(results_by_source: list[list[Notice]], limit: int) -> list[Notice]:

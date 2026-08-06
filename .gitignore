@@ -26,16 +26,17 @@ snapshots/
 traces/
 logs/
 /dist/
-*.docx
-*.mp4
-*.mov
-*.mkv
-*.avi
-*.webm
 *.zip
+*.rar
 *.sqlite3
 *.db
+_incoming_superfusion*/
+.tendertrace_ui_server.pid
 
 # Frontend dependencies
 web/node_modules/
+
+# Documents and office temporary files
+~$*.docx
+*.tmp
 

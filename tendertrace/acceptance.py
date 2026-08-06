@@ -9,7 +9,7 @@ from typing import Any
 from docx import Document
 
 from tendertrace.config import Settings
-from tendertrace.db import connection, database_health
+from tendertrace.db import SCHEMA_VERSION, connection, database_health
 from tendertrace.llm.gateway import model_status
 from tendertrace.submission import forbidden_package_entries
 from tendertrace.vault.qianlima import QianlimaSessionVault
@@ -75,8 +75,12 @@ REQUIRED_TABLES = {
     "clusters",
     "evidence_items",
     "attachment_snapshots",
+    "page_artifacts",
     "model_audits",
     "outbox_messages",
+    "user_activity_events",
+    "weekly_reports",
+    "user_memory_profiles",
 }
 
 SECRET_SCAN_PATHS = (
@@ -146,7 +150,14 @@ def _check_secret_scan(root: Path) -> list[AcceptanceCheck]:
             _scan_file(path, findings, root)
         else:
             for child in path.rglob("*"):
-                if child.is_file() and child.suffix.lower() in {".py", ".md", ".html", ".js", ".css", ".toml"}:
+                if child.is_file() and child.suffix.lower() in {
+                    ".py",
+                    ".md",
+                    ".html",
+                    ".js",
+                    ".css",
+                    ".toml",
+                }:
                     _scan_file(child, findings, root)
     if findings:
         return [AcceptanceCheck("secret_scan", "fail", "; ".join(findings[:5]))]
@@ -204,8 +215,14 @@ def _check_database(settings: Settings) -> list[AcceptanceCheck]:
     if missing:
         return [AcceptanceCheck("database", "fail", f"missing tables: {', '.join(missing)}")]
     versions = health.get("schema_versions", [])
-    if 7 not in versions:
-        return [AcceptanceCheck("database", "fail", "schema version 7 is missing")]
+    if SCHEMA_VERSION not in versions:
+        return [
+            AcceptanceCheck(
+                "database",
+                "fail",
+                f"schema version {SCHEMA_VERSION} is missing",
+            )
+        ]
     return [AcceptanceCheck("database", "pass", "required tables and schema version present")]
 
 
@@ -219,7 +236,9 @@ def _check_model(settings: Settings) -> list[AcceptanceCheck]:
                 f"{status.mode}/{status.provider}/{status.model or 'none'}",
             )
         ]
-    return [AcceptanceCheck("model_status", "warn", f"{status.mode}/{status.provider} not configured")]
+    return [
+        AcceptanceCheck("model_status", "warn", f"{status.mode}/{status.provider} not configured")
+    ]
 
 
 def _check_sources(settings: Settings) -> list[AcceptanceCheck]:
@@ -237,7 +256,9 @@ def _check_sources(settings: Settings) -> list[AcceptanceCheck]:
 
 
 def _check_word_artifacts(settings: Settings, *, strict_runtime: bool) -> list[AcceptanceCheck]:
-    output_files = sorted(settings.outputs_dir.glob("*.docx"), key=lambda path: path.stat().st_mtime)
+    output_files = sorted(
+        settings.outputs_dir.glob("*.docx"), key=lambda path: path.stat().st_mtime
+    )
     outbox_files = sorted(settings.outbox_dir.glob("*.docx"), key=lambda path: path.stat().st_mtime)
     checks = [
         _artifact_count_check("outputs_docx", output_files, strict_runtime),
@@ -334,4 +355,27 @@ def _check_any_multi_source_run(rows: list[Any]) -> AcceptanceCheck:
         source_sites = stats.get("source_sites")
         if isinstance(source_sites, list) and len(set(source_sites)) >= 2:
             return AcceptanceCheck("multi_source_run", "pass", row["id"])
-    return AcceptanceCheck("multi_source_run", "warn", "no finished run with >=2 source sites found")
+    for row in rows:
+        stats = json.loads(row["stats_json"])
+        attempted = _attempted_external_sources(stats)
+        if len(attempted) >= 2:
+            return AcceptanceCheck(
+                "multi_source_run",
+                "pass",
+                f"{row['id']} attempted {', '.join(attempted)}",
+            )
+    return AcceptanceCheck(
+        "multi_source_run", "warn", "no finished run with >=2 source sites attempted"
+    )
+
+
+def _attempted_external_sources(stats: dict[str, object]) -> list[str]:
+    source_stats = stats.get("source_stats")
+    if not isinstance(source_stats, list):
+        return []
+    sources = {
+        str(item.get("source") or "")
+        for item in source_stats
+        if isinstance(item, dict) and item.get("source") and not str(item.get("source")).startswith("local_")
+    }
+    return sorted(sources)

@@ -74,6 +74,20 @@ class Settings:
     port: int
     timezone: str
     delivery_channels: tuple[str, ...]
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_from: str
+    smtp_to: tuple[str, ...]
+    smtp_use_tls: bool
+    smtp_password_present: bool
+    smtp_timeout: float
+    feishu_app_id: str
+    feishu_app_secret_present: bool
+    feishu_bitable_app_token: str
+    feishu_bitable_table_id: str
+    feishu_timeout: float
+    public_base_url: str
     db_path: Path
     outputs_dir: Path
     outbox_dir: Path
@@ -144,6 +158,13 @@ class Settings:
             _first_value("TENDERTRACE_MODEL_REQUEST_TIMEOUT", env_files, "8"),
             "TENDERTRACE_MODEL_REQUEST_TIMEOUT",
         )
+        smtp_password = _first_value("TENDERTRACE_SMTP_PASSWORD", env_files, "")
+        feishu_app_secret = _first_value("TENDERTRACE_FEISHU_APP_SECRET", env_files, "")
+        public_base_url = _first_value(
+            "TENDERTRACE_PUBLIC_BASE_URL",
+            env_files,
+            f"http://{_first_value('TENDERTRACE_HOST', env_files, '127.0.0.1')}:{port}",
+        )
 
         return cls(
             workspace_root=root,
@@ -154,12 +175,55 @@ class Settings:
             delivery_channels=_split_csv(
                 _first_value("TENDERTRACE_DELIVERY_CHANNELS", env_files, "web,outbox")
             ),
-            db_path=_resolve_path(root, _first_value("TENDERTRACE_DB_PATH", env_files, "data/tendertrace.sqlite3")),
-            outputs_dir=_resolve_path(root, _first_value("TENDERTRACE_OUTPUTS_DIR", env_files, "outputs")),
-            outbox_dir=_resolve_path(root, _first_value("TENDERTRACE_OUTBOX_DIR", env_files, "outbox")),
-            snapshots_dir=_resolve_path(root, _first_value("TENDERTRACE_SNAPSHOTS_DIR", env_files, "snapshots")),
-            traces_dir=_resolve_path(root, _first_value("TENDERTRACE_TRACES_DIR", env_files, "traces")),
-            secrets_dir=_resolve_path(root, _first_value("TENDERTRACE_SECRETS_DIR", env_files, "secrets")),
+            smtp_host=_first_value("TENDERTRACE_SMTP_HOST", env_files, ""),
+            smtp_port=_parse_positive_int(
+                _first_value("TENDERTRACE_SMTP_PORT", env_files, "587"),
+                "TENDERTRACE_SMTP_PORT",
+            ),
+            smtp_username=_first_value("TENDERTRACE_SMTP_USERNAME", env_files, ""),
+            smtp_from=_first_value("TENDERTRACE_SMTP_FROM", env_files, ""),
+            smtp_to=_split_csv(_first_value("TENDERTRACE_SMTP_TO", env_files, "")),
+            smtp_use_tls=_parse_bool(_first_value("TENDERTRACE_SMTP_USE_TLS", env_files, "true")),
+            smtp_password_present=_bool_secret_present(smtp_password),
+            smtp_timeout=_parse_positive_float(
+                _first_value("TENDERTRACE_SMTP_TIMEOUT", env_files, "15"),
+                "TENDERTRACE_SMTP_TIMEOUT",
+            ),
+            feishu_app_id=_first_value("TENDERTRACE_FEISHU_APP_ID", env_files, ""),
+            feishu_app_secret_present=_bool_secret_present(feishu_app_secret),
+            feishu_bitable_app_token=_first_value(
+                "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN",
+                env_files,
+                "",
+            ),
+            feishu_bitable_table_id=_first_value(
+                "TENDERTRACE_FEISHU_BITABLE_TABLE_ID",
+                env_files,
+                "",
+            ),
+            feishu_timeout=_parse_positive_float(
+                _first_value("TENDERTRACE_FEISHU_TIMEOUT", env_files, "20"),
+                "TENDERTRACE_FEISHU_TIMEOUT",
+            ),
+            public_base_url=public_base_url.rstrip("/"),
+            db_path=_resolve_path(
+                root, _first_value("TENDERTRACE_DB_PATH", env_files, "data/tendertrace.sqlite3")
+            ),
+            outputs_dir=_resolve_path(
+                root, _first_value("TENDERTRACE_OUTPUTS_DIR", env_files, "outputs")
+            ),
+            outbox_dir=_resolve_path(
+                root, _first_value("TENDERTRACE_OUTBOX_DIR", env_files, "outbox")
+            ),
+            snapshots_dir=_resolve_path(
+                root, _first_value("TENDERTRACE_SNAPSHOTS_DIR", env_files, "snapshots")
+            ),
+            traces_dir=_resolve_path(
+                root, _first_value("TENDERTRACE_TRACES_DIR", env_files, "traces")
+            ),
+            secrets_dir=_resolve_path(
+                root, _first_value("TENDERTRACE_SECRETS_DIR", env_files, "secrets")
+            ),
             model_mode=model_mode,
             model_enhancement_enabled=_parse_bool(
                 _first_value("TENDERTRACE_MODEL_ENHANCEMENT_ENABLED", env_files, "false")
@@ -176,7 +240,9 @@ class Settings:
             scheduler_enabled=_parse_bool(
                 _first_value("TENDERTRACE_SCHEDULER_ENABLED", env_files, "true")
             ),
-            ingest_enabled=_parse_bool(_first_value("TENDERTRACE_INGEST_ENABLED", env_files, "false")),
+            ingest_enabled=_parse_bool(
+                _first_value("TENDERTRACE_INGEST_ENABLED", env_files, "false")
+            ),
             ingest_cron=_first_value("TENDERTRACE_INGEST_CRON", env_files, "0 */6 * * *"),
             ingest_topics=_split_csv(
                 _first_value(
@@ -226,6 +292,20 @@ class Settings:
             "port": self.port,
             "timezone": self.timezone,
             "delivery_channels": list(self.delivery_channels),
+            "smtp_host": self.smtp_host,
+            "smtp_port": self.smtp_port,
+            "smtp_username_configured": bool(self.smtp_username),
+            "smtp_from": self.smtp_from,
+            "smtp_to_configured": bool(self.smtp_to),
+            "smtp_use_tls": self.smtp_use_tls,
+            "smtp_password_configured": self.smtp_password_present,
+            "smtp_timeout": self.smtp_timeout,
+            "feishu_app_id_configured": bool(self.feishu_app_id),
+            "feishu_app_secret_configured": self.feishu_app_secret_present,
+            "feishu_bitable_app_token_configured": bool(self.feishu_bitable_app_token),
+            "feishu_bitable_table_id": self.feishu_bitable_table_id,
+            "feishu_timeout": self.feishu_timeout,
+            "public_base_url": self.public_base_url,
             "db_path": str(self.db_path),
             "outputs_dir": str(self.outputs_dir),
             "outbox_dir": str(self.outbox_dir),
@@ -259,6 +339,20 @@ class Settings:
             _read_env_file(self.workspace_root / ".env"),
         ]
         return _first_value("OPENAI_API_KEY", env_files, "")
+
+    def smtp_password(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("TENDERTRACE_SMTP_PASSWORD", env_files, "")
+
+    def feishu_app_secret(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("TENDERTRACE_FEISHU_APP_SECRET", env_files, "")
 
 
 def _parse_positive_int(value: str, name: str) -> int:

@@ -24,6 +24,7 @@
           <button class="nav-tab" type="button" data-view="subscriptionsView">订阅管理</button>
           <button class="nav-tab" type="button" data-view="sourcesView">数据源</button>
           <button class="nav-tab" type="button" data-view="evaluationView">Agent评测</button>
+          <button class="nav-tab" type="button" data-view="memoryView">用户记忆</button>
           <button class="nav-tab" type="button" data-view="settingsView">设置</button>
         </nav>
 
@@ -113,6 +114,41 @@
                     <p>输入自然语言需求后，我会解析区域、主题、时间、频率，并生成可下载 Word。</p>
                   </div>
                 </article>
+                <section id="smartStartPanel" class="smart-start" aria-label="智能启动建议">
+                  <div class="smart-start-head">
+                    <div>
+                      <strong>智能启动</strong>
+                      <span id="smartStartMeta">正在读取当前配置和记忆库</span>
+                    </div>
+                    <button class="ghost-button" type="button" data-view="memoryView">查看周报</button>
+                  </div>
+                  <div class="smart-grid">
+                    <button
+                      class="smart-card"
+                      type="button"
+                      data-example-query="最近1个月上海服务器招标信息都有哪些"
+                    >
+                      <strong>快速查询</strong>
+                      <span>上海服务器，最近1个月</span>
+                    </button>
+                    <button
+                      class="smart-card"
+                      type="button"
+                      data-example-query="最近3个月杭州市空调招标信息都有哪些，请每天9:00发送"
+                    >
+                      <strong>启用订阅</strong>
+                      <span>识别频率后自动切换订阅</span>
+                    </button>
+                    <div class="smart-card passive">
+                      <strong>最近报告</strong>
+                      <span id="smartLatestReport">暂无可下载 Word</span>
+                    </div>
+                    <div class="smart-card passive">
+                      <strong>下一步建议</strong>
+                      <span id="smartRecommendation">完成一次查询后，我会根据下载和点击给出建议。</span>
+                    </div>
+                  </div>
+                </section>
               </div>
 
               <form id="runForm" class="composer">
@@ -249,29 +285,6 @@
                 </div>
               </section>
 
-              <section class="panel sources-panel" aria-labelledby="sourcesTitle">
-                <div class="panel-heading">
-                  <div>
-                    <h2 id="sourcesTitle">数据源状态</h2>
-                    <span class="panel-meta">公开源与登录源</span>
-                  </div>
-                  <button id="refreshSourcesButton" class="ghost-button" type="button">刷新</button>
-                </div>
-                <div id="sourceList" class="source-list empty-state">加载中</div>
-              </section>
-
-              <section class="panel model-panel" aria-labelledby="modelTitle">
-                <div class="panel-heading">
-                  <div>
-                    <h2 id="modelTitle">模型医生</h2>
-                    <span class="panel-meta">本地 / 云端连通性</span>
-                  </div>
-                  <button id="modelDoctorButton" class="ghost-button" type="button">重新检测</button>
-                </div>
-                <div id="modelStatus" class="source-list empty-state">Loading</div>
-                <div id="modelDoctorResult" class="source-list empty-state">Not checked</div>
-              </section>
-
               <section class="panel output-panel" aria-labelledby="outputTitle">
                 <div class="panel-heading">
                   <div>
@@ -282,75 +295,54 @@
                 </div>
                 <div class="download-strip" id="latestDownload" hidden></div>
               </section>
+
+              <section class="panel insight-panel" aria-labelledby="insightTitle">
+                <div class="panel-heading">
+                  <div>
+                    <h2 id="insightTitle">使用洞察</h2>
+                    <span class="panel-meta">来自用户记忆库</span>
+                  </div>
+                  <button class="ghost-button" type="button" data-view="memoryView">查看周报</button>
+                </div>
+                <div id="memoryDigest" class="source-list empty-state">等待周报数据</div>
+              </section>
             </aside>
-          </div>
-
-          <div class="bottom-grid">
-            <section class="panel subscription-panel" aria-labelledby="subscriptionTitle">
-              <div class="panel-heading">
-                <div>
-                  <h2 id="subscriptionTitle">我的订阅</h2>
-                  <span class="panel-meta">增量推送由 sent_history 控制</span>
-                </div>
-                <button id="refreshSubscriptionsButton" class="ghost-button" type="button">刷新</button>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>订阅名称</th>
-                      <th>查询条件</th>
-                      <th>频率</th>
-                      <th>状态</th>
-                      <th>最近运行</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody id="subscriptionBody">
-                    <tr><td colspan="6" class="empty-cell">加载中</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section class="panel outbox-panel" aria-labelledby="outboxTitle">
-              <div class="panel-heading">
-                <div>
-                  <h2 id="outboxTitle">Word 报告（Outbox）</h2>
-                  <span class="panel-meta">可下载、可追踪、可删除</span>
-                </div>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>文件名</th>
-                      <th>生成时间</th>
-                      <th>状态</th>
-                      <th>大小</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody id="outboxBody">
-                    <tr><td colspan="5" class="empty-cell">加载中</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
           </div>
         </section>
 
         <section id="historyView" class="view">
           <section class="panel page-panel">
-            <div class="panel-heading">
-              <div>
-                <h1>历史运行</h1>
-                <span class="panel-meta">运行记录、状态、报告和删除操作</span>
+              <div class="panel-heading">
+                <div>
+                  <h1>历史运行</h1>
+                  <span class="panel-meta">运行记录、状态、报告和删除操作</span>
+                </div>
+                <button id="refreshRunsButton" class="ghost-button" type="button">刷新</button>
               </div>
-              <button id="refreshRunsButton" class="ghost-button" type="button">刷新</button>
-            </div>
-            <div class="table-wrap">
-              <table>
+              <div class="list-tools" aria-label="历史运行筛选">
+                <label class="search-field">
+                  <span class="sr-only">搜索历史运行</span>
+                  <input id="runSearchInput" type="search" placeholder="搜索问题、状态、Run ID" autocomplete="off" />
+                </label>
+                <select id="runStatusFilter" aria-label="筛选运行状态">
+                  <option value="all">全部状态</option>
+                  <option value="finished">已完成</option>
+                  <option value="running">运行中</option>
+                  <option value="queued">排队中</option>
+                  <option value="failed">失败</option>
+                </select>
+                <select id="runSortSelect" aria-label="排序历史运行">
+                  <option value="started_desc">最新优先</option>
+                  <option value="started_asc">最早优先</option>
+                  <option value="notice_desc">结果最多</option>
+                  <option value="status_asc">状态 A-Z</option>
+                </select>
+                <button id="toggleRunsButton" class="ghost-button" type="button">展开全部</button>
+                <button id="clearRunFiltersButton" class="ghost-button" type="button">清除</button>
+              </div>
+              <div id="runListHint" class="list-hint">默认展示最近 8 条运行</div>
+              <div class="table-wrap">
+                <table>
                 <thead>
                   <tr>
                     <th>问题</th>
@@ -410,11 +402,12 @@
                     <th>频率</th>
                     <th>状态</th>
                     <th>最近运行</th>
+                    <th>增量</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody id="subscriptionPageBody">
-                  <tr><td colspan="6" class="empty-cell">加载中</td></tr>
+                  <tr><td colspan="7" class="empty-cell">加载中</td></tr>
                 </tbody>
               </table>
             </div>
@@ -458,6 +451,58 @@
               <div class="eval-card">
                 <h2>评测说明</h2>
                 <div id="evaluationNotes" class="case-list empty-state">暂无说明</div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="memoryView" class="view">
+          <section class="panel page-panel">
+            <div class="panel-heading">
+              <div>
+                <h1>用户记忆</h1>
+                <span class="panel-meta">每日使用、点击、下载、查询偏好与周报建议</span>
+              </div>
+              <div class="action-group">
+                <button id="refreshMemoryButton" class="primary-lite-button" type="button">刷新周报</button>
+                <button id="saveMemoryButton" class="ghost-button" type="button">保存快照</button>
+              </div>
+            </div>
+            <div id="memorySummary" class="eval-summary empty-state">等待记忆数据</div>
+            <div class="eval-grid">
+              <div id="memoryUsageMetrics" class="eval-card"></div>
+              <div id="memoryReportMetrics" class="eval-card"></div>
+              <div id="memorySubscriptionMetrics" class="eval-card"></div>
+              <div id="memoryDailyMetrics" class="eval-card"></div>
+            </div>
+            <div class="eval-detail-grid memory-insight-grid">
+              <div class="eval-card">
+                <h2>知识画像</h2>
+                <div id="memoryProfile" class="case-list empty-state">暂无画像</div>
+              </div>
+              <div class="eval-card advice-card">
+                <h2>生成式建议</h2>
+                <div id="memoryGeneratedAdvice" class="case-list empty-state">暂无建议</div>
+              </div>
+            </div>
+            <div class="eval-detail-grid">
+              <div class="eval-card">
+                <h2>高频查询</h2>
+                <div id="memoryQueries" class="case-list empty-state">暂无查询</div>
+              </div>
+              <div class="eval-card">
+                <h2>周报建议</h2>
+                <div id="memorySuggestions" class="case-list empty-state">暂无建议</div>
+              </div>
+            </div>
+            <div class="eval-detail-grid">
+              <div class="eval-card">
+                <h2>最近事件</h2>
+                <div id="memoryEvents" class="case-list empty-state">暂无事件</div>
+              </div>
+              <div class="eval-card">
+                <h2>分析摘要</h2>
+                <div id="memoryAnalysis" class="case-list empty-state">暂无分析</div>
               </div>
             </div>
           </section>

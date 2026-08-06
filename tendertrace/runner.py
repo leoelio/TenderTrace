@@ -13,12 +13,15 @@ from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.adapters.multi import MultiSourceAdapter
 from tendertrace.config import ModelMode, Settings
 from tendertrace.db import connection, init_db, json_dumps
+from tendertrace.delivery.emailer import send_report_email
+from tendertrace.delivery.feishu_bitable import sync_notices_to_bitable
 from tendertrace.intent import compile_intent
 from tendertrace.llm.enhancer import enhance_bidql_with_model
 from tendertrace.llm.gateway import ModelGateway
 from tendertrace.pipeline.attachments import Downloader, enrich_attachment_snapshots
 from tendertrace.pipeline.dedup import clean_and_cluster_notices
 from tendertrace.pipeline.evidence import attach_evidence
+from tendertrace.pipeline.fields import extract_structured_fields
 from tendertrace.retrieval import search_notices, upsert_notice_fts
 from tendertrace.report.docx_writer import write_report
 from tendertrace.runlog import finish_run, register_outbox_message, start_run
@@ -115,7 +118,7 @@ def run_once(
                 notices=local_notices,
             )
         source_stats = [local_result.stats]
-        if len(local_notices) >= max_results:
+        if _can_use_local_only(local_notices, max_results, source_adapter):
             dedup_result = clean_and_cluster_notices(local_notices[:max_results])
             notices = dedup_result.notices
             region_scope = _region_scope_summary(state.intent, source_stats)
@@ -125,6 +128,7 @@ def run_once(
                     "count": len(local_notices),
                     "engine": local_result.stats.get("engine"),
                     "cache_hit": True,
+                    "source_sites": _source_sites(local_notices),
                 },
             )
             context.emit_tool_call("pipeline.clean_dedup", dedup_result.stats)
@@ -151,6 +155,7 @@ def run_once(
                 "max_pages": max_pages,
                 "max_results": max_results,
                 "local_retrieved": len(local_notices),
+                "local_source_sites": _source_sites(local_notices),
             },
         )
         collected = source_adapter.collect(
@@ -204,6 +209,9 @@ def run_once(
         )
         notices = attachment_result.notices
         context.emit_tool_call("pipeline.attachment_extract", attachment_result.stats)
+        structured_result = extract_structured_fields(notices)
+        notices = structured_result.notices
+        context.emit_tool_call("pipeline.structured_fields", structured_result.stats)
         evidence_result = attach_evidence(notices)
         notices = evidence_result.notices
         deduped_count = len(notices)
@@ -219,11 +227,7 @@ def run_once(
                         cluster_keys=cluster_keys,
                     )
                 )
-            notices = [
-                notice
-                for notice in notices
-                if _cluster_key(notice.to_dict()) in unsent
-            ]
+            notices = [notice for notice in notices if _cluster_key(notice.to_dict()) in unsent]
         pre_skipped_sent = int(state.funnel.get("pre_skipped_sent") or 0)
         skipped_sent = (
             pre_skipped_sent + deduped_count - len(notices)
@@ -238,9 +242,14 @@ def run_once(
                 "skipped_sent": skipped_sent,
                 "source_sites": _source_sites(notices),
                 **attachment_result.stats,
+                **structured_result.stats,
                 **evidence_result.stats,
             },
-            quality={"attachments": attachment_result.stats, "evidence": evidence_result.stats},
+            quality={
+                "attachments": attachment_result.stats,
+                "structured_fields": structured_result.stats,
+                "evidence": evidence_result.stats,
+            },
         )
 
     def report(state: RunState, context) -> RunState:
@@ -252,6 +261,7 @@ def run_once(
             output_dir=settings.outputs_dir,
             generated_at=run_at,
             run_mode="incremental" if incremental else "full",
+            run_stats=state.funnel,
         )
         settings.outbox_dir.mkdir(parents=True, exist_ok=True)
         outbox_path = settings.outbox_dir / report_path.name
@@ -262,6 +272,24 @@ def run_once(
             docx_path=outbox_path,
             subscription_id=subscription_id,
         )
+        email_result = send_report_email(
+            settings,
+            docx_path=outbox_path,
+            query=state.original_query,
+            run_id=state.run_id,
+            notice_count=len(state.notices),
+        )
+        context.emit_tool_call("delivery.email", email_result.to_dict())
+        feishu_result = sync_notices_to_bitable(
+            settings,
+            notices=state.notices,
+            bidql=state.intent,
+            query=state.original_query,
+            run_id=state.run_id,
+            outbox_path=outbox_path,
+            synced_at=run_at,
+        )
+        context.emit_tool_call("delivery.feishu_bitable", feishu_result.to_dict())
         if subscription_id and incremental:
             with connection(settings) as conn:
                 for notice in state.notices:
@@ -273,7 +301,12 @@ def run_once(
                         docx_path=str(outbox_path),
                     )
         return state.with_updates(
-            artifacts={"docx_path": str(report_path), "outbox_path": str(outbox_path)}
+            artifacts={"docx_path": str(report_path), "outbox_path": str(outbox_path)},
+            funnel={
+                **state.funnel,
+                "email_delivery": email_result.to_dict(),
+                "feishu_bitable_delivery": feishu_result.to_dict(),
+            },
         )
 
     graph = (
@@ -371,6 +404,18 @@ def _settings_for_model_strategy(settings: Settings, strategy: str) -> Settings:
     return settings
 
 
+def _can_use_local_only(
+    local_notices: list[Notice],
+    max_results: int,
+    source_adapter: NoticeAdapter,
+) -> bool:
+    if len(local_notices) < max_results:
+        return False
+    if isinstance(source_adapter, MultiSourceAdapter):
+        return len(_source_sites(local_notices)) >= 2
+    return True
+
+
 def _region_scope_summary(
     bidql: dict[str, Any],
     source_stats: list[dict[str, object]],
@@ -436,11 +481,7 @@ def _filter_unsent_candidates(
             )
         )
     skipped = {key for key in cluster_keys if key not in unsent}
-    return [
-        notice
-        for notice in notices
-        if _cluster_key(notice.to_dict()) in unsent
-    ], skipped
+    return [notice for notice in notices if _cluster_key(notice.to_dict()) in unsent], skipped
 
 
 def _cluster_key(notice: dict[str, object]) -> str:
@@ -560,6 +601,15 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
                     cluster_key=cluster_key,
                     attachment=attachment,
                 )
+            page_artifact = fields.get("page_artifact")
+            if isinstance(page_artifact, dict):
+                _persist_page_artifact(
+                    conn=conn,
+                    notice_pk=notice_pk,
+                    cluster_key=cluster_key,
+                    source_site=notice.source_site,
+                    artifact=page_artifact,
+                )
 
 
 def _persist_evidence_item(
@@ -613,9 +663,9 @@ def _persist_attachment_snapshot(
     attachment: dict[str, Any],
 ) -> None:
     canonical = str(attachment.get("canonical_url") or attachment.get("url") or "")
-    attachment_id = hashlib.sha1(f"{notice_pk}:{cluster_key}:{canonical}".encode("utf-8")).hexdigest()[
-        :24
-    ]
+    attachment_id = hashlib.sha1(
+        f"{notice_pk}:{cluster_key}:{canonical}".encode("utf-8")
+    ).hexdigest()[:24]
     conn.execute(
         """
         INSERT OR REPLACE INTO attachment_snapshots(
@@ -638,6 +688,49 @@ def _persist_attachment_snapshot(
             str(attachment.get("text_excerpt") or ""),
             int(attachment.get("text_length") or 0),
             str(attachment.get("error") or ""),
+        ),
+    )
+
+
+def _persist_page_artifact(
+    *,
+    conn,
+    notice_pk: str,
+    cluster_key: str,
+    source_site: str,
+    artifact: dict[str, Any],
+) -> None:
+    source_url = str(artifact.get("source_url") or "")
+    final_url = str(artifact.get("final_url") or source_url)
+    content_sha256 = str(artifact.get("content_sha256") or "")
+    artifact_id = hashlib.sha1(
+        f"{notice_pk}:{cluster_key}:{source_url}:{final_url}:{content_sha256}".encode("utf-8")
+    ).hexdigest()[:24]
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO page_artifacts(
+            id, notice_id, cluster_key, source_site, source_url, final_url, status_code,
+            fetcher, content_sha256, content_length, text_excerpt, blocked, error,
+            fetched_at, elapsed_ms
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            artifact_id,
+            notice_pk,
+            cluster_key,
+            source_site,
+            source_url,
+            final_url,
+            int(artifact.get("status_code") or 0),
+            str(artifact.get("fetcher") or ""),
+            content_sha256,
+            int(artifact.get("content_length") or 0),
+            str(artifact.get("text_excerpt") or ""),
+            1 if artifact.get("blocked") else 0,
+            str(artifact.get("error") or ""),
+            str(artifact.get("fetched_at") or ""),
+            int(artifact.get("elapsed_ms") or 0),
         ),
     )
 

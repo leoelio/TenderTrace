@@ -10,12 +10,15 @@ from tendertrace.acceptance import run_acceptance
 from tendertrace.config import ConfigError, Settings
 from tendertrace.db import database_health, init_db
 from tendertrace.demo_check import run_demo_check, write_demo_evidence
+from tendertrace.demo_incremental import run_incremental_demo
 from tendertrace.demo_video import generate_demo_video
+from tendertrace.delivery.feishu_bitable import check_feishu_bitable
 from tendertrace.gold import build_gold_candidates, evaluate_gold_recall
 from tendertrace.ingest import run_ingest_cycle
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
+from tendertrace.memory import build_weekly_report, persist_weekly_report
 from tendertrace.runner import run_once
 from tendertrace.runtime.bus import EventBus
 from tendertrace.runtime.checkpoint import SqliteCheckpointer
@@ -119,6 +122,20 @@ def cmd_demo_video(args: argparse.Namespace) -> int:
     return 0 if result.status == "pass" else 1
 
 
+def cmd_demo_incremental(args: argparse.Namespace) -> int:
+    settings = _settings()
+    result = run_incremental_demo(
+        settings,
+        query=args.query,
+        now=_parse_now(args.now),
+        max_pages=args.max_pages,
+        max_results=args.max_results,
+        model_strategy=args.model_strategy,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _parse_now(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -187,6 +204,23 @@ def cmd_gold_candidates(args: argparse.Namespace) -> int:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     payload["output_path"] = str(path)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_memory_weekly(args: argparse.Namespace) -> int:
+    settings = _settings()
+    init_db(settings)
+    report = build_weekly_report(settings, user_id=args.user_id, days=args.days)
+    if args.save:
+        report = persist_weekly_report(settings, report)
+    if args.out:
+        path = Path(args.out)
+        if not path.is_absolute():
+            path = settings.workspace_root / path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        report["output_path"] = str(path)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -344,6 +378,13 @@ def cmd_run_subscription(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_feishu_bitable_check(args: argparse.Namespace) -> int:
+    settings = _settings()
+    result = check_feishu_bitable(settings, ensure_fields=args.ensure_fields)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0 if result.status in {"pass", "warn", "skipped"} else 1
+
+
 def cmd_source_status(_: argparse.Namespace) -> int:
     settings = _settings()
     qianlima = QianlimaSessionVault(settings)
@@ -356,7 +397,9 @@ def cmd_source_status(_: argparse.Namespace) -> int:
                     {
                         **qianlima.status().to_dict(),
                         "engine": "playwright",
-                        "status": "configured" if qianlima.has_storage_state() else "login_required",
+                        "status": "configured"
+                        if qianlima.has_storage_state()
+                        else "login_required",
                     },
                 ]
             },
@@ -450,9 +493,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path for the refreshed demo evidence JSON.",
     )
     demo_video.set_defaults(func=cmd_demo_video)
+    demo_incremental = sub.add_parser(
+        "demo-incremental",
+        help="Create a scheduled subscription and trigger two runs to demonstrate incremental delivery.",
+    )
+    demo_incremental.add_argument("query")
+    demo_incremental.add_argument("--now", help="Optional ISO datetime used for the demo.")
+    demo_incremental.add_argument("--max-pages", type=int, default=1)
+    demo_incremental.add_argument("--max-results", type=int, default=10)
+    demo_incremental.add_argument(
+        "--model-strategy",
+        choices=("config", "rules", "local", "cloud", "hybrid"),
+        default="config",
+        help="Override model enhancement for this demo.",
+    )
+    demo_incremental.set_defaults(func=cmd_demo_incremental)
     parse_intent = sub.add_parser("parse-intent", help="Compile a natural-language query to BidQL.")
     parse_intent.add_argument("query")
-    parse_intent.add_argument("--now", help="Optional ISO datetime used to resolve relative windows.")
+    parse_intent.add_argument(
+        "--now", help="Optional ISO datetime used to resolve relative windows."
+    )
     parse_intent.set_defaults(func=cmd_parse_intent)
     ingest_once = sub.add_parser(
         "ingest-once",
@@ -488,6 +548,15 @@ def build_parser() -> argparse.ArgumentParser:
     gold_candidates.add_argument("--max-pages", type=int, default=1)
     gold_candidates.add_argument("--max-results", type=int, default=20)
     gold_candidates.set_defaults(func=cmd_gold_candidates)
+    memory_weekly = sub.add_parser(
+        "memory-weekly",
+        help="Build the local user-memory weekly report from recorded activity events.",
+    )
+    memory_weekly.add_argument("--user-id", default="admin")
+    memory_weekly.add_argument("--days", type=int, default=7)
+    memory_weekly.add_argument("--save", action="store_true", help="Persist this report snapshot.")
+    memory_weekly.add_argument("--out", help="Optional JSON output path.")
+    memory_weekly.set_defaults(func=cmd_memory_weekly)
     create_ingest_sub = sub.add_parser(
         "create-ingest-subscription",
         help="Create a background ingest subscription that only grows the local notices DB.",
@@ -495,7 +564,9 @@ def build_parser() -> argparse.ArgumentParser:
     create_ingest_sub.add_argument("--name", default="ingest")
     create_ingest_sub.add_argument("--topic", action="append", required=True)
     create_ingest_sub.add_argument("--region", action="append", required=True)
-    create_ingest_sub.add_argument("--cron", default=None, help="Cron expression, default uses TENDERTRACE_INGEST_CRON.")
+    create_ingest_sub.add_argument(
+        "--cron", default=None, help="Cron expression, default uses TENDERTRACE_INGEST_CRON."
+    )
     create_ingest_sub.add_argument("--window-days", type=int, default=30)
     create_ingest_sub.add_argument("--max-pages", type=int, default=1)
     create_ingest_sub.add_argument("--max-results", type=int, default=20)
@@ -511,12 +582,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_ingest_sub.add_argument("subscription_id")
     run_ingest_sub.set_defaults(func=cmd_run_ingest_subscription)
     serve = sub.add_parser("serve", help="Start the FastAPI service.")
-    serve.add_argument("--reload", action="store_true", help="Enable uvicorn hot reload for development.")
+    serve.add_argument(
+        "--reload", action="store_true", help="Enable uvicorn hot reload for development."
+    )
     serve.set_defaults(func=cmd_serve)
     sub.add_parser("graph-smoke", help="Run a small graph and persist trace events.").set_defaults(
         func=cmd_graph_smoke
     )
-    run_once = sub.add_parser("run-once", help="Run one public-source collection and write a Word report.")
+    run_once = sub.add_parser(
+        "run-once", help="Run one public-source collection and write a Word report."
+    )
     run_once.add_argument("query")
     run_once.add_argument("--now", help="Optional ISO datetime used for the run.")
     run_once.add_argument("--max-pages", type=int, default=1)
@@ -549,9 +624,19 @@ def build_parser() -> argparse.ArgumentParser:
     run_sub = sub.add_parser("run-subscription", help="Manually trigger a subscription run.")
     run_sub.add_argument("subscription_id")
     run_sub.set_defaults(func=cmd_run_subscription)
-    sub.add_parser("source-status", help="Show configured source and login-state status.").set_defaults(
-        func=cmd_source_status
+    feishu_check = sub.add_parser(
+        "feishu-bitable-check",
+        help="Validate Feishu Bitable connectivity and required opportunity fields.",
     )
+    feishu_check.add_argument(
+        "--ensure-fields",
+        action="store_true",
+        help="Create missing TenderTrace opportunity fields in the configured table.",
+    )
+    feishu_check.set_defaults(func=cmd_feishu_bitable_check)
+    sub.add_parser(
+        "source-status", help="Show configured source and login-state status."
+    ).set_defaults(func=cmd_source_status)
     sub.add_parser(
         "login-qianlima",
         help="Open a browser for manual Qianlima login and save Playwright storage_state.",

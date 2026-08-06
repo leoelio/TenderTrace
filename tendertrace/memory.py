@@ -1,0 +1,701 @@
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from datetime import date, datetime, timedelta
+import json
+from typing import Any
+from uuid import NAMESPACE_URL, uuid4, uuid5
+from zoneinfo import ZoneInfo
+
+from tendertrace.config import Settings
+from tendertrace.db import connection, json_dumps
+from tendertrace.intent import compile_intent
+
+
+DEFAULT_USER_ID = "admin"
+MAX_REPORT_DAYS = 31
+
+
+def record_activity(
+    settings: Settings,
+    *,
+    event_type: str,
+    target: str | None = None,
+    label: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    user_id: str = DEFAULT_USER_ID,
+    created_at: datetime | str | None = None,
+) -> dict[str, object]:
+    event_type = event_type.strip()
+    if not event_type:
+        raise ValueError("event_type is required")
+    user_id = (user_id or DEFAULT_USER_ID).strip() or DEFAULT_USER_ID
+    timestamp = _coerce_datetime(settings, created_at)
+    event = {
+        "id": str(uuid4()),
+        "user_id": user_id,
+        "event_type": event_type,
+        "target": (target or "").strip(),
+        "label": (label or "").strip(),
+        "metadata": _metadata_dict(metadata),
+        "created_at": timestamp.isoformat(timespec="seconds"),
+        "created_date": timestamp.date().isoformat(),
+    }
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_activity_events(
+                id, user_id, event_type, target, label, metadata_json, created_at, created_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event["id"],
+                event["user_id"],
+                event["event_type"],
+                event["target"],
+                event["label"],
+                json_dumps(event["metadata"]),
+                event["created_at"],
+                event["created_date"],
+            ),
+        )
+    return event
+
+
+def build_weekly_report(
+    settings: Settings,
+    *,
+    user_id: str = DEFAULT_USER_ID,
+    days: int = 7,
+    now: datetime | str | None = None,
+) -> dict[str, object]:
+    user_id = (user_id or DEFAULT_USER_ID).strip() or DEFAULT_USER_ID
+    days = max(1, min(int(days), MAX_REPORT_DAYS))
+    end_at = _coerce_datetime(settings, now)
+    start_date = end_at.date() - timedelta(days=days - 1)
+    end_date = end_at.date()
+    events = _load_events(settings, user_id, start_date, end_date)
+    runs = _load_runs(settings, start_date, end_date)
+    subscriptions = _load_subscription_count(settings, start_date, end_date)
+
+    event_counts = Counter(event["event_type"] for event in events)
+    daily = _daily_rows(start_date, end_date, events, runs)
+    top_queries = _top_queries(events, runs)
+    downloads = [event for event in events if event["event_type"] == "download"]
+    failed_runs = [run for run in runs if run.get("status") == "failed"]
+    finished_runs = [run for run in runs if run.get("status") == "finished"]
+
+    summary = {
+        "total_events": len(events),
+        "active_days": sum(1 for row in daily if row["events"] or row["runs"]),
+        "clicks": event_counts["click"],
+        "downloads": len(downloads),
+        "runs_started": event_counts["run_start"] or len(runs),
+        "runs_finished": len(finished_runs),
+        "failed_runs": len(failed_runs),
+        "subscriptions_created": event_counts["subscription_create"] or subscriptions,
+        "weekly_reports_viewed": event_counts["weekly_report_view"],
+    }
+    knowledge_profile = _knowledge_profile(events, runs, top_queries, summary)
+    risk_signals = _risk_signals(summary, knowledge_profile, failed_runs)
+    recommendation_plan = _recommendation_plan(
+        summary,
+        top_queries,
+        failed_runs,
+        knowledge_profile,
+        risk_signals,
+    )
+    return {
+        "user_id": user_id,
+        "period": {
+            "from": start_date.isoformat(),
+            "to": end_date.isoformat(),
+            "days": days,
+            "generated_at": end_at.isoformat(timespec="seconds"),
+        },
+        "summary": summary,
+        "event_counts": dict(event_counts),
+        "daily": daily,
+        "top_queries": top_queries,
+        "downloads": _compact_events(downloads, limit=10),
+        "recent_events": _compact_events(list(reversed(events)), limit=12),
+        "knowledge_profile": knowledge_profile,
+        "risk_signals": risk_signals,
+        "recommendation_plan": recommendation_plan,
+        "generated_advice": _generated_advice(summary, knowledge_profile, recommendation_plan),
+        "analysis": _analysis(summary, top_queries, knowledge_profile, risk_signals),
+        "suggestions": _suggestions(recommendation_plan),
+    }
+
+
+def persist_weekly_report(settings: Settings, report: dict[str, object]) -> dict[str, object]:
+    period = report.get("period")
+    if not isinstance(period, dict):
+        raise ValueError("report.period is required")
+    user_id = str(report.get("user_id") or DEFAULT_USER_ID)
+    week_start = str(period.get("from") or "")
+    week_end = str(period.get("to") or "")
+    if not week_start or not week_end:
+        raise ValueError("report period is incomplete")
+    report_id = str(uuid5(NAMESPACE_URL, f"tendertrace:weekly:{user_id}:{week_start}:{week_end}"))
+    profile_snapshot = _profile_snapshot(report)
+    profile_id = str(uuid5(NAMESPACE_URL, f"tendertrace:memory-profile:{user_id}"))
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO weekly_reports(id, user_id, week_start, week_end, report_json)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, week_start, week_end) DO UPDATE SET
+                report_json = excluded.report_json,
+                created_at = datetime('now')
+            """,
+            (report_id, user_id, week_start, week_end, json_dumps(report)),
+        )
+        conn.execute(
+            """
+            INSERT INTO user_memory_profiles(id, user_id, profile_json)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                profile_json = excluded.profile_json,
+                updated_at = datetime('now')
+            """,
+            (profile_id, user_id, json_dumps(profile_snapshot)),
+        )
+    return {**report, "saved_report_id": report_id}
+
+
+def load_memory_profile(settings: Settings, *, user_id: str = DEFAULT_USER_ID) -> dict[str, object] | None:
+    user_id = (user_id or DEFAULT_USER_ID).strip() or DEFAULT_USER_ID
+    with connection(settings) as conn:
+        row = conn.execute(
+            """
+            SELECT profile_json, updated_at
+            FROM user_memory_profiles
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    payload = _loads_json(row["profile_json"], {})
+    if isinstance(payload, dict):
+        return {**payload, "updated_at": row["updated_at"]}
+    return {"user_id": user_id, "updated_at": row["updated_at"]}
+
+
+def _load_events(
+    settings: Settings,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[dict[str, Any]]:
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT event_type, target, label, metadata_json, created_at, created_date
+            FROM user_activity_events
+            WHERE user_id = ?
+              AND created_date >= ?
+              AND created_date <= ?
+            ORDER BY created_at ASC
+            """,
+            (user_id, start_date.isoformat(), end_date.isoformat()),
+        ).fetchall()
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        events.append(
+            {
+                "event_type": row["event_type"],
+                "target": row["target"] or "",
+                "label": row["label"] or "",
+                "metadata": _loads_json(row["metadata_json"], {}),
+                "created_at": row["created_at"],
+                "created_date": row["created_date"],
+            }
+        )
+    return events
+
+
+def _load_runs(settings: Settings, start_date: date, end_date: date) -> list[dict[str, Any]]:
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, original_query, status, started_at, finished_at, stats_json
+            FROM runs
+            WHERE status != 'deleted'
+              AND date(started_at) >= ?
+              AND date(started_at) <= ?
+            ORDER BY started_at ASC
+            """,
+            (start_date.isoformat(), end_date.isoformat()),
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "original_query": row["original_query"],
+            "status": row["status"],
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
+            "stats": _loads_json(row["stats_json"], {}),
+        }
+        for row in rows
+    ]
+
+
+def _load_subscription_count(settings: Settings, start_date: date, end_date: date) -> int:
+    with connection(settings) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM subscriptions
+            WHERE date(created_at) >= ?
+              AND date(created_at) <= ?
+            """,
+            (start_date.isoformat(), end_date.isoformat()),
+        ).fetchone()
+    return int(row["count"] if row else 0)
+
+
+def _daily_rows(
+    start_date: date,
+    end_date: date,
+    events: list[dict[str, Any]],
+    runs: list[dict[str, Any]],
+) -> list[dict[str, object]]:
+    event_counter: dict[str, Counter[str]] = defaultdict(Counter)
+    for event in events:
+        event_counter[event["created_date"]][event["event_type"]] += 1
+    run_counter: Counter[str] = Counter()
+    for run in runs:
+        started_at = str(run.get("started_at") or "")
+        if started_at:
+            run_counter[started_at[:10]] += 1
+    rows = []
+    cursor = start_date
+    while cursor <= end_date:
+        key = cursor.isoformat()
+        counts = event_counter[key]
+        rows.append(
+            {
+                "date": key,
+                "events": sum(counts.values()),
+                "clicks": counts["click"],
+                "downloads": counts["download"],
+                "runs": run_counter[key],
+                "event_types": dict(counts),
+            }
+        )
+        cursor += timedelta(days=1)
+    return rows
+
+
+def _top_queries(events: list[dict[str, Any]], runs: list[dict[str, Any]]) -> list[dict[str, object]]:
+    counter: Counter[str] = Counter()
+    for event in events:
+        metadata = event.get("metadata") or {}
+        if isinstance(metadata, dict):
+            query = str(metadata.get("query") or "").strip()
+            if query:
+                counter[query] += 1
+    for run in runs:
+        query = str(run.get("original_query") or "").strip()
+        if query:
+            counter[query] += 1
+    return [{"query": query, "count": count} for query, count in counter.most_common(8)]
+
+
+def _compact_events(events: list[dict[str, Any]], *, limit: int) -> list[dict[str, object]]:
+    return [
+        {
+            "event_type": event["event_type"],
+            "target": event["target"],
+            "label": event["label"],
+            "created_at": event["created_at"],
+            "metadata": event["metadata"],
+        }
+        for event in events[:limit]
+    ]
+
+
+def _knowledge_profile(
+    events: list[dict[str, Any]],
+    runs: list[dict[str, Any]],
+    top_queries: list[dict[str, object]],
+    summary: dict[str, int],
+) -> dict[str, object]:
+    topic_counter: Counter[str] = Counter()
+    region_counter: Counter[str] = Counter()
+    schedule_counter: Counter[str] = Counter()
+    source_counter: Counter[str] = Counter()
+    source_failures: Counter[str] = Counter()
+    clarify_risk_count = 0
+
+    for item in top_queries:
+        query = str(item.get("query") or "").strip()
+        weight = _coerce_int(item.get("count"), default=1)
+        if not query:
+            continue
+        try:
+            bidql = compile_intent(query)
+        except Exception:
+            continue
+        topic = bidql.get("topic") if isinstance(bidql.get("topic"), dict) else {}
+        for value in topic.get("core") or []:
+            if str(value).strip():
+                topic_counter[str(value).strip()] += weight
+        region_label = _region_label(bidql.get("region"))
+        if region_label:
+            region_counter[region_label] += weight
+        schedule_label = _schedule_label(bidql.get("schedule"))
+        if schedule_label:
+            schedule_counter[schedule_label] += weight
+        meta = bidql.get("meta") if isinstance(bidql.get("meta"), dict) else {}
+        clarify_needed = meta.get("clarify_needed") if isinstance(meta, dict) else []
+        if isinstance(clarify_needed, list) and clarify_needed:
+            clarify_risk_count += weight
+
+    for run in runs:
+        stats = run.get("stats") if isinstance(run.get("stats"), dict) else {}
+        for item in stats.get("source_stats") or []:
+            if not isinstance(item, dict):
+                continue
+            source = str(item.get("source") or item.get("site") or "").strip()
+            if not source:
+                continue
+            count = _coerce_int(item.get("count"), default=0)
+            if count > 0:
+                source_counter[source] += count
+            if item.get("status") == "failed":
+                source_failures[source] += 1
+
+    return {
+        "topics": _counter_rows(topic_counter),
+        "regions": _counter_rows(region_counter),
+        "schedules": _counter_rows(schedule_counter),
+        "sources": _counter_rows(source_counter),
+        "source_failures": _counter_rows(source_failures),
+        "query_patterns": {
+            "repeat_queries": [
+                {"query": item["query"], "count": item["count"]}
+                for item in top_queries
+                if _coerce_int(item.get("count")) >= 2
+            ],
+            "clarify_risk_count": clarify_risk_count,
+            "scheduled_intent_count": sum(schedule_counter.values()),
+        },
+        "behavior": {
+            "download_rate": round(_safe_div(summary["downloads"], summary["runs_finished"]), 3),
+            "completion_rate": round(_safe_div(summary["runs_finished"], summary["runs_started"]), 3),
+            "failure_rate": round(_safe_div(summary["failed_runs"], summary["runs_started"]), 3),
+            "subscription_rate": round(
+                _safe_div(summary["subscriptions_created"], summary["runs_started"]),
+                3,
+            ),
+        },
+    }
+
+
+def _risk_signals(
+    summary: dict[str, int],
+    profile: dict[str, object],
+    failed_runs: list[dict[str, Any]],
+) -> list[dict[str, object]]:
+    behavior = profile.get("behavior") if isinstance(profile.get("behavior"), dict) else {}
+    query_patterns = profile.get("query_patterns")
+    query_patterns = query_patterns if isinstance(query_patterns, dict) else {}
+    risks: list[dict[str, object]] = []
+
+    if failed_runs:
+        risks.append(
+            {
+                "severity": "high",
+                "title": "存在失败运行",
+                "detail": f"{len(failed_runs)} 次运行失败，建议优先查看事件流和数据源状态。",
+                "evidence": {"run_ids": [str(run.get("id") or "") for run in failed_runs[:5]]},
+            }
+        )
+    if summary["runs_finished"] and float(behavior.get("download_rate") or 0) < 0.6:
+        risks.append(
+            {
+                "severity": "medium",
+                "title": "报告下载转化偏低",
+                "detail": "已有 Word 生成但下载偏少，可能存在报告入口不明显或结果未及时复核。",
+                "evidence": {
+                    "runs_finished": summary["runs_finished"],
+                    "downloads": summary["downloads"],
+                },
+            }
+        )
+    if _coerce_int(query_patterns.get("clarify_risk_count")):
+        risks.append(
+            {
+                "severity": "medium",
+                "title": "部分查询意图不够稳定",
+                "detail": "历史查询中存在主题或区域置信度较低的表达，建议补充品类词典或主动反问。",
+                "evidence": {"count": query_patterns["clarify_risk_count"]},
+            }
+        )
+    if query_patterns.get("repeat_queries") and not summary["subscriptions_created"]:
+        risks.append(
+            {
+                "severity": "low",
+                "title": "高频查询尚未订阅化",
+                "detail": "重复查询仍由人工触发，适合转成订阅并复用 sent_history 增量去重。",
+                "evidence": {"repeat_queries": query_patterns["repeat_queries"][:3]},
+            }
+        )
+    return risks[:5]
+
+
+def _recommendation_plan(
+    summary: dict[str, int],
+    top_queries: list[dict[str, object]],
+    failed_runs: list[dict[str, Any]],
+    profile: dict[str, object],
+    risk_signals: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    behavior = profile.get("behavior") if isinstance(profile.get("behavior"), dict) else {}
+    topics = profile.get("topics") if isinstance(profile.get("topics"), list) else []
+    regions = profile.get("regions") if isinstance(profile.get("regions"), list) else []
+    repeat_query = top_queries[0] if top_queries and _coerce_int(top_queries[0].get("count")) >= 2 else None
+    top_topic = str(topics[0]["name"]) if topics else ""
+    top_region = str(regions[0]["name"]) if regions else ""
+    plan: list[dict[str, object]] = []
+
+    if summary["downloads"] == 0 and summary["runs_finished"] == 0:
+        plan.append(
+            _recommendation(
+                "high",
+                "onboarding",
+                "先完成一次真实查询并下载 Word",
+                "当前记忆库还缺少结果转化样本，无法判断哪些主题真正有价值。",
+                "运行一个明确区域和主题的查询，下载生成的 Word 后再查看周报。",
+            )
+        )
+    if repeat_query:
+        plan.append(
+            _recommendation(
+                "high",
+                "subscription",
+                "将高频查询升级为订阅",
+                f"“{repeat_query['query']}” 已出现 {repeat_query['count']} 次，适合交给定时任务增量推送。",
+                "在工作台切换到创建订阅，保持每天 09:00 推送并依赖 sent_history 去重。",
+                query=str(repeat_query["query"]),
+            )
+        )
+    if failed_runs:
+        plan.append(
+            _recommendation(
+                "high",
+                "reliability",
+                "先处理失败运行对应的数据源",
+                f"本周期有 {len(failed_runs)} 次失败运行，会持续拉低召回与周报可信度。",
+                "打开历史运行的追踪视图，优先检查失败节点、源站状态和模型配置。",
+                run_ids=[str(run.get("id") or "") for run in failed_runs[:5]],
+            )
+        )
+    if summary["runs_finished"] and float(behavior.get("download_rate") or 0) < 0.6:
+        plan.append(
+            _recommendation(
+                "medium",
+                "workflow",
+                "复核未下载的 Word 报告",
+                "系统已经生成报告，但下载记录不足，说明结果可能没有进入业务归档。",
+                "进入报告输出区下载最新 Word，并删除明显无价值或重复的旧报告。",
+            )
+        )
+    if top_topic and top_region:
+        plan.append(
+            _recommendation(
+                "medium",
+                "knowledge_base",
+                "围绕核心偏好扩展后台采集",
+                f"当前偏好集中在“{top_region} / {top_topic}”，适合提前积累本地 notices 库。",
+                f"创建采集订阅：区域={top_region}，主题={top_topic}，让后续查询优先走本地库。",
+                topic=top_topic,
+                region=top_region,
+            )
+        )
+    if not plan and not risk_signals:
+        plan.append(
+            _recommendation(
+                "low",
+                "evaluation",
+                "保持当前使用节奏并补充金标集",
+                "当前运行、下载和订阅指标没有明显异常。",
+                "继续扩充评测金标集，用真实 Recall@K 衡量后续优化收益。",
+            )
+        )
+    return plan[:6]
+
+
+def _generated_advice(
+    summary: dict[str, int],
+    profile: dict[str, object],
+    plan: list[dict[str, object]],
+) -> dict[str, object]:
+    topics = profile.get("topics") if isinstance(profile.get("topics"), list) else []
+    regions = profile.get("regions") if isinstance(profile.get("regions"), list) else []
+    top_topic = str(topics[0]["name"]) if topics else "暂无稳定主题"
+    top_region = str(regions[0]["name"]) if regions else "暂无稳定区域"
+    if summary["total_events"] == 0 and summary["runs_finished"] == 0:
+        headline = "记忆库正在等待第一批有效样本"
+        summary_text = "完成真实查询、下载 Word、创建订阅后，系统会自动沉淀主题和区域偏好。"
+    else:
+        headline = f"当前重点是 {top_region} 的 {top_topic}"
+        summary_text = (
+            f"本周期完成 {summary['runs_finished']} 次运行、下载 {summary['downloads']} 份报告，"
+            f"系统已据此生成 {len(plan)} 条可执行建议。"
+        )
+    return {
+        "headline": headline,
+        "summary": summary_text,
+        "next_actions": [str(item.get("action") or "") for item in plan[:3]],
+        "basis": {
+            "top_topic": top_topic,
+            "top_region": top_region,
+            "runs_finished": summary["runs_finished"],
+            "downloads": summary["downloads"],
+        },
+        "engine": "local_profile_generator",
+    }
+
+
+def _analysis(
+    summary: dict[str, int],
+    top_queries: list[dict[str, object]],
+    profile: dict[str, object],
+    risk_signals: list[dict[str, object]],
+) -> list[str]:
+    if summary["total_events"] == 0 and summary["runs_finished"] == 0:
+        return ["本周期内还没有可分析的使用记录。"]
+    topics = profile.get("topics") if isinstance(profile.get("topics"), list) else []
+    regions = profile.get("regions") if isinstance(profile.get("regions"), list) else []
+    behavior = profile.get("behavior") if isinstance(profile.get("behavior"), dict) else {}
+    rows = [
+        f"本周期记录 {summary['total_events']} 次交互，覆盖 {summary['active_days']} 个活跃日。",
+        f"完成运行 {summary['runs_finished']} 次，下载报告 {summary['downloads']} 次。",
+    ]
+    if top_queries:
+        rows.append(f"关注最高的查询是：{top_queries[0]['query']}。")
+    if topics:
+        rows.append(f"主题偏好集中在：{topics[0]['name']}。")
+    if regions:
+        rows.append(f"区域偏好集中在：{regions[0]['name']}。")
+    if summary["runs_finished"]:
+        rows.append(f"报告下载转化率为 {float(behavior.get('download_rate') or 0):.0%}。")
+    if risk_signals:
+        rows.append(f"检测到 {len(risk_signals)} 个需要关注的风险信号。")
+    return rows
+
+
+def _suggestions(plan: list[dict[str, object]]) -> list[str]:
+    if not plan:
+        return ["当前使用节奏正常，可继续补充金标集来量化召回率变化。"]
+    return [
+        f"{item.get('title', '建议')}：{item.get('action', '')}".strip("：")
+        for item in plan[:5]
+    ]
+
+
+def _recommendation(
+    priority: str,
+    kind: str,
+    title: str,
+    reason: str,
+    action: str,
+    **evidence: object,
+) -> dict[str, object]:
+    return {
+        "priority": priority,
+        "kind": kind,
+        "title": title,
+        "reason": reason,
+        "action": action,
+        "evidence": {key: value for key, value in evidence.items() if value not in (None, "", [])},
+    }
+
+
+def _profile_snapshot(report: dict[str, object]) -> dict[str, object]:
+    return {
+        "user_id": report.get("user_id") or DEFAULT_USER_ID,
+        "period": report.get("period") or {},
+        "knowledge_profile": report.get("knowledge_profile") or {},
+        "risk_signals": report.get("risk_signals") or [],
+        "recommendation_plan": report.get("recommendation_plan") or [],
+        "generated_advice": report.get("generated_advice") or {},
+    }
+
+
+def _counter_rows(counter: Counter[str], *, limit: int = 6) -> list[dict[str, object]]:
+    total = sum(counter.values())
+    return [
+        {"name": name, "count": count, "share": round(_safe_div(count, total), 3)}
+        for name, count in counter.most_common(limit)
+    ]
+
+
+def _region_label(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    district = str(value.get("district") or "").strip()
+    city = str(value.get("city") or "").strip()
+    province = str(value.get("province") or "").strip()
+    if district and city:
+        return f"{province}/{city}/{district}" if province else f"{city}/{district}"
+    if city and province:
+        return f"{province}/{city}"
+    return province or city or district
+
+
+def _schedule_label(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    kind = str(value.get("kind") or "").strip()
+    if kind == "recurring":
+        cron = str(value.get("cron") or "").strip()
+        return f"recurring:{cron}" if cron else "recurring"
+    if kind == "once_at":
+        return "once_at"
+    return ""
+
+
+def _coerce_int(value: object, *, default: int = 0) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_div(numerator: int, denominator: int) -> float:
+    return float(numerator) / float(denominator) if denominator else 0.0
+
+
+def _metadata_dict(value: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    try:
+        json.dumps(value, ensure_ascii=False)
+        return value
+    except TypeError:
+        return {key: str(item) for key, item in value.items()}
+
+
+def _loads_json(raw: str, fallback: Any) -> Any:
+    try:
+        return json.loads(raw or "")
+    except json.JSONDecodeError:
+        return fallback
+
+
+def _coerce_datetime(settings: Settings, value: datetime | str | None) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        return datetime.fromisoformat(value)
+    try:
+        tz = ZoneInfo(settings.timezone)
+    except Exception:
+        return datetime.now().astimezone().replace(microsecond=0)
+    return datetime.now(tz).replace(microsecond=0)

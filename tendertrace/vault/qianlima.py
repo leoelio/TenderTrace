@@ -1,13 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import json
+import re
+import time
 from typing import Any
+from urllib.parse import urljoin
 
-from tendertrace.adapters.ccgp import Notice, _clean_spaces, _matches_bidql
+from selectolax.parser import HTMLParser
+
+from tendertrace.adapters.ccgp import (
+    Attachment,
+    Notice,
+    _clean_spaces,
+    _matches_bidql,
+    _summarize,
+)
 from tendertrace.config import Settings
+from tendertrace.fetching import FetchResult, FetchStats
+from tendertrace.parsing import ContentSelection, select_main_content
+from tendertrace.pipeline.artifacts import page_artifact_from_fetch
 
 
 QIANLIMA_HOME_URL = "https://www.qianlima.com/"
@@ -85,7 +99,9 @@ class QianlimaSessionVault:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
-            raise RuntimeError("Playwright is not installed. Run: python -m pip install -e .[dev]") from exc
+            raise RuntimeError(
+                "Playwright is not installed. Run: python -m pip install -e .[dev]"
+            ) from exc
 
         try:
             with sync_playwright() as playwright:
@@ -114,7 +130,9 @@ class QianlimaSessionVault:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
-            raise RuntimeError("Playwright is not installed. Run: python -m pip install -e .[dev]") from exc
+            raise RuntimeError(
+                "Playwright is not installed. Run: python -m pip install -e .[dev]"
+            ) from exc
 
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=False)
@@ -133,6 +151,7 @@ class QianlimaAdapter:
     def __init__(self, *, vault: QianlimaSessionVault, timeout_ms: int = 30000) -> None:
         self.vault = vault
         self.timeout_ms = timeout_ms
+        self.last_fetch_stats: dict[str, object] = {}
 
     def collect(
         self,
@@ -146,18 +165,77 @@ class QianlimaAdapter:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
-            raise RuntimeError("Playwright is not installed. Run: python -m pip install -e .[dev]") from exc
+            raise RuntimeError(
+                "Playwright is not installed. Run: python -m pip install -e .[dev]"
+            ) from exc
 
         keyword = _topic_keyword(bidql)
+        stats = FetchStats()
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             context = browser.new_context(storage_state=str(self.vault.storage_state_path))
             page = context.new_page()
+            started = time.monotonic()
             page.goto(QIANLIMA_SEARCH_URL, wait_until="domcontentloaded", timeout=self.timeout_ms)
             html = page.content()
+            stats.record(
+                _rendered_fetch_result(
+                    QIANLIMA_SEARCH_URL,
+                    final_url=page.url,
+                    html=html,
+                    elapsed_ms=_elapsed_ms(started),
+                )
+            )
+            candidates = parse_rendered_search(html, keyword=keyword)[
+                : max(max_pages, 1) * max_results
+            ]
+            enriched: list[Notice] = []
+            for notice in candidates:
+                started = time.monotonic()
+                try:
+                    response = page.goto(
+                        notice.source_url,
+                        wait_until="domcontentloaded",
+                        timeout=self.timeout_ms,
+                    )
+                    detail_html = page.content()
+                    fetch_result = _rendered_fetch_result(
+                        notice.source_url,
+                        final_url=page.url,
+                        html=detail_html,
+                        elapsed_ms=_elapsed_ms(started),
+                        status_code=response.status if response is not None else 200,
+                    )
+                    stats.record(fetch_result)
+                    enriched.append(parse_rendered_detail(notice, detail_html, fetch_result))
+                except Exception as exc:
+                    stats.record(
+                        FetchResult(
+                            url=notice.source_url,
+                            final_url=notice.source_url,
+                            method="GET",
+                            status_code=0,
+                            text="",
+                            content_type="text/html",
+                            fetched_at=_now_iso(),
+                            elapsed_ms=_elapsed_ms(started),
+                            attempt_count=1,
+                            fetcher="playwright",
+                            error=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
+                    enriched.append(
+                        Notice(
+                            **{
+                                **notice.to_dict(),
+                                "attachments": notice.attachments,
+                                "fields": {**notice.fields, "detail_error": str(exc)},
+                            }
+                        )
+                    )
             browser.close()
-        notices = parse_rendered_search(html, keyword=keyword)[: max(max_pages, 1) * max_results]
-        return [notice for notice in notices if _matches_bidql(notice, bidql)][:max_results]
+        self.last_fetch_stats = stats.to_dict()
+        return [notice for notice in enriched if _matches_bidql(notice, bidql)][:max_results]
 
 
 def parse_rendered_search(html: str, *, keyword: str = "") -> list[Notice]:
@@ -201,6 +279,176 @@ def parse_rendered_search(html: str, *, keyword: str = "") -> list[Notice]:
             )
         )
     return notices
+
+
+def parse_rendered_detail(
+    notice: Notice,
+    html: str,
+    fetch_result: FetchResult | None = None,
+) -> Notice:
+    parser = HTMLParser(html)
+    selection = _select_content(parser)
+    content = selection.text
+    title = _detail_title(parser) or notice.title
+    text = " ".join(part for part in (title, content) if part)
+    source_url = fetch_result.final_url if fetch_result is not None else notice.source_url
+    fields = {
+        **notice.fields,
+        "collector": "playwright",
+        "login_state": "storage_state",
+        "content_length": len(content),
+        "content_selector": selection.selector,
+        "content_fallback": selection.fallback_used,
+        "detail_url": source_url,
+    }
+    if fetch_result is not None:
+        fields["page_artifact"] = page_artifact_from_fetch(notice.source_site, fetch_result)
+    return Notice(
+        id=notice.id,
+        source_site=notice.source_site,
+        title=title,
+        publish_time=_extract_publish_time(text) or notice.publish_time,
+        region=_extract_region(text) or notice.region,
+        purchaser=_extract_label(
+            text, ("采购人", "招标人", "采购单位", "业主单位", "Purchaser", "Buyer")
+        )
+        or notice.purchaser,
+        source_url=source_url,
+        content_text=content,
+        core_content=_summarize(content) if content else notice.core_content,
+        attachments=_extract_attachments(parser, source_url),
+        fields=fields,
+    )
+
+
+def _select_content(parser: HTMLParser) -> ContentSelection:
+    return select_main_content(
+        parser,
+        (
+            "#content",
+            "#detail",
+            ".detail",
+            ".detail-content",
+            ".article",
+            ".article-content",
+            ".content",
+            ".main",
+        ),
+    )
+
+
+def _detail_title(parser: HTMLParser) -> str:
+    for selector in ("h1", ".title", ".article-title", "title"):
+        node = parser.css_first(selector)
+        if node is None:
+            continue
+        title = _clean_spaces(node.text())
+        if len(title) >= 4:
+            return title
+    return ""
+
+
+def _extract_attachments(parser: HTMLParser, detail_url: str) -> list[Attachment]:
+    attachments: list[Attachment] = []
+    for anchor in parser.css("a"):
+        href = anchor.attributes.get("href") or ""
+        text = _clean_spaces(anchor.text())
+        if not href:
+            continue
+        lowered = href.lower()
+        if not (
+            any(
+                ext in lowered for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")
+            )
+            or "附件" in text
+            or "下载" in text
+        ):
+            continue
+        attachments.append(
+            Attachment(name=text or href.rsplit("/", 1)[-1], url=urljoin(detail_url, href))
+        )
+    return attachments
+
+
+def _extract_publish_time(text: str) -> str:
+    match = re.search(
+        r"(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})日?(?:\s+(\d{1,2}:\d{2}))?",
+        text,
+    )
+    if not match:
+        return ""
+    date_part = f"{int(match.group(1)):04d}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+    time_part = match.group(4)
+    return f"{date_part} {time_part}" if time_part else date_part
+
+
+def _extract_label(text: str, labels: tuple[str, ...]) -> str:
+    joined = "|".join(re.escape(label) for label in labels)
+    match = re.search(rf"(?:{joined})\s*[:：]\s*([^。\n；;]{{2,80}})", text, flags=re.IGNORECASE)
+    return _clean_spaces(match.group(1)) if match else ""
+
+
+def _extract_region(text: str) -> str:
+    labeled = _extract_label(text, ("地区", "区域", "省份", "Region"))
+    if labeled:
+        return labeled
+    for region in (
+        "北京",
+        "上海",
+        "天津",
+        "重庆",
+        "安徽",
+        "浙江",
+        "江苏",
+        "广东",
+        "河南",
+        "四川",
+        "山东",
+        "湖北",
+        "湖南",
+        "福建",
+        "陕西",
+        "河北",
+    ):
+        if region in text:
+            return region
+    return ""
+
+
+def _rendered_fetch_result(
+    url: str,
+    *,
+    final_url: str,
+    html: str,
+    elapsed_ms: int,
+    status_code: int = 200,
+) -> FetchResult:
+    return FetchResult(
+        url=url,
+        final_url=final_url,
+        method="GET",
+        status_code=status_code,
+        text=html,
+        content_type="text/html",
+        fetched_at=_now_iso(),
+        elapsed_ms=elapsed_ms,
+        attempt_count=1,
+        fetcher="playwright",
+        blocked=_looks_like_login_page(html),
+    )
+
+
+def _looks_like_login_page(html: str) -> bool:
+    sample = (html or "")[:5000].lower()
+    return any(marker in sample for marker in ("login", "captcha", "登录", "请登录", "验证码"))
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _topic_keyword(bidql: dict[str, Any]) -> str:

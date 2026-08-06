@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P23</strong> · Gold-set Recall@K · Local-first Retrieval · Ingest Subscriptions · Optional Vector Search
+  <strong>Current stage: P27</strong> · Managed Crawling · Source Health · SMTP Delivery · Feishu Bitable Ledger
 </p>
 
 ---
@@ -19,22 +19,28 @@
 
 TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原型。系统支持用户输入自然语言问题，自动解析主题、地区、时间范围和调度意图，从多源招投标网站采集公告，清洗去重后生成 Word 报告，并通过 Web 下载与本地 outbox 交付。
 
+可选配置 SMTP 后，系统也可以把生成后的 Word 作为邮件附件发送；订阅页会展示新增条数、已跳过历史条数、下次触发时间和最近 Word 下载入口，便于验证“持续订阅 + 增量推送”。
+
 项目当前已经从“用户查询时现场抓取”升级为“先采集入库，后本地检索”的架构：后台采集任务持续写入 SQLite，用户查询优先走本地 FTS5 索引，不足时再触发现场采集。评测层也支持人工金标集驱动的真实 Recall@K。
 
 ## 核心能力
 
 - 自然语言意图解析：识别主题、同义词、地区、省市区、时间范围、发送频率。
 - 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源。
+- 托管抓取：统一 retry、阻断识别、浏览器兜底、批量详情抓取和页面快照。
 - 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码。
 - 本地优先检索：公告入库后写入 SQLite FTS5，使用 jieba 分词和 BM25 排序。
 - 后台采集订阅：采集订阅与用户报告订阅分离，只负责持续养大 `notices` 库。
 - 增量推送：用户订阅通过 `sent_history` 保证已经发送过的公告不重复出现在后续 Word。
+- 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
+- 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 清洗去重：正文噪声清理、URL 规范化、项目编号提取、SimHash 聚类。
 - 附件抽取：支持受限下载并抽取 PDF、DOCX、XLSX 正文片段。
-- 证据链：保存来源链接、正文摘录、附件快照、事实校验结果。
-- Word 报告：输出标题、发布时间、来源链接、核心内容和附件链接。
+- 证据链：保存来源链接、正文摘录、附件快照、字段级证据和事实校验结果。
+- Word 报告：输出标题、发布时间、来源链接、核心内容、附件链接、多源覆盖和抓取健康。
 - 模型增强：支持规则模式、本地 Ollama 模式、OpenAI 兼容云端模式。
 - Agent 评测：覆盖 RAG、Agent、Harness、Recall Proxy、金标 Recall@K。
+- 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议。
 - 可选向量检索：安装 `.[vector]` 后可用 BGE 类模型生成本地向量，与 FTS 做 RRF 融合。
 
 ## 技术栈
@@ -67,8 +73,12 @@ tendertrace/
   scheduling/            # 用户订阅、采集订阅、sent_history
   vault/                 # 千里马 storage_state 管理
   db.py                  # SQLite schema 与迁移
+  fetching.py            # 托管 HTTP 抓取、重试、阻断识别和批量详情抓取
+  linking.py             # URL Map / LinkExtractor 发现规则
+  memory.py              # 用户记忆库、知识画像和生成式建议
   retrieval.py           # FTS5 / LIKE / 向量融合检索
   runner.py              # 一次完整运行流程
+  source_map.py          # 数据源地图和来源健康统计
   gold.py                # 金标 Recall@K 评测
   vector.py              # 可选向量构建与覆盖率
 web/dist/                # Web 工作台静态文件
@@ -116,6 +126,7 @@ TENDERTRACE_OUTBOX_DIR=outbox
 TENDERTRACE_SNAPSHOTS_DIR=snapshots
 TENDERTRACE_TRACES_DIR=traces
 TENDERTRACE_SECRETS_DIR=secrets
+TENDERTRACE_DELIVERY_CHANNELS=web,outbox
 
 TENDERTRACE_MODEL_MODE=local
 TENDERTRACE_MODEL_ENHANCEMENT_ENABLED=false
@@ -126,6 +137,22 @@ OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-5.5
 TENDERTRACE_OPENAI_API_STYLE=responses
+
+# 可选邮件投递。启用前把 email 加入 TENDERTRACE_DELIVERY_CHANNELS。
+TENDERTRACE_SMTP_HOST=
+TENDERTRACE_SMTP_PORT=587
+TENDERTRACE_SMTP_USERNAME=
+TENDERTRACE_SMTP_PASSWORD=
+TENDERTRACE_SMTP_FROM=
+TENDERTRACE_SMTP_TO=
+TENDERTRACE_SMTP_USE_TLS=true
+
+# 可选飞书多维表格台账。启用前把 feishu_bitable 加入 TENDERTRACE_DELIVERY_CHANNELS。
+TENDERTRACE_FEISHU_APP_ID=
+TENDERTRACE_FEISHU_APP_SECRET=
+TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
+TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
+TENDERTRACE_PUBLIC_BASE_URL=http://127.0.0.1:8000
 ```
 
 模型模式：
@@ -172,6 +199,25 @@ python -m tendertrace ingest-once --topic 充电桩 --region 上海 --window-day
 python -m tendertrace create-subscription "最近3个月上海充电桩招标信息有哪些，请每天9:00发送给我" --max-pages 1 --max-results 5
 ```
 
+启用邮件投递时，先在 `.env.local` 配置 SMTP，并把发送渠道改为：
+
+```env
+TENDERTRACE_DELIVERY_CHANNELS=web,outbox,email
+```
+
+启用飞书多维表格台账时，先在 `.env.local` 配置飞书应用与表格参数，并检查连接：
+
+```powershell
+python -m tendertrace feishu-bitable-check
+python -m tendertrace feishu-bitable-check --ensure-fields
+```
+
+演示订阅增量二次运行：
+
+```powershell
+python -m tendertrace demo-incremental "最近3个月上海充电桩招标信息有哪些，请每天9:00发送给我" --max-pages 1 --max-results 5
+```
+
 创建后台采集订阅：
 
 ```powershell
@@ -185,6 +231,12 @@ python -m tendertrace run-ingest-subscription <ingest_subscription_id>
 ```powershell
 python -m tendertrace model-status
 python -m tendertrace model-doctor
+```
+
+生成用户记忆周报与画像快照：
+
+```powershell
+python -m tendertrace memory-weekly --days 7 --save
 ```
 
 千里马登录态保存与验证：
@@ -215,9 +267,10 @@ Web UI 覆盖以下视图：
 
 - 工作台：输入自然语言问题，选择运行模式、模型策略和搜索深度。
 - 历史运行：查看 run 记录、trace、checkpoint 和报告路径。
-- 订阅管理：管理用户定时报告订阅。
-- 数据源：查看公开源和千里马登录态状态。
+- 订阅管理：管理用户定时报告订阅，查看新增/跳过历史、下次触发时间和最近 Word。
+- 数据源：查看公开源、千里马登录态、入口路由、发现规则和来源健康。
 - Agent 评测：查看 RAG、Agent、Harness、Recall、金标评测和向量覆盖率。
+- 用户记忆：查看使用画像、知识偏好、风险信号和生成式行动建议。
 - 设置：查看运行配置与模型连通性。
 
 ## 本地库检索流程
@@ -283,8 +336,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P23
-- 103 unit tests pass.
+- Current stage: P27
+- 129 unit tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -307,7 +360,9 @@ python -m tendertrace acceptance-check --no-runtime
 
 ## Overview
 
-TenderTrace is a runnable AI application prototype for tender and procurement intelligence aggregation. A user can enter a natural-language query, and the system parses topic, region, time range, and scheduling intent, collects tender notices from multiple sources, cleans and deduplicates the results, and generates a Word report for Web download and local outbox delivery.
+TenderTrace is a runnable AI application prototype for tender and procurement intelligence aggregation. A user can enter a natural-language query, and the system parses topic, region, time range, and scheduling intent, collects tender notices from multiple sources, cleans and deduplicates the results, and generates a Word report for Web download, local outbox delivery, and optional SMTP email delivery.
+
+When SMTP is configured, generated Word reports can be sent as email attachments. The subscription page also surfaces new/skipped counts, next run time, latest Word download, and the latest email status for incremental delivery verification.
 
 The current architecture is local-first: background ingestion continuously stores notices into SQLite, user queries first search the local FTS5 index, and live crawling is triggered only when the local database cannot satisfy the request. The evaluation layer also supports real Recall@K based on manually annotated gold sets.
 
@@ -319,12 +374,15 @@ The current architecture is local-first: background ingestion continuously store
 - Local-first retrieval with SQLite FTS5, jieba tokenization, and BM25 ranking.
 - Background ingest subscriptions separated from user report subscriptions.
 - Incremental scheduled delivery with `sent_history` deduplication.
+- Optional SMTP email delivery for generated Word reports.
+- Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Text cleaning, URL canonicalization, project-number extraction, SimHash clustering.
 - Bounded attachment download and extraction for PDF, DOCX, and XLSX.
 - Evidence chain with source links, excerpts, attachment snapshots, and fact checks.
 - Word report generation with title, publish time, source link, core content, and attachment links.
 - Rule-only, local Ollama, and OpenAI-compatible cloud model enhancement modes.
 - Agent evaluation covering RAG, agent execution, intent harness, recall proxy, and gold Recall@K.
+- User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then generates preference profiles, risk signals, and actionable advice.
 - Optional vector retrieval via `sentence-transformers`, fused with FTS by RRF.
 
 ## Tech Stack
@@ -357,6 +415,7 @@ tendertrace/
   scheduling/            # User subscriptions, ingest subscriptions, sent_history
   vault/                 # Qianlima storage_state vault
   db.py                  # SQLite schema and migrations
+  memory.py              # User memory, knowledge profile, and generated advice
   retrieval.py           # FTS5 / LIKE / vector-fused retrieval
   runner.py              # End-to-end run orchestration
   gold.py                # Gold-set Recall@K evaluation
@@ -477,6 +536,12 @@ python -m tendertrace model-status
 python -m tendertrace model-doctor
 ```
 
+Build and persist a user-memory weekly profile snapshot:
+
+```powershell
+python -m tendertrace memory-weekly --days 7 --save
+```
+
 Save and verify Qianlima login state:
 
 ```powershell
@@ -508,6 +573,7 @@ The Web UI includes:
 - Subscription management: manage scheduled user report subscriptions.
 - Data sources: inspect public sources and Qianlima login-state status.
 - Agent evaluation: inspect RAG, agent, harness, recall, gold-set metrics, and vector coverage.
+- User memory: inspect usage profiles, knowledge preferences, risk signals, and generated next-step advice.
 - Settings: inspect runtime configuration and model connectivity.
 
 ## Local-First Retrieval Flow
@@ -573,8 +639,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P23
-- 103 unit tests pass.
+- Current stage: P27
+- 129 unit tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

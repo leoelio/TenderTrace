@@ -7,8 +7,11 @@ import re
 from typing import Any
 from urllib.parse import urljoin
 
-import httpx
 from selectolax.parser import HTMLParser
+
+from tendertrace.fetching import FetchError, FetchPolicy, FetchResult, ManagedFetcher
+from tendertrace.parsing import ContentSelection, select_main_content
+from tendertrace.pipeline.artifacts import page_artifact_from_fetch
 
 
 CCGP_LIST_URLS = (
@@ -85,7 +88,11 @@ def _matches_bidql(notice: Notice, bidql: dict[str, Any]) -> bool:
     haystack = f"{notice.title} {notice.region} {notice.purchaser} {notice.content_text}"
     if city and city_aliases and not any(alias and alias in haystack for alias in city_aliases):
         return False
-    if region and notice.region != region and not any(alias and alias in haystack for alias in region_aliases):
+    if (
+        region
+        and notice.region != region
+        and not any(alias and alias in haystack for alias in region_aliases)
+    ):
         return False
     if not _date_in_window(notice.publish_time, bidql.get("time", {}).get("resolved_window")):
         return False
@@ -110,7 +117,10 @@ def parse_list_page(html: str, page_url: str) -> list[Notice]:
         title = _clean_spaces(anchor.text())
         source_url = urljoin(page_url, anchor.attributes.get("href", ""))
         text = _clean_spaces(item.text(separator=" "))
-        match = re.search(r"发布时间：\s*(?P<time>.*?)\s*地域：\s*(?P<region>.*?)\s*采购人：\s*(?P<purchaser>.*)$", text)
+        match = re.search(
+            r"发布时间：\s*(?P<time>.*?)\s*地域：\s*(?P<region>.*?)\s*采购人：\s*(?P<purchaser>.*)$",
+            text,
+        )
         if not title or not source_url or match is None:
             continue
         notices.append(
@@ -128,12 +138,14 @@ def parse_list_page(html: str, page_url: str) -> list[Notice]:
 
 
 def _extract_content(parser: HTMLParser) -> str:
-    node = parser.css_first("#noticeArea") or parser.css_first(".vF_detail_content") or parser.css_first("#detail")
-    if node is None:
-        return ""
-    for bad in node.css("script,style"):
-        bad.decompose()
-    return _clean_spaces(node.text(separator=" "))
+    return _select_content(parser).text
+
+
+def _select_content(parser: HTMLParser) -> ContentSelection:
+    return select_main_content(
+        parser,
+        ("#noticeArea", ".vF_detail_content", "#detail", ".detail_content", ".content"),
+    )
 
 
 def _extract_attachments(parser: HTMLParser, detail_url: str) -> list[Attachment]:
@@ -145,11 +157,15 @@ def _extract_attachments(parser: HTMLParser, detail_url: str) -> list[Attachment
             continue
         lowered = href.lower()
         if not (
-            any(ext in lowered for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar"))
+            any(
+                ext in lowered for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")
+            )
             or "附件" in text
         ):
             continue
-        attachments.append(Attachment(name=text or href.rsplit("/", 1)[-1], url=urljoin(detail_url, href)))
+        attachments.append(
+            Attachment(name=text or href.rsplit("/", 1)[-1], url=urljoin(detail_url, href))
+        )
     return attachments
 
 
@@ -169,9 +185,17 @@ def _summarize(content: str) -> str:
     return _clean_spaces(" ".join(selected))[:600]
 
 
-def enrich_from_detail(notice: Notice, html: str) -> Notice:
+def enrich_from_detail(
+    notice: Notice, html: str, fetch_result: FetchResult | None = None
+) -> Notice:
     parser = HTMLParser(html)
-    content = _extract_content(parser)
+    selection = _select_content(parser)
+    content = selection.text
+    fields = {**notice.fields, "content_length": len(content)}
+    fields["content_selector"] = selection.selector
+    fields["content_fallback"] = selection.fallback_used
+    if fetch_result is not None:
+        fields["page_artifact"] = page_artifact_from_fetch(notice.source_site, fetch_result)
     return Notice(
         id=notice.id,
         source_site=notice.source_site,
@@ -183,7 +207,7 @@ def enrich_from_detail(notice: Notice, html: str) -> Notice:
         content_text=content,
         core_content=_summarize(content),
         attachments=_extract_attachments(parser, notice.source_url),
-        fields={**notice.fields, "content_length": len(content)},
+        fields=fields,
     )
 
 
@@ -199,6 +223,13 @@ class CcgpAdapter:
             "Referer": "https://www.ccgp.gov.cn/",
         }
         self.timeout = timeout
+        self.policy = FetchPolicy(
+            headers=self.headers,
+            timeout=timeout,
+            max_retries=2,
+            browser_fallback=True,
+        )
+        self.last_fetch_stats: dict[str, object] = {}
 
     def list_urls(self, max_pages: int) -> list[str]:
         urls: list[str] = []
@@ -208,32 +239,53 @@ class CcgpAdapter:
                 urls.append(urljoin(base, f"index_{page}.htm"))
         return urls
 
-    def collect(self, bidql: dict[str, Any], *, max_pages: int = 1, max_results: int = 10) -> list[Notice]:
-        with httpx.Client(headers=self.headers, timeout=self.timeout, follow_redirects=True) as client:
-            candidates: list[Notice] = []
-            for page_url in self.list_urls(max_pages):
-                response = client.get(page_url)
-                response.raise_for_status()
-                candidates.extend(parse_list_page(response.text, page_url))
-            matched = [notice for notice in candidates if _matches_bidql(notice, bidql)]
-            enriched: list[Notice] = []
-            for notice in matched[:max_results]:
-                try:
-                    detail = client.get(notice.source_url)
-                    detail.raise_for_status()
-                    enriched.append(enrich_from_detail(notice, detail.text))
-                except httpx.HTTPError as exc:
-                    enriched.append(
-                        Notice(
-                            id=notice.id,
-                            source_site=notice.source_site,
-                            title=notice.title,
-                            publish_time=notice.publish_time,
-                            region=notice.region,
-                            purchaser=notice.purchaser,
-                            source_url=notice.source_url,
-                            core_content=f"详情页抓取失败：{type(exc).__name__}",
-                            fields={"detail_error": str(exc)},
-                        )
+    def collect(
+        self, bidql: dict[str, Any], *, max_pages: int = 1, max_results: int = 10
+    ) -> list[Notice]:
+        with ManagedFetcher(self.policy) as fetcher:
+            try:
+                return self._collect_with_fetcher(
+                    fetcher,
+                    bidql,
+                    max_pages=max_pages,
+                    max_results=max_results,
+                )
+            finally:
+                self.last_fetch_stats = fetcher.stats.to_dict()
+
+    def _collect_with_fetcher(
+        self,
+        fetcher: ManagedFetcher,
+        bidql: dict[str, Any],
+        *,
+        max_pages: int,
+        max_results: int,
+    ) -> list[Notice]:
+        candidates: list[Notice] = []
+        for page_url in self.list_urls(max_pages):
+            response = fetcher.get(page_url)
+            response.raise_for_status()
+            candidates.extend(parse_list_page(response.text, page_url))
+        matched = [notice for notice in candidates if _matches_bidql(notice, bidql)]
+        enriched: list[Notice] = []
+        batch = matched[:max_results]
+        detail_results = fetcher.batch_get([notice.source_url for notice in batch])
+        for notice, detail in zip(batch, detail_results, strict=True):
+            try:
+                detail.raise_for_status()
+                enriched.append(enrich_from_detail(notice, detail.text, detail))
+            except FetchError as exc:
+                enriched.append(
+                    Notice(
+                        id=notice.id,
+                        source_site=notice.source_site,
+                        title=notice.title,
+                        publish_time=notice.publish_time,
+                        region=notice.region,
+                        purchaser=notice.purchaser,
+                        source_url=notice.source_url,
+                        core_content=f"详情页抓取失败：{type(exc).__name__}",
+                        fields={"detail_error": str(exc)},
                     )
-            return enriched
+                )
+        return enriched

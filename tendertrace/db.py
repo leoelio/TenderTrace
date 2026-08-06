@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 10
 
 
 DDL = (
@@ -135,6 +135,27 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS page_artifacts (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        cluster_key TEXT NOT NULL,
+        source_site TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        final_url TEXT,
+        status_code INTEGER NOT NULL DEFAULT 0,
+        fetcher TEXT NOT NULL,
+        content_sha256 TEXT,
+        content_length INTEGER NOT NULL DEFAULT 0,
+        text_excerpt TEXT,
+        blocked INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        fetched_at TEXT,
+        elapsed_ms INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS sent_history (
         subscription_id TEXT NOT NULL,
         cluster_key TEXT NOT NULL,
@@ -222,6 +243,38 @@ DDL = (
         FOREIGN KEY (notice_id) REFERENCES notices(id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS user_activity_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'admin',
+        event_type TEXT NOT NULL,
+        target TEXT,
+        label TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        created_date TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS weekly_reports (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'admin',
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        report_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (user_id, week_start, week_end)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_memory_profiles (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'admin',
+        profile_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (user_id)
+    )
+    """,
 )
 
 
@@ -243,6 +296,9 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_evidence_items_notice ON evidence_items(notice_id)",
     "CREATE INDEX IF NOT EXISTS idx_attachment_snapshots_notice ON attachment_snapshots(notice_id)",
     "CREATE INDEX IF NOT EXISTS idx_attachment_snapshots_cluster ON attachment_snapshots(cluster_key)",
+    "CREATE INDEX IF NOT EXISTS idx_page_artifacts_notice ON page_artifacts(notice_id)",
+    "CREATE INDEX IF NOT EXISTS idx_page_artifacts_cluster ON page_artifacts(cluster_key)",
+    "CREATE INDEX IF NOT EXISTS idx_page_artifacts_source ON page_artifacts(source_site, fetched_at)",
     "CREATE INDEX IF NOT EXISTS idx_run_checkpoints_run ON run_checkpoints(run_id, seq)",
     "CREATE INDEX IF NOT EXISTS idx_trace_events_run ON trace_events(run_id, seq)",
     "CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_messages(status, created_at)",
@@ -250,6 +306,10 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_model_audits_status ON model_audits(status)",
     "CREATE INDEX IF NOT EXISTS idx_ingest_subscriptions_status ON ingest_subscriptions(status)",
     "CREATE INDEX IF NOT EXISTS idx_notice_embeddings_model ON notice_embeddings(model)",
+    "CREATE INDEX IF NOT EXISTS idx_user_activity_user_date ON user_activity_events(user_id, created_date)",
+    "CREATE INDEX IF NOT EXISTS idx_user_activity_type_time ON user_activity_events(event_type, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_weekly_reports_user_period ON weekly_reports(user_id, week_start, week_end)",
+    "CREATE INDEX IF NOT EXISTS idx_user_memory_profiles_user ON user_memory_profiles(user_id)",
 )
 
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
@@ -307,7 +367,9 @@ def database_health(settings: Settings) -> dict[str, object]:
         tables = conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
         ).fetchall()
-        migrations = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
+        migrations = conn.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
     return {
         "initialized": True,
         "path": str(settings.db_path),

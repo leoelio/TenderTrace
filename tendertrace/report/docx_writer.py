@@ -15,7 +15,9 @@ from tendertrace.adapters.ccgp import Notice
 from tendertrace.report.naming import safe_report_filename
 
 
-def _set_run_font(run, *, size: float = 11, bold: bool | None = None, color: str | None = None) -> None:
+def _set_run_font(
+    run, *, size: float = 11, bold: bool | None = None, color: str | None = None
+) -> None:
     run.font.name = "Calibri"
     rpr = run._element.get_or_add_rPr()
     rpr.rFonts.set(qn("w:ascii"), "Calibri")
@@ -155,6 +157,120 @@ def _attachment_excerpts(notice: Notice) -> list[str]:
     return excerpts
 
 
+def _structured_fields(notice: Notice) -> dict[str, Any]:
+    value = notice.fields.get("structured_fields")
+    return value if isinstance(value, dict) else {}
+
+
+def _structured_field_evidence(notice: Notice) -> dict[str, Any]:
+    value = notice.fields.get("structured_field_evidence")
+    return value if isinstance(value, dict) else {}
+
+
+def _add_structured_fields(doc: Document, notice: Notice) -> None:
+    structured = _structured_fields(notice)
+    for label, key in (
+        ("项目编号", "project_no"),
+        ("预算金额", "budget"),
+        ("投标截止", "bid_deadline"),
+        ("开标时间", "opening_time"),
+    ):
+        value = str(structured.get(key) or "").strip()
+        if value:
+            _add_label_value(doc, label, value)
+    _add_structured_evidence(doc, notice)
+
+
+def _add_structured_evidence(doc: Document, notice: Notice) -> None:
+    evidence = _structured_field_evidence(notice)
+    if not evidence:
+        return
+    lines: list[str] = []
+    for key in ("project_no", "budget", "bid_deadline", "opening_time"):
+        item = evidence.get(key)
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("evidence_text") or "").strip()
+        if text:
+            lines.append(f"{key}: {text[:180]}")
+    if lines:
+        _add_label_value(doc, "字段证据", " | ".join(lines))
+
+
+def _add_run_stats(doc: Document, run_stats: dict[str, Any] | None) -> None:
+    if not run_stats:
+        return
+    collected = _stat_int(run_stats, "collected")
+    deduped = _stat_int(run_stats, "deduped")
+    local_retrieved = _stat_int(run_stats, "local_retrieved")
+    source_collected = _stat_int(run_stats, "source_collected")
+    pre_skipped = _stat_int(run_stats, "pre_skipped_sent")
+    doc.add_paragraph(
+        f"运行漏斗：候选 {collected} 条，本地复用 {local_retrieved} 条，"
+        f"外部来源新增 {source_collected} 条，清洗去重后 {deduped} 条。"
+    )
+    if pre_skipped:
+        doc.add_paragraph(
+            f"订阅增量：已跳过历史推送内容 {pre_skipped} 条，本文件仅保留本轮新增内容。"
+        )
+    source_stats = _source_stats(run_stats)
+    if source_stats:
+        attempted = len(source_stats)
+        hit_sources = sum(1 for item in source_stats if _stat_int(item, "count") > 0)
+        failed = sum(1 for item in source_stats if str(item.get("status") or "") == "failed")
+        doc.add_paragraph(
+            f"多源覆盖：本轮尝试 {attempted} 个来源，{hit_sources} 个来源命中，{failed} 个来源异常。"
+        )
+        _add_source_coverage_table(doc, source_stats)
+
+
+def _add_source_coverage_table(doc: Document, source_stats: list[dict[str, Any]]) -> None:
+    doc.add_heading("来源覆盖与抓取健康", level=1)
+    table = doc.add_table(rows=1, cols=8)
+    table.style = "Table Grid"
+    headers = ["来源", "状态", "命中", "请求", "成功", "阻断", "重试", "说明"]
+    for cell, header in zip(table.rows[0].cells, headers, strict=True):
+        _set_cell_text(cell, header, bold=True)
+        _shade(cell, "E8EEF5")
+    for item in source_stats:
+        fetch_stats = item.get("fetch_stats")
+        fetch = fetch_stats if isinstance(fetch_stats, dict) else {}
+        note_parts = []
+        if item.get("relaxed_city"):
+            note_parts.append("城市无结果，已放宽到省级")
+        if item.get("error"):
+            note_parts.append(str(item["error"]))
+        if fetch.get("last_error"):
+            note_parts.append(str(fetch["last_error"]))
+        row = table.add_row().cells
+        values = [
+            str(item.get("source") or "-"),
+            str(item.get("status") or "-"),
+            str(item.get("count") or 0),
+            str(fetch.get("requests") or 0),
+            str(fetch.get("successes") or 0),
+            str(fetch.get("blocked") or 0),
+            str(fetch.get("retries") or 0),
+            "；".join(note_parts) or "正常",
+        ]
+        for cell, value in zip(row, values, strict=True):
+            _set_cell_text(cell, value)
+
+
+def _source_stats(run_stats: dict[str, Any]) -> list[dict[str, Any]]:
+    items = run_stats.get("source_stats")
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _stat_int(stats: dict[str, Any], key: str) -> int:
+    try:
+        return int(stats.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _region_scope(bidql: dict[str, Any]) -> dict[str, Any]:
     meta = bidql.get("meta")
     if not isinstance(meta, dict):
@@ -192,6 +308,7 @@ def write_report(
     output_dir: Path,
     generated_at: datetime,
     run_mode: str = "full",
+    run_stats: dict[str, Any] | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     normalized = [item if isinstance(item, Notice) else _notice_from_dict(item) for item in notices]
@@ -231,6 +348,7 @@ def write_report(
     doc.add_paragraph(f"本次从 {source_text} 筛选出 {len(normalized)} 条符合条件的招投标信息。")
     if region_note:
         doc.add_paragraph(region_note)
+    _add_run_stats(doc, run_stats)
     if not normalized:
         doc.add_paragraph("本轮未发现符合条件的新增招投标信息。")
         doc.save(path)
@@ -264,6 +382,7 @@ def write_report(
         _add_label_value(doc, "来源链接", notice.source_url)
         _add_label_value(doc, "采购人", notice.purchaser)
         _add_label_value(doc, "核心内容", notice.core_content)
+        _add_structured_fields(doc, notice)
         evidence = _evidence(notice)
         if evidence:
             _add_label_value(doc, "事实校验", _evidence_status_text(notice))
@@ -289,7 +408,9 @@ def write_report(
             _add_label_value(doc, "附件链接", "无")
 
     doc.add_heading("附录", level=1)
-    doc.add_paragraph("去重说明：本报告按来源站点、公告 ID、规范化 URL 和 cluster_key 去重；订阅增量另由 sent_history 控制。")
+    doc.add_paragraph(
+        "去重说明：本报告按来源站点、公告 ID、规范化 URL 和 cluster_key 去重；订阅增量另由 sent_history 控制。"
+    )
     doc.add_paragraph(
         "证据说明：来源链接指向对应公告详情页；核心内容由详情页正文抽取，不做生成式改写；"
         "事实校验基于标题、详情正文、核心内容和附件链接的可追溯证据生成。"

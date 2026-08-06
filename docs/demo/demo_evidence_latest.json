@@ -1,0 +1,260 @@
+{
+  "status": "pass",
+  "generated_at": "2026-08-06T16:18:49",
+  "counts": {
+    "pass": 7,
+    "warn": 0,
+    "fail": 0
+  },
+  "checks": [
+    {
+      "name": "model_doctor",
+      "status": "pass",
+      "detail": "mode=local/ollama/qwen3:8b"
+    },
+    {
+      "name": "sources",
+      "status": "pass",
+      "detail": "ccgp, ggzy and qianlima login state are available"
+    },
+    {
+      "name": "finished_runs",
+      "status": "pass",
+      "detail": "7 finished runs, 4 distinct queries"
+    },
+    {
+      "name": "word_outbox",
+      "status": "pass",
+      "detail": "7 outputs and 7 outbox docx files"
+    },
+    {
+      "name": "trace_flow",
+      "status": "pass",
+      "detail": "required trace tools present; optional=['llm.intent_enhancer', 'pipeline.attachment_extract']"
+    },
+    {
+      "name": "subscription_incremental",
+      "status": "pass",
+      "detail": "1 active subscriptions, 2 sent_history records"
+    },
+    {
+      "name": "demo_video_file",
+      "status": "pass",
+      "detail": "1 video file(s) under docs/demo"
+    }
+  ],
+  "evidence": {
+    "outputs_docx": [
+      "最近12个月全国服务器招标信息都有哪些_202608061526.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608061618.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061404.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061452.docx",
+      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608061253.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061455.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061456.docx"
+    ],
+    "outbox_docx": [
+      "最近12个月全国服务器招标信息都有哪些_202608061526.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608061618.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061404.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061452.docx",
+      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608061253.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061455.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061456.docx"
+    ],
+    "video_files": [
+      "docs\\demo\\demo演示视频.mp4"
+    ],
+    "finished_run_count": 7,
+    "distinct_finished_queries": 4,
+    "active_subscription_count": 1,
+    "sent_history_count": 2,
+    "outbox_message_count": 7,
+    "latest_finished_run": {
+      "id": "3f83af36-54e3-4853-9112-5c2c4f1242dd",
+      "subscription_id": null,
+      "original_query": "最近12个月全国服务器招标信息都有哪些",
+      "status": "finished",
+      "output_docx_path": "E:\\tt\\outputs\\最近12个月全国服务器招标信息都有哪些_202608061618.docx",
+      "stats": {
+        "notice_count": 4,
+        "trace_events": 18,
+        "collected": 6,
+        "local_retrieved": 3,
+        "source_collected": 3,
+        "deduped": 4,
+        "source_sites": [
+          "ggzy"
+        ],
+        "source_stats": [
+          {
+            "source": "local_fts5",
+            "status": "finished",
+            "count": 3,
+            "relaxed_city": false,
+            "engine": "fts5",
+            "vector_status": "disabled",
+            "vector_retrieved": 0
+          },
+          {
+            "source": "ccgp",
+            "status": "finished",
+            "count": 0,
+            "error": null,
+            "relaxed_city": false,
+            "fetch_stats": {
+              "requests": 2,
+              "succeeded": 2,
+              "failed": 0,
+              "blocked": 0,
+              "retries": 0,
+              "browser_fallbacks": 0,
+              "avg_elapsed_ms": 100,
+              "status_codes": {
+                "200": 2
+              },
+              "last_error": ""
+            }
+          },
+          {
+            "source": "ggzy",
+            "status": "finished",
+            "count": 3,
+            "error": null,
+            "relaxed_city": false,
+            "fetch_stats": {
+              "requests": 7,
+              "succeeded": 7,
+              "failed": 0,
+              "blocked": 0,
+              "retries": 0,
+              "browser_fallbacks": 0,
+              "avg_elapsed_ms": 986,
+              "status_codes": {
+                "200": 7
+              },
+              "last_error": ""
+            }
+          },
+          {
+            "source": "qianlima",
+            "status": "finished",
+            "count": 0,
+            "error": null,
+            "relaxed_city": false,
+            "fetch_stats": {
+              "requests": 1,
+              "succeeded": 1,
+              "failed": 0,
+              "blocked": 0,
+              "retries": 0,
+              "browser_fallbacks": 1,
+              "avg_elapsed_ms": 1484,
+              "status_codes": {
+                "200": 1
+              },
+              "last_error": ""
+            }
+          }
+        ],
+        "region_scope": {},
+        "retrieval_engine": "fts5",
+        "pre_skipped_sent": 0,
+        "raw_count": 6,
+        "cleaned_count": 6,
+        "cluster_count": 4,
+        "duplicates_removed": 2,
+        "new": 4,
+        "skipped_sent": 0,
+        "attachments_seen": 1,
+        "attachments_attempted": 1,
+        "attachments_downloaded": 0,
+        "attachments_extracted": 0,
+        "attachments_skipped": 1,
+        "attachments_failed": 0,
+        "structured_notices": 4,
+        "structured_field_hits": 24,
+        "structured_field_counts": {
+          "project_no": 4,
+          "purchaser": 4,
+          "region": 4,
+          "publish_time": 4,
+          "bid_deadline": 3,
+          "opening_time": 3,
+          "attachment_count": 1,
+          "budget": 1
+        },
+        "evidence_checked": 4,
+        "evidence_passed": 4,
+        "evidence_warnings": 0,
+        "email_delivery": {
+          "status": "skipped",
+          "channel": "email",
+          "recipient_count": 0,
+          "message": "email channel is disabled"
+        }
+      }
+    },
+    "latest_trace_tools": [
+      "intent.rule_parser",
+      "llm.intent_enhancer",
+      "adapter.multi.collect",
+      "pipeline.clean_dedup",
+      "pipeline.attachment_extract",
+      "pipeline.structured_fields",
+      "pipeline.evidence_validate",
+      "report.docx_writer",
+      "delivery.email"
+    ],
+    "model_doctor": {
+      "status": "pass",
+      "live": false,
+      "counts": {
+        "pass": 2,
+        "warn": 1,
+        "fail": 0
+      },
+      "checks": [
+        {
+          "name": "provider",
+          "status": "pass",
+          "detail": "local/ollama/qwen3:8b"
+        },
+        {
+          "name": "local_dependency",
+          "status": "pass",
+          "detail": "Ollama is required only when local enhancement is enabled and invoked"
+        },
+        {
+          "name": "enhancement",
+          "status": "warn",
+          "detail": "model enhancement is disabled; runs will use deterministic rule parsing"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "site": "ccgp",
+        "status": "configured"
+      },
+      {
+        "site": "ggzy",
+        "status": "configured"
+      },
+      {
+        "site": "qianlima",
+        "storage_state_path": "E:\\tt\\secrets\\qianlima_storage_state.json",
+        "exists": true,
+        "size": 4209,
+        "modified_at": "2026-08-06T16:17:15",
+        "validation": "ready",
+        "detail": "qianlima storage_state structure is ready",
+        "ready": true,
+        "cookie_count": 21,
+        "origin_count": 2,
+        "qianlima_cookie_count": 20,
+        "qianlima_origin_count": 2
+      }
+    ]
+  }
+}
