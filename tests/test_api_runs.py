@@ -16,6 +16,7 @@ ENV_KEYS = (
     "TENDERTRACE_TRACES_DIR",
     "TENDERTRACE_SECRETS_DIR",
     "TENDERTRACE_SCHEDULER_ENABLED",
+    "TENDERTRACE_API_TOKEN",
 )
 
 
@@ -106,6 +107,58 @@ class RunsApiTests(unittest.TestCase):
                         os.environ[key] = value
 
         self.assertEqual(response.status_code, 400)
+
+    def test_api_token_protects_write_routes_when_configured(self) -> None:
+        warnings.filterwarnings(
+            "ignore",
+            message="Using `httpx` with `starlette.testclient` is deprecated.*",
+        )
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app import api as api_module
+
+        old_env = {key: os.environ.get(key) for key in ENV_KEYS}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            os.environ["TENDERTRACE_DB_PATH"] = str(root / "data" / "db.sqlite3")
+            os.environ["TENDERTRACE_OUTPUTS_DIR"] = str(root / "outputs")
+            os.environ["TENDERTRACE_OUTBOX_DIR"] = str(root / "outbox")
+            os.environ["TENDERTRACE_SNAPSHOTS_DIR"] = str(root / "snapshots")
+            os.environ["TENDERTRACE_TRACES_DIR"] = str(root / "traces")
+            os.environ["TENDERTRACE_SECRETS_DIR"] = str(root / "secrets")
+            os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
+            os.environ["TENDERTRACE_API_TOKEN"] = "local-api-token"
+            try:
+                with patch.object(
+                    api_module,
+                    "run_once",
+                    return_value=RunOnceResult(
+                        run_id="run-token",
+                        status="finished",
+                        notice_count=0,
+                        docx_path=None,
+                        outbox_path=None,
+                        trace_events=0,
+                    ),
+                ):
+                    client = TestClient(api_module.create_app())
+                    health_response = client.get("/api/health")
+                    unauthorized = client.post("/api/runs", json={"query": "服务器招标"})
+                    authorized = client.post(
+                        "/api/runs",
+                        json={"query": "服务器招标"},
+                        headers={"X-TenderTrace-Token": "local-api-token"},
+                    )
+            finally:
+                for key, value in old_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(health_response.status_code, 200)
+        self.assertEqual(unauthorized.status_code, 401)
+        self.assertEqual(authorized.status_code, 200)
 
     def test_start_run_returns_run_id_for_progress_polling(self) -> None:
         warnings.filterwarnings(
@@ -215,6 +268,58 @@ class RunsApiTests(unittest.TestCase):
         self.assertEqual(payload["progress"]["current_node"], "intent")
         self.assertEqual(detail_response.status_code, 200)
         self.assertIn("progress", detail_response.json())
+
+    def test_runs_api_redacts_sensitive_stats(self) -> None:
+        warnings.filterwarnings(
+            "ignore",
+            message="Using `httpx` with `starlette.testclient` is deprecated.*",
+        )
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app.api import create_app
+        from tendertrace.config import Settings
+        from tendertrace.db import init_db
+        from tendertrace.runlog import finish_run, start_run
+
+        old_env = {key: os.environ.get(key) for key in ENV_KEYS}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            os.environ["TENDERTRACE_DB_PATH"] = str(root / "data" / "db.sqlite3")
+            os.environ["TENDERTRACE_OUTPUTS_DIR"] = str(root / "outputs")
+            os.environ["TENDERTRACE_OUTBOX_DIR"] = str(root / "outbox")
+            os.environ["TENDERTRACE_SNAPSHOTS_DIR"] = str(root / "snapshots")
+            os.environ["TENDERTRACE_TRACES_DIR"] = str(root / "traces")
+            os.environ["TENDERTRACE_SECRETS_DIR"] = str(root / "secrets")
+            os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
+            try:
+                settings = Settings.load()
+                init_db(settings)
+                start_run(settings, run_id="run-secret", original_query="server", mode="full")
+                finish_run(
+                    settings,
+                    run_id="run-secret",
+                    status="finished",
+                    output_docx_path=None,
+                    stats={"feishu_bitable_delivery": {"app_token": "fixture-token"}},
+                )
+                client = TestClient(create_app())
+                list_response = client.get("/api/runs")
+                detail_response = client.get("/api/runs/run-secret")
+            finally:
+                for key, value in old_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotIn("fixture-token", str(list_response.json()))
+        self.assertNotIn("fixture-token", str(detail_response.json()))
+        self.assertEqual(
+            list_response.json()["items"][0]["stats"]["feishu_bitable_delivery"]["app_token"],
+            "[redacted]",
+        )
 
     def test_delete_run_removes_history_record(self) -> None:
         warnings.filterwarnings(

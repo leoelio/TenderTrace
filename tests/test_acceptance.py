@@ -86,13 +86,30 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(checks["multi_source_run"].status, "pass")
         self.assertIn("attempted ccgp, ggzy", checks["multi_source_run"].detail)
 
+    def test_acceptance_reports_invalid_submission_zip_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_required_files(root)
+            (root / "dist" / "TenderTrace_submission_202607062130.zip").write_bytes(
+                b"not-a-zip" * 2000
+            )
+            settings = Settings.load(root)
+            init_db(settings)
+
+            report = run_acceptance(settings, strict_runtime=False)
+
+        checks = {check.name: check for check in report.checks}
+        self.assertEqual(report.status, "fail")
+        self.assertEqual(checks["submission_package"].status, "fail")
+        self.assertIn("could not be scanned", checks["submission_package"].detail)
+
 
 def _write_required_files(root: Path) -> None:
     files = [
         ".env.example",
         *REQUIRED_DELIVERY_DOCS,
         "docs/teaching/13_交付收口与完成度审计.docx",
-        "docs/demo/TenderTrace_Demo.mp4",
+        "docs/demo/demo演示视频.mp4",
         "dist/TenderTrace_submission_202607062130.zip",
     ]
     for relative in files:

@@ -13,12 +13,13 @@ from tendertrace.demo_check import run_demo_check, write_demo_evidence
 from tendertrace.demo_incremental import run_incremental_demo
 from tendertrace.demo_video import generate_demo_video
 from tendertrace.delivery.feishu_bitable import check_feishu_bitable
-from tendertrace.gold import build_gold_candidates, evaluate_gold_recall
+from tendertrace.gold import build_gold_candidates, build_gold_coverage, evaluate_gold_recall
 from tendertrace.ingest import run_ingest_cycle
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
 from tendertrace.memory import build_weekly_report, persist_weekly_report
+from tendertrace.preflight import run_preflight
 from tendertrace.runner import run_once
 from tendertrace.runtime.bus import EventBus
 from tendertrace.runtime.checkpoint import SqliteCheckpointer
@@ -191,18 +192,42 @@ def cmd_evaluate_gold(args: argparse.Namespace) -> int:
 
 def cmd_gold_candidates(args: argparse.Namespace) -> int:
     settings = _settings()
+    path = Path(args.out)
+    if not path.is_absolute():
+        path = settings.workspace_root / path
+    existing_payload = None
+    if args.resume and path.exists():
+        try:
+            existing_payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            existing_payload = None
     payload = build_gold_candidates(
         settings,
         gold_path=Path(args.gold) if args.gold else None,
         max_pages=args.max_pages,
         max_results=args.max_results,
+        case_ids=args.case_id,
+        case_timeout_seconds=args.case_timeout,
+        existing_payload=existing_payload,
     )
-    path = Path(args.out)
-    if not path.is_absolute():
-        path = settings.workspace_root / path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     payload["output_path"] = str(path)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_gold_coverage(args: argparse.Namespace) -> int:
+    settings = _settings()
+    result = build_gold_coverage(settings, gold_path=Path(args.gold) if args.gold else None)
+    payload = result.to_dict()
+    if args.out:
+        path = Path(args.out)
+        if not path.is_absolute():
+            path = settings.workspace_root / path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        payload["output_path"] = str(path)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
@@ -442,6 +467,13 @@ def cmd_package_submission(args: argparse.Namespace) -> int:
     return 0 if result.status == "pass" else 1
 
 
+def cmd_preflight(args: argparse.Namespace) -> int:
+    settings = _settings()
+    report = run_preflight(settings, package=not args.no_package, live=args.live)
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    return 0 if report.status == "pass" else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tendertrace")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -547,7 +579,30 @@ def build_parser() -> argparse.ArgumentParser:
     gold_candidates.add_argument("--out", default="docs/evaluation/gold_candidates_latest.json")
     gold_candidates.add_argument("--max-pages", type=int, default=1)
     gold_candidates.add_argument("--max-results", type=int, default=20)
+    gold_candidates.add_argument(
+        "--case-id",
+        action="append",
+        help="Generate candidates only for one case id; repeatable.",
+    )
+    gold_candidates.add_argument(
+        "--case-timeout",
+        type=int,
+        default=45,
+        help="Per-case timeout in seconds; use 0 to disable process timeout.",
+    )
+    gold_candidates.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reuse finished case results already present in --out.",
+    )
     gold_candidates.set_defaults(func=cmd_gold_candidates)
+    gold_coverage = sub.add_parser(
+        "gold-coverage",
+        help="Summarize how many gold benchmark cases are annotated and ready to evaluate.",
+    )
+    gold_coverage.add_argument("--gold", help="Gold benchmark JSON path.")
+    gold_coverage.add_argument("--out", help="Optional JSON output path.")
+    gold_coverage.set_defaults(func=cmd_gold_coverage)
     memory_weekly = sub.add_parser(
         "memory-weekly",
         help="Build the local user-memory weekly report from recorded activity events.",
@@ -657,6 +712,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     package_submission.add_argument("--out", help="Optional zip output path.")
     package_submission.set_defaults(func=cmd_package_submission)
+    preflight = sub.add_parser(
+        "preflight",
+        help="Run the local release preflight checks and print a JSON summary.",
+    )
+    preflight.add_argument(
+        "--no-package",
+        action="store_true",
+        help="Skip package-submission for a faster local check.",
+    )
+    preflight.add_argument(
+        "--live",
+        action="store_true",
+        help="Also run live model, Qianlima, and Feishu connectivity checks.",
+    )
+    preflight.set_defaults(func=cmd_preflight)
     return parser
 
 

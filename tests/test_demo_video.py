@@ -54,13 +54,13 @@ class DemoVideoTests(unittest.TestCase):
     def test_demo_video_result_is_json_safe(self) -> None:
         result = DemoVideoResult(
             status="pass",
-            output_path="docs/demo/TenderTrace_Demo.mp4",
+            output_path="docs/demo/demo演示视频.mp4",
             evidence_path="docs/demo/demo_evidence_latest.json",
             frames=20,
             warning_count=1,
         )
 
-        self.assertEqual(result.to_dict()["output_path"], "docs/demo/TenderTrace_Demo.mp4")
+        self.assertEqual(result.to_dict()["output_path"], "docs/demo/demo演示视频.mp4")
         self.assertEqual(result.to_dict()["warning_count"], 1)
 
 

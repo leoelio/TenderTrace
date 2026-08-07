@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
+import secrets
 from threading import Thread
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -22,6 +23,7 @@ from tendertrace.memory import (
 )
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import run_once
+from tendertrace.sanitize import sanitize_for_output, sanitize_stats
 from tendertrace.runtime.checkpoint import SqliteCheckpointer
 from tendertrace.runtime.trace import SqliteTraceStore
 from tendertrace.scheduling.scheduler import (
@@ -46,8 +48,8 @@ from tendertrace.source_map import build_source_map
 
 def create_app():
     try:
-        from fastapi import Body, FastAPI, HTTPException
-        from fastapi.responses import FileResponse
+        from fastapi import Body, FastAPI, HTTPException, Request
+        from fastapi.responses import FileResponse, JSONResponse
     except ImportError as exc:
         raise RuntimeError(
             "FastAPI is not installed. Run: python -m pip install -e .[dev]"
@@ -70,6 +72,15 @@ def create_app():
 
     app = FastAPI(title="TenderTrace", version="0.1.0", lifespan=lifespan)
     app.state.scheduler = None
+
+    @app.middleware("http")
+    async def api_token_middleware(request: Request, call_next):
+        if _requires_api_token(settings, request):
+            expected = settings.api_token()
+            provided = _api_token_from_headers(request.headers)
+            if not expected or not secrets.compare_digest(provided, expected):
+                return JSONResponse({"detail": "invalid API token"}, status_code=401)
+        return await call_next(request)
 
     @app.get("/api/health")
     def health() -> dict[str, object]:
@@ -314,7 +325,7 @@ def create_app():
         items = []
         for row in rows:
             item = dict(row)
-            item["stats"] = json.loads(item.pop("stats_json") or "{}")
+            item["stats"] = sanitize_stats(json.loads(item.pop("stats_json") or "{}"))
             item["outbox_path"] = _outbox_path_for_run(item["id"], settings)
             items.append(item)
         return {"items": items}
@@ -523,7 +534,7 @@ def create_app():
                     "seq": event.seq,
                     "event_type": event.event_type,
                     "node": event.node,
-                    "payload": event.payload,
+                    "payload": sanitize_for_output(event.payload),
                     "created_at": event.created_at,
                 }
                 for event in store.list_events(run_id)
@@ -540,7 +551,7 @@ def create_app():
                     "seq": checkpoint.seq,
                     "node": checkpoint.node,
                     "status": checkpoint.status,
-                    "state": checkpoint.state.to_dict(),
+                    "state": sanitize_for_output(checkpoint.state.to_dict()),
                 }
                 for checkpoint in checkpointer.list(run_id)
             ],
@@ -653,7 +664,7 @@ def _latest_subscription_run(settings: Settings, subscription_id: str) -> dict[s
             "last_download_url": None,
             "last_email_status": None,
         }
-    stats = _loads_json(row["stats_json"])
+    stats = sanitize_stats(_loads_json(row["stats_json"]))
     outbox_path = str(outbox["docx_path"]) if outbox else str(row["output_docx_path"] or "")
     outbox_name = Path(outbox_path).name if outbox_path else None
     email = stats.get("email_delivery")
@@ -769,6 +780,32 @@ def _int_stat(stats: dict[str, object], key: str) -> int:
         return 0
 
 
+def _requires_api_token(settings: Settings, request) -> bool:
+    if not settings.api_token_present:
+        return False
+    path = request.url.path
+    if not path.startswith("/api/") or path == "/api/health":
+        return False
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        return True
+    return path == "/api/memory/weekly" and str(request.query_params.get("save")).lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _api_token_from_headers(headers) -> str:
+    token = headers.get("x-tendertrace-token")
+    if token:
+        return token
+    authorization = headers.get("authorization") or ""
+    prefix = "Bearer "
+    if authorization.startswith(prefix):
+        return authorization[len(prefix) :]
+    return ""
+
+
 def _outbox_path_for_run(run_id: str, settings: Settings) -> str | None:
     for item in list_outbox_messages(settings):
         if item.run_id == run_id:
@@ -811,7 +848,7 @@ def _run_progress(settings: Settings, run_id: str, status: str) -> dict[str, obj
                 "seq": latest_event.seq,
                 "event_type": latest_event.event_type,
                 "node": latest_event.node,
-                "payload": latest_event.payload,
+                "payload": sanitize_for_output(latest_event.payload),
                 "created_at": latest_event.created_at,
             }
             if latest_event

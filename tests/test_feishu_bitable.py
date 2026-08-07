@@ -193,6 +193,10 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(result.status, "sent")
         self.assertEqual(result.created_count, 1)
         self.assertEqual(result.updated_count, 1)
+        payload = result.to_dict()
+        self.assertNotIn("app_token", payload)
+        self.assertTrue(payload["app_token_configured"])
+        self.assertNotIn("base_test", str(payload))
         created = FakeFeishuClient.created_records[0]["fields"]
         self.assertEqual(created["标题"], "new title")
         self.assertEqual(created["关键词"], "服务器")

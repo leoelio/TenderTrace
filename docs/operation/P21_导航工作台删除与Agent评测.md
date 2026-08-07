@@ -84,7 +84,7 @@ python -m ruff check tendertrace tests
 
 当前结果：
 
-- 89 个单元测试通过。
+- 143 个 pytest 测试通过。
 - Ruff 通过。
 - 浏览器验证无 console error。
 - 1280px 桌面宽度下顶栏保持单行。

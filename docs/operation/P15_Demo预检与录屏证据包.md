@@ -11,7 +11,7 @@ P15 面向最终 Demo 视频交付。视频本身仍需要人工录制，但录�
 - 模型状态和来源状态。
 - 录屏文件是否已放入 `docs/demo/`。
 
-因此本阶段新增 `demo-check` 命令，它只审计当前工作区，不联网、不重跑采集、不伪造演示结果。
+因此本阶段新增 `demo-check` 命令，它只审计当前工作区，不联网、不重跑采集、不伪造演示结果。当前检查还会记录 CI 配置、最新交付包安全扫描和 API 鉴权状态。
 
 ## 新增命令
 
@@ -54,6 +54,8 @@ fail=0
 2. 只有一个问题或没有 Word/outbox 时，`demo-check` fail。
 3. 最新 run 缺少关键 trace 工具时，`demo-check` fail。
 4. 没有订阅或 `sent_history` 时，`demo-check` fail。
+5. `.github/workflows/ci.yml` 缺失时 fail。
+6. 已存在的提交包含禁入文件或疑似密钥时 fail；尚未生成提交包时只 warn，提醒最终交付前运行 `package-submission`。
 5. 千里马未登录和视频未录制只作为 warning，不伪装成已完成。
 6. 证据包不包含 OpenAI key、账号密码或 `.env.local` 明文。
 

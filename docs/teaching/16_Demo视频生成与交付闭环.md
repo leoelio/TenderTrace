@@ -80,7 +80,7 @@ nb_frames=600
 集成验证由实际命令完成：
 
 ```powershell
-python -m tendertrace demo-video --url http://127.0.0.1:8015/ --out docs/demo/TenderTrace_Demo.mp4
+python -m tendertrace demo-video --url http://127.0.0.1:8015/ --out docs/demo/demo演示视频.mp4
 ffprobe ...
 ```
 
@@ -89,7 +89,7 @@ ffprobe ...
 当前已经生成：
 
 ```text
-docs/demo/TenderTrace_Demo.mp4
+docs/demo/demo演示视频.mp4
 docs/demo/demo_evidence_latest.json
 ```
 

@@ -67,8 +67,25 @@ class DeliveryDocsTests(unittest.TestCase):
     def test_readme_matches_current_stage(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
         self.assertIn("Current stage: P27", readme)
-        self.assertIn("129 unit tests pass", readme)
+        self.assertIn("143 unit tests pass", readme)
         self.assertIn("acceptance-check", readme)
+
+    def test_delivery_docs_do_not_regress_to_stale_evidence(self) -> None:
+        banned = [
+            "TenderTrace_Demo.mp4",
+            "89 个单元测试",
+            "95 个单元测试",
+            "103 项单元测试",
+            "pass=31",
+            "pass: 31",
+        ]
+        paths = [Path("README.md"), Path("标迹TenderTrace报名补充材料.md")]
+        paths.extend(Path("docs").rglob("*.md"))
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            for marker in banned:
+                with self.subTest(path=str(path), marker=marker):
+                    self.assertNotIn(marker, text)
 
     def test_delivery_documents_do_not_contain_plaintext_openai_keys(self) -> None:
         secret_pattern = re.compile(r"sk-(?:proj-)?[A-Za-z0-9_-]{20,}")

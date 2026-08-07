@@ -37,7 +37,7 @@ class RunLogTests(unittest.TestCase):
                 run_id=run_id,
                 status="finished",
                 output_docx_path=docx_path,
-                stats={"notice_count": 1},
+                stats={"notice_count": 1, "feishu_bitable_delivery": {"app_token": "fixture-token"}},
             )
 
             run = get_run(settings, run_id)
@@ -49,7 +49,8 @@ class RunLogTests(unittest.TestCase):
                 ).fetchone()
 
         self.assertEqual(run["status"], "finished")
-        self.assertEqual(run["stats"], {"notice_count": 1})
+        self.assertEqual(run["stats"]["notice_count"], 1)
+        self.assertEqual(run["stats"]["feishu_bitable_delivery"]["app_token"], "[redacted]")
         self.assertEqual(row["output_docx_path"], str(docx_path))
         self.assertEqual(messages[0].run_id, run_id)
         self.assertEqual(messages[0].docx_path, str(docx_path))

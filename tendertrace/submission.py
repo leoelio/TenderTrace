@@ -5,11 +5,13 @@ from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
+import re
 import zipfile
 
 
 ROOT_FILES = (
     ".env.example",
+    ".gitattributes",
     ".gitignore",
     "README.md",
     "pyproject.toml",
@@ -18,6 +20,7 @@ ROOT_FILES = (
 )
 
 SOURCE_DIRS = (
+    ".github/workflows",
     "tendertrace",
     "tests",
     "docs",
@@ -66,12 +69,24 @@ ALLOWED_SUFFIXES = {
     ".py",
     ".toml",
     ".txt",
+    ".yml",
 }
 
 ALLOWED_FILENAMES = {
     ".env.example",
+    ".gitattributes",
     ".gitignore",
 }
+
+
+@dataclass(frozen=True)
+class SubmissionSecurityFinding:
+    path: str
+    kind: str
+    detail: str
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -92,6 +107,7 @@ class SubmissionPackageResult:
     file_count: int
     total_bytes: int
     forbidden_entry_count: int
+    secret_hit_count: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -127,13 +143,15 @@ def create_submission_package(root: Path, output_path: Path | None = None) -> Su
     manifest_path = package_path.with_suffix(".manifest.json")
     manifest_path.write_bytes(manifest_bytes)
     forbidden = forbidden_package_entries(package_path)
+    secret_findings = package_secret_findings(package_path)
     return SubmissionPackageResult(
-        status="pass" if not forbidden else "fail",
+        status="pass" if not forbidden and not secret_findings else "fail",
         package_path=str(package_path),
         manifest_path=str(manifest_path),
         file_count=len(manifest_files),
         total_bytes=sum(item.size for item in manifest_files),
         forbidden_entry_count=len(forbidden),
+        secret_hit_count=len(secret_findings),
     )
 
 
@@ -141,6 +159,17 @@ def forbidden_package_entries(package_path: Path) -> list[str]:
     with zipfile.ZipFile(package_path) as archive:
         entries = archive.namelist()
     return [entry for entry in entries if _is_forbidden_relative(Path(entry))]
+
+
+def package_secret_findings(package_path: Path) -> list[SubmissionSecurityFinding]:
+    findings: list[SubmissionSecurityFinding] = []
+    with zipfile.ZipFile(package_path) as archive:
+        for entry in archive.infolist():
+            if entry.is_dir() or not _is_scannable_entry(entry.filename, entry.file_size):
+                continue
+            text = archive.read(entry).decode("utf-8", errors="ignore")
+            findings.extend(_scan_text(entry.filename, text))
+    return findings
 
 
 def _collect_submission_files(root: Path) -> list[Path]:
@@ -195,4 +224,67 @@ def _file_record(root: Path, path: Path) -> SubmissionFile:
         path=path.relative_to(root).as_posix(),
         size=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
+    )
+
+
+SCANNABLE_SUFFIXES = {
+    ".css",
+    ".html",
+    ".js",
+    ".json",
+    ".md",
+    ".py",
+    ".toml",
+    ".txt",
+    ".yml",
+}
+
+SECRET_VALUE_PATTERN = re.compile(
+    r"""(?ix)
+    (?P<key>
+        api[_-]?key|app[_-]?secret|app[_-]?token|access[_-]?token|
+        authorization|bearer|cookie|password|smtp[_-]?password|storage[_-]?state
+    )
+    [ \t"':=]+
+    (?P<value>sk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{16,}|[A-Za-z0-9._/\-+=]{20,})
+    """
+)
+
+OPENAI_KEY_PATTERN = re.compile(r"sk-(?:proj-)?[A-Za-z0-9_-]{20,}")
+
+
+def _is_scannable_entry(filename: str, size: int) -> bool:
+    return size <= 2_000_000 and Path(filename).suffix.lower() in SCANNABLE_SUFFIXES
+
+
+def _scan_text(path: str, text: str) -> list[SubmissionSecurityFinding]:
+    findings: list[SubmissionSecurityFinding] = []
+    for match in OPENAI_KEY_PATTERN.finditer(text):
+        value = match.group(0)
+        if not _is_placeholder_value(value):
+            findings.append(SubmissionSecurityFinding(path, "openai_key", "OpenAI key-like value"))
+    if Path(path).suffix.lower() == ".py":
+        return findings
+    for match in SECRET_VALUE_PATTERN.finditer(text):
+        key = match.group("key")
+        value = match.group("value")
+        if not _is_placeholder_value(value):
+            findings.append(SubmissionSecurityFinding(path, key.lower(), f"{key} has a non-placeholder value"))
+    return findings
+
+
+def _is_placeholder_value(value: str) -> bool:
+    lowered = value.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "[redacted]",
+            "example",
+            "fake",
+            "placeholder",
+            "test",
+            "secret",
+            "xxxx",
+            "...",
+        )
     )

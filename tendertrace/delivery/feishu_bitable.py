@@ -44,7 +44,10 @@ class FeishuBitableResult:
     table_id: str = ""
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        data = asdict(self)
+        data.pop("app_token", None)
+        data["app_token_configured"] = bool(self.app_token)
+        return data
 
 
 @dataclass(frozen=True)

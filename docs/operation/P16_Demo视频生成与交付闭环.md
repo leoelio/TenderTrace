@@ -5,13 +5,13 @@
 P16 把 Demo 视频从待人工录制推进到可交付文件。新增 `demo-video` 命令，从当前真实 Web UI 截图和 `demo-check` 证据包生成 MP4：
 
 ```powershell
-python -m tendertrace demo-video --url http://127.0.0.1:8015/ --out docs/demo/TenderTrace_Demo.mp4
+python -m tendertrace demo-video --url http://127.0.0.1:8015/ --out docs/demo/demo演示视频.mp4
 ```
 
 当前生成文件：
 
 ```text
-docs/demo/TenderTrace_Demo.mp4
+docs/demo/demo演示视频.mp4
 ```
 
 视频参数经 `ffprobe` 验证：
@@ -75,7 +75,7 @@ qianlima login_required
 
 ## 成功标准
 
-1. `docs/demo/TenderTrace_Demo.mp4` 存在且大于 10 KB。
+1. `docs/demo/demo演示视频.mp4` 存在且大于 10 KB。
 2. 视频为 1280x720，时长约 20 秒。
 3. 首帧不是黑屏，中文标题和 Web 截图可读。
 4. `demo-check` 的 `demo_video_file` 通过。
@@ -84,8 +84,8 @@ qianlima login_required
 ## 验证命令
 
 ```powershell
-python -m tendertrace demo-video --url http://127.0.0.1:8015/ --out docs/demo/TenderTrace_Demo.mp4
-ffprobe -v error -select_streams v:0 -show_entries stream=width,height,duration,nb_frames -of json docs/demo/TenderTrace_Demo.mp4
+python -m tendertrace demo-video --url http://127.0.0.1:8015/ --out docs/demo/demo演示视频.mp4
+ffprobe -v error -select_streams v:0 -show_entries stream=width,height,duration,nb_frames -of json docs/demo/demo演示视频.mp4
 python -m tendertrace demo-check --out docs/demo/demo_evidence_latest.json
 python -m tendertrace acceptance-check
 python -m unittest discover -s tests -v

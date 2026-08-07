@@ -151,6 +151,7 @@ class SubscriptionApiTests(unittest.TestCase):
                 "new": 2,
                 "skipped_sent": 3,
                 "email_delivery": {"status": "sent"},
+                "feishu_bitable_delivery": {"app_token": "fixture-token"},
             }
             with connection(settings) as conn:
                 conn.execute(
@@ -225,6 +226,7 @@ class SubscriptionApiTests(unittest.TestCase):
         self.assertEqual(item["last_outbox_name"], "latest.docx")
         self.assertEqual(item["last_download_url"], "/api/outbox/latest.docx")
         self.assertEqual(item["last_email_status"], "sent")
+        self.assertNotIn("fixture-token", str(item))
 
     def test_delete_subscription_hides_it_from_active_list(self) -> None:
         client, cleanup = _client()

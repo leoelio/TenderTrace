@@ -153,6 +153,7 @@ TENDERTRACE_FEISHU_APP_SECRET=
 TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
 TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
 TENDERTRACE_PUBLIC_BASE_URL=http://127.0.0.1:8000
+TENDERTRACE_API_TOKEN=
 ```
 
 模型模式：
@@ -251,6 +252,7 @@ python -m tendertrace verify-qianlima --live
 
 ```powershell
 python -m tendertrace gold-candidates --max-pages 2 --max-results 30 --out docs/evaluation/gold_candidates_latest.json
+python -m tendertrace gold-coverage --out docs/evaluation/gold_coverage_latest.json
 python -m tendertrace evaluate-gold --out docs/evaluation/recall_after_p23.json
 ```
 
@@ -337,18 +339,21 @@ docs/evaluation/gold_benchmark.json
 当前验证基线：
 
 - Current stage: P27
-- 129 unit tests pass.
+- 143 unit tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
+- `python -m tendertrace preflight --no-package` passes.
 
 推荐回归命令：
 
 ```powershell
-python -m unittest discover -s tests -v
-python -m ruff check tendertrace tests
+python -m pytest
+python -m ruff check .
 node --check web\dist\app.js
 python -m tendertrace acceptance-check --no-runtime
+python -m tendertrace preflight --no-package
+python -m tendertrace preflight --no-package --live
 ```
 
 </details>
@@ -475,6 +480,7 @@ OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-5.5
 TENDERTRACE_OPENAI_API_STYLE=responses
+TENDERTRACE_API_TOKEN=
 ```
 
 Model modes:
@@ -554,6 +560,7 @@ Generate gold candidates and evaluate Recall@K:
 
 ```powershell
 python -m tendertrace gold-candidates --max-pages 2 --max-results 30 --out docs/evaluation/gold_candidates_latest.json
+python -m tendertrace gold-coverage --out docs/evaluation/gold_coverage_latest.json
 python -m tendertrace evaluate-gold --out docs/evaluation/recall_after_p23.json
 ```
 
@@ -640,18 +647,21 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 Current verified baseline:
 
 - Current stage: P27
-- 129 unit tests pass.
+- 143 unit tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
+- `python -m tendertrace preflight --no-package` passes.
 
 Recommended checks:
 
 ```powershell
-python -m unittest discover -s tests -v
-python -m ruff check tendertrace tests
+python -m pytest
+python -m ruff check .
 node --check web\dist\app.js
 python -m tendertrace acceptance-check --no-runtime
+python -m tendertrace preflight --no-package
+python -m tendertrace preflight --no-package --live
 ```
 
 </details>

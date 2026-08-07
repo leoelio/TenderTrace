@@ -11,6 +11,8 @@ from docx import Document
 from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.llm.doctor import model_doctor
+from tendertrace.sanitize import sanitize_for_output
+from tendertrace.submission import forbidden_package_entries, package_secret_findings
 from tendertrace.vault.qianlima import QianlimaSessionVault
 
 
@@ -66,6 +68,9 @@ def run_demo_check(settings: Settings) -> DemoEvidenceReport:
         _check_trace_flow(evidence),
         _check_subscription_incremental(evidence),
         _check_video_file(settings, evidence),
+        _check_submission_package(settings, evidence),
+        _check_ci_config(settings, evidence),
+        _check_api_token(settings, evidence),
     ]
     status = "fail" if any(check.status == "fail" for check in checks) else "pass"
     return DemoEvidenceReport(
@@ -78,7 +83,8 @@ def run_demo_check(settings: Settings) -> DemoEvidenceReport:
 
 def write_demo_evidence(report: DemoEvidenceReport, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    payload = sanitize_for_output(report.to_dict())
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 
@@ -163,7 +169,7 @@ def _trace_tools(conn, run_id: str) -> list[str]:
 def _latest_run_dict(row) -> dict[str, Any] | None:
     if row is None:
         return None
-    stats = json.loads(row["stats_json"] or "{}")
+    stats = sanitize_for_output(json.loads(row["stats_json"] or "{}"))
     return {
         "id": row["id"],
         "subscription_id": row["subscription_id"],
@@ -172,6 +178,7 @@ def _latest_run_dict(row) -> dict[str, Any] | None:
         "output_docx_path": row["output_docx_path"],
         "stats": stats,
     }
+
 
 
 def _video_files(root: Path) -> list[str]:
@@ -282,3 +289,73 @@ def _check_video_file(settings: Settings, evidence: dict[str, Any]) -> DemoCheck
         "warn",
         "no demo video file found under docs/demo; record it after rehearsal",
     )
+
+
+def _check_submission_package(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
+    package = _latest_submission_package(settings.workspace_root)
+    if package is None:
+        evidence["submission_package"] = {"status": "missing"}
+        return DemoCheck(
+            "submission_package",
+            "warn",
+            "no dist/TenderTrace_submission_*.zip found; run package-submission before final delivery",
+        )
+    try:
+        forbidden = forbidden_package_entries(package)
+        secret_findings = package_secret_findings(package)
+    except Exception as exc:
+        evidence["submission_package"] = {
+            "status": "invalid",
+            "path": str(package),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        return DemoCheck("submission_package", "fail", f"package scan failed: {package.name}")
+    evidence["submission_package"] = {
+        "status": "scanned",
+        "path": str(package),
+        "forbidden_entry_count": len(forbidden),
+        "secret_hit_count": len(secret_findings),
+        "secret_findings": [finding.to_dict() for finding in secret_findings],
+    }
+    if forbidden:
+        return DemoCheck(
+            "submission_package",
+            "fail",
+            f"{package.name} contains forbidden entries: {', '.join(forbidden[:3])}",
+        )
+    if secret_findings:
+        return DemoCheck(
+            "submission_package",
+            "fail",
+            f"{package.name} contains {len(secret_findings)} secret-like value(s)",
+        )
+    return DemoCheck("submission_package", "pass", f"{package.name} passed package safety scan")
+
+
+def _check_ci_config(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
+    path = settings.workspace_root / ".github" / "workflows" / "ci.yml"
+    exists = path.is_file()
+    evidence["ci_config"] = {"path": str(path), "exists": exists}
+    if not exists:
+        return DemoCheck("ci_config", "fail", ".github/workflows/ci.yml is missing")
+    return DemoCheck("ci_config", "pass", "GitHub Actions CI workflow is present")
+
+
+def _check_api_token(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
+    evidence["api_security"] = {
+        "app_env": settings.app_env,
+        "api_token_configured": settings.api_token_present,
+    }
+    if settings.api_token_present:
+        detail = "API token guard is configured"
+    else:
+        detail = f"API token guard is disabled for {settings.app_env} mode"
+    return DemoCheck("api_security", "pass", detail)
+
+
+def _latest_submission_package(root: Path) -> Path | None:
+    packages = sorted(
+        (root / "dist").glob("TenderTrace_submission_*.zip"),
+        key=lambda path: (path.stat().st_mtime, path.name),
+    )
+    return packages[-1] if packages else None

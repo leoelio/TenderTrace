@@ -11,7 +11,7 @@ from docx import Document
 from tendertrace.config import Settings
 from tendertrace.db import SCHEMA_VERSION, connection, database_health
 from tendertrace.llm.gateway import model_status
-from tendertrace.submission import forbidden_package_entries
+from tendertrace.submission import forbidden_package_entries, package_secret_findings
 from tendertrace.vault.qianlima import QianlimaSessionVault
 
 
@@ -185,13 +185,31 @@ def _check_submission_package(root: Path) -> list[AcceptanceCheck]:
     if not packages:
         return [AcceptanceCheck("submission_package", "fail", "no non-empty submission zip found")]
     newest = max(packages, key=lambda path: path.stat().st_mtime)
-    forbidden = forbidden_package_entries(newest)
+    try:
+        forbidden = forbidden_package_entries(newest)
+        secret_findings = package_secret_findings(newest)
+    except Exception as exc:
+        return [
+            AcceptanceCheck(
+                "submission_package",
+                "fail",
+                f"{newest.name} could not be scanned: {type(exc).__name__}",
+            )
+        ]
     if forbidden:
         return [
             AcceptanceCheck(
                 "submission_package",
                 "fail",
                 f"{newest.name} contains forbidden entries: {', '.join(forbidden[:5])}",
+            )
+        ]
+    if secret_findings:
+        return [
+            AcceptanceCheck(
+                "submission_package",
+                "fail",
+                f"{newest.name} contains token-like content: {secret_findings[0].path}",
             )
         ]
     return [AcceptanceCheck("submission_package", "pass", newest.name)]

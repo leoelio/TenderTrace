@@ -15,9 +15,9 @@ python -m tendertrace source-status
 python -m tendertrace verify-qianlima
 python -m tendertrace acceptance-check
 python -m tendertrace demo-check --out docs/demo/demo_evidence_latest.json
-python -m tendertrace demo-video --url http://127.0.0.1:8000/ --out docs/demo/TenderTrace_Demo.mp4
+python -m tendertrace demo-video --url http://127.0.0.1:8000/ --out docs/demo/demo演示视频.mp4
 python -m tendertrace package-submission
-python -m unittest discover -s tests -v
+python -m pytest
 python -m ruff check .
 ```
 

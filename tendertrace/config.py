@@ -113,6 +113,7 @@ class Settings:
     vector_top_k: int
     attachment_max_per_notice: int
     attachment_max_bytes: int
+    api_token_present: bool
 
     @classmethod
     def load(cls, workspace_root: Path | None = None) -> "Settings":
@@ -165,10 +166,16 @@ class Settings:
             env_files,
             f"http://{_first_value('TENDERTRACE_HOST', env_files, '127.0.0.1')}:{port}",
         )
+        app_env = _first_value("TENDERTRACE_APP_ENV", env_files, "dev")
+        api_token = _first_value("TENDERTRACE_API_TOKEN", env_files, "")
+        if app_env.strip().lower() in {"prod", "production"} and not _bool_secret_present(
+            api_token
+        ):
+            raise ConfigError("TENDERTRACE_API_TOKEN is required when TENDERTRACE_APP_ENV=prod")
 
         return cls(
             workspace_root=root,
-            app_env=_first_value("TENDERTRACE_APP_ENV", env_files, "dev"),
+            app_env=app_env,
             host=_first_value("TENDERTRACE_HOST", env_files, "127.0.0.1"),
             port=port,
             timezone=_first_value("TENDERTRACE_TIMEZONE", env_files, "Asia/Shanghai"),
@@ -272,6 +279,7 @@ class Settings:
             ),
             attachment_max_per_notice=attachment_max_per_notice,
             attachment_max_bytes=attachment_max_bytes,
+            api_token_present=_bool_secret_present(api_token),
         )
 
     def ensure_directories(self) -> None:
@@ -331,6 +339,7 @@ class Settings:
             "vector_top_k": self.vector_top_k,
             "attachment_max_per_notice": self.attachment_max_per_notice,
             "attachment_max_bytes": self.attachment_max_bytes,
+            "api_token_configured": self.api_token_present,
         }
 
     def openai_api_key(self) -> str:
@@ -353,6 +362,13 @@ class Settings:
             _read_env_file(self.workspace_root / ".env"),
         ]
         return _first_value("TENDERTRACE_FEISHU_APP_SECRET", env_files, "")
+
+    def api_token(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("TENDERTRACE_API_TOKEN", env_files, "")
 
 
 def _parse_positive_int(value: str, name: str) -> int:

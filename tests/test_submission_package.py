@@ -3,7 +3,11 @@ import tempfile
 import unittest
 import zipfile
 
-from tendertrace.submission import create_submission_package, forbidden_package_entries
+from tendertrace.submission import (
+    create_submission_package,
+    forbidden_package_entries,
+    package_secret_findings,
+)
 
 
 class SubmissionPackageTests(unittest.TestCase):
@@ -13,15 +17,17 @@ class SubmissionPackageTests(unittest.TestCase):
             _write(root / "README.md", "# TenderTrace\n")
             _write(root / "pyproject.toml", "[project]\nname='tendertrace'\n")
             _write(root / ".env.example", "OPENAI_API_KEY=\n")
+            _write(root / ".gitattributes", "*.py text eol=lf\n")
             _write(root / ".env.local", "OPENAI_API_KEY=sk-proj-secret\n")
             _write(root / "secrets" / "qianlima_storage_state.json", '{"cookies":[{"value":"secret"}]}')
             _write(root / "data" / "tendertrace.sqlite3", "runtime")
             _write(root / "tendertrace" / "__init__.py", '"""package"""')
             _write(root / "tests" / "test_smoke.py", "def test_smoke(): pass\n")
             _write(root / "web" / "dist" / "app.js", "console.log('ok')\n")
+            _write(root / ".github" / "workflows" / "ci.yml", "name: CI\n")
             _write(root / "outputs" / "report.docx", "docx")
             _write(root / "outbox" / "report.docx", "docx")
-            _write(root / "docs" / "demo" / "TenderTrace_Demo.mp4", "video")
+            _write(root / "docs" / "demo" / "demo演示视频.mp4", "video")
 
             result = create_submission_package(root)
             forbidden = forbidden_package_entries(Path(result.package_path))
@@ -29,16 +35,35 @@ class SubmissionPackageTests(unittest.TestCase):
                 entries = set(archive.namelist())
 
         self.assertEqual(result.status, "pass")
+        self.assertEqual(result.secret_hit_count, 0)
         self.assertEqual(forbidden, [])
         self.assertIn("web/dist/app.js", entries)
+        self.assertIn(".github/workflows/ci.yml", entries)
         self.assertIn(".env.example", entries)
+        self.assertIn(".gitattributes", entries)
         self.assertIn("outputs/report.docx", entries)
         self.assertIn("outbox/report.docx", entries)
-        self.assertIn("docs/demo/TenderTrace_Demo.mp4", entries)
+        self.assertIn("docs/demo/demo演示视频.mp4", entries)
         self.assertIn("SUBMISSION_MANIFEST.json", entries)
         self.assertNotIn(".env.local", entries)
         self.assertFalse(any(entry.startswith("secrets/") for entry in entries))
         self.assertFalse(any(entry.startswith("data/") for entry in entries))
+
+    def test_submission_package_fails_on_token_like_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "README.md", "# TenderTrace\n")
+            _write(root / "pyproject.toml", "[project]\nname='tendertrace'\n")
+            _write(root / ".env.example", "OPENAI_API_KEY=\n")
+            token = "TeN9" + "biQO6aov3cscq77cdETfncd"
+            _write(root / "docs" / "demo" / "evidence.json", f'{{"app_token":"{token}"}}')
+
+            result = create_submission_package(root)
+            findings = package_secret_findings(Path(result.package_path))
+
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.secret_hit_count, 1)
+        self.assertEqual(findings[0].path, "docs/demo/evidence.json")
 
 
 def _write(path: Path, text: str) -> None:

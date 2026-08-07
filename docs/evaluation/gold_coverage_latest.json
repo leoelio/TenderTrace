@@ -1,0 +1,72 @@
+{
+  "available": false,
+  "complete": false,
+  "gold_path": "E:\\tt\\docs\\evaluation\\gold_benchmark.json",
+  "case_count": 10,
+  "annotated_case_count": 0,
+  "empty_case_count": 10,
+  "expected_total": 0,
+  "annotation_completion": 0.0,
+  "cases": [
+    {
+      "id": "gold-001",
+      "query": "最近1个月上海充电桩招标信息有哪些",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-002",
+      "query": "2026年3月份上海充电设施招标信息都有哪些",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-003",
+      "query": "最近3个月苏州服务器采购招标公告",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-004",
+      "query": "最近6个月成都医疗设备招标信息有哪些",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-005",
+      "query": "最近36个月杭州市的空调或者服务器投标信息都有哪些",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-006",
+      "query": "最近2个月安徽省信创服务器招标信息有哪些",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-007",
+      "query": "2026年4月份北京新能源充电站相关招标信息有哪些",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-008",
+      "query": "最近1个月广州电梯维保招标公告",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-009",
+      "query": "最近90天深圳网络设备采购项目招标信息",
+      "status": "needs_annotation",
+      "expected_count": 0
+    },
+    {
+      "id": "gold-010",
+      "query": "最近1个月郑州消防设备招标信息有哪些",
+      "status": "needs_annotation",
+      "expected_count": 0
+    }
+  ]
+}

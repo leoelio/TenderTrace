@@ -9,6 +9,7 @@ from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
 from tendertrace.demo_check import run_demo_check, write_demo_evidence
 from tendertrace.runlog import finish_run, register_outbox_message, start_run
+from tendertrace.submission import create_submission_package
 
 
 class DemoCheckTests(unittest.TestCase):
@@ -35,6 +36,8 @@ class DemoCheckTests(unittest.TestCase):
                     "UPDATE runs SET finished_at = '2026-07-06 13:01:00' WHERE id = 'run-2'"
                 )
             _insert_subscription_and_sent_history(settings, "run-2", second_outbox)
+            _write_text(root / ".github" / "workflows" / "ci.yml", "name: CI\n")
+            create_submission_package(root)
 
             report = run_demo_check(settings)
             out = write_demo_evidence(report, root / "docs" / "demo" / "evidence.json")
@@ -47,10 +50,16 @@ class DemoCheckTests(unittest.TestCase):
         self.assertEqual(checks["word_outbox"].status, "pass")
         self.assertEqual(checks["trace_flow"].status, "pass")
         self.assertEqual(checks["subscription_incremental"].status, "pass")
+        self.assertEqual(checks["submission_package"].status, "pass")
+        self.assertEqual(checks["ci_config"].status, "pass")
+        self.assertEqual(checks["api_security"].status, "pass")
         self.assertEqual(checks["sources"].status, "warn")
         self.assertEqual(checks["demo_video_file"].status, "warn")
         self.assertTrue(out_exists)
         self.assertEqual(written_payload["status"], "pass")
+        self.assertNotIn("fixture-token", json.dumps(written_payload, ensure_ascii=False))
+        latest_stats = written_payload["evidence"]["latest_finished_run"]["stats"]
+        self.assertEqual(latest_stats["feishu_bitable_delivery"]["app_token"], "[redacted]")
 
     def test_demo_check_fails_when_core_demo_evidence_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -78,6 +87,11 @@ def _write_report(path: Path) -> Path:
     return path
 
 
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def _insert_run(settings: Settings, run_id: str, query: str, docx_path: Path) -> None:
     start_run(
         settings,
@@ -98,6 +112,11 @@ def _insert_run(settings: Settings, run_id: str, query: str, docx_path: Path) ->
             "trace_events": 7,
             "evidence_checked": 1,
             "source_sites": ["ccgp", "ggzy"],
+            "feishu_bitable_delivery": {
+                "status": "sent",
+                "app_token": "fixture-token",
+                "table_id": "tbl_test",
+            },
         },
     )
 

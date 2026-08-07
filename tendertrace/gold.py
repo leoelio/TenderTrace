@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 import json
+from multiprocessing import Process, Queue
 from pathlib import Path
-from typing import Any
+from queue import Empty
+from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
 from tendertrace.adapters.multi import MultiSourceAdapter
@@ -30,6 +32,64 @@ class GoldEvaluationResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class GoldCoverageResult:
+    available: bool
+    complete: bool
+    gold_path: str
+    case_count: int
+    annotated_case_count: int
+    empty_case_count: int
+    expected_total: int
+    annotation_completion: float
+    cases: list[dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def build_gold_coverage(
+    settings: Settings,
+    *,
+    gold_path: Path | None = None,
+) -> GoldCoverageResult:
+    path = _resolve_gold_path(settings, gold_path)
+    cases = _load_cases(path)
+    items: list[dict[str, Any]] = []
+    annotated_count = 0
+    expected_total = 0
+
+    for case in cases:
+        expected_count = len(_expected_groups(case))
+        expected_total += expected_count
+        if expected_count:
+            annotated_count += 1
+            status = "ready"
+        else:
+            status = "needs_annotation"
+        items.append(
+            {
+                "id": case.get("id"),
+                "query": case.get("query"),
+                "status": status,
+                "expected_count": expected_count,
+            }
+        )
+
+    empty_count = len(cases) - annotated_count
+    return GoldCoverageResult(
+        available=annotated_count > 0,
+        complete=bool(cases) and empty_count == 0,
+        gold_path=str(path),
+        case_count=len(cases),
+        annotated_case_count=annotated_count,
+        empty_case_count=empty_count,
+        expected_total=expected_total,
+        annotation_completion=_ratio(annotated_count, len(cases)),
+        cases=items,
+    )
 
 
 def evaluate_gold_recall(
@@ -93,39 +153,157 @@ def build_gold_candidates(
     gold_path: Path | None = None,
     max_pages: int = 1,
     max_results: int = 20,
+    case_ids: Iterable[str] | None = None,
+    case_timeout_seconds: int | None = None,
+    existing_payload: dict[str, Any] | None = None,
+    adapter: Any | None = None,
 ) -> dict[str, Any]:
     path = _resolve_gold_path(settings, gold_path)
     cases = _load_cases(path)
-    adapter = MultiSourceAdapter.default(settings)
+    selected_ids = {str(item) for item in case_ids or [] if str(item).strip()}
+    existing_by_id = _existing_candidate_items(existing_payload)
     items = []
     for case in cases:
-        bidql = compile_intent(str(case["query"]), now=_case_now(case))
-        collected = adapter.collect(bidql, max_pages=max_pages, max_results=max_results)
-        deduped = clean_and_cluster_notices(collected).notices
+        case_id = str(case.get("id") or "")
+        if selected_ids and case_id not in selected_ids:
+            continue
+        if case_id in existing_by_id and existing_by_id[case_id].get("status") == "finished":
+            cached = dict(existing_by_id[case_id])
+            cached["cached"] = True
+            items.append(cached)
+            continue
         items.append(
-            {
-                "id": case.get("id"),
-                "query": case.get("query"),
-                "candidates": [
-                    {
-                        "source_site": notice.source_site,
-                        "notice_id": notice.id,
-                        "title": notice.title,
-                        "publish_time": notice.publish_time,
-                        "source_url": notice.source_url,
-                        "match_keys": sorted(_notice_match_keys(notice)),
-                    }
-                    for notice in deduped
-                ],
-            }
+            _collect_case_with_timeout(
+                settings,
+                case,
+                max_pages=max_pages,
+                max_results=max_results,
+                timeout_seconds=case_timeout_seconds,
+                adapter=adapter,
+            )
         )
     return {
         "gold_path": str(path),
         "case_count": len(cases),
+        "selected_case_count": len(items),
         "max_pages": max_pages,
         "max_results": max_results,
+        "case_timeout_seconds": case_timeout_seconds,
         "items": items,
     }
+
+
+def _collect_case_with_timeout(
+    settings: Settings,
+    case: dict[str, Any],
+    *,
+    max_pages: int,
+    max_results: int,
+    timeout_seconds: int | None,
+    adapter: Any | None = None,
+) -> dict[str, Any]:
+    if adapter is not None or not timeout_seconds or timeout_seconds <= 0:
+        return _collect_case(settings, case, max_pages=max_pages, max_results=max_results, adapter=adapter)
+
+    queue: Queue = Queue()
+    process = Process(
+        target=_collect_case_worker,
+        args=(str(settings.workspace_root), case, max_pages, max_results, queue),
+    )
+    process.start()
+    process.join(timeout_seconds)
+    if process.is_alive():
+        process.terminate()
+        process.join(5)
+        return _case_error(case, "timeout", f"case exceeded {timeout_seconds}s")
+    try:
+        payload = queue.get_nowait()
+    except Empty:
+        return _case_error(case, "failed", f"worker exited with code {process.exitcode}")
+    if payload.get("status") == "ok" and isinstance(payload.get("item"), dict):
+        return payload["item"]
+    return _case_error(case, "failed", str(payload.get("error") or "unknown worker error"))
+
+
+def _collect_case_worker(
+    workspace_root: str,
+    case: dict[str, Any],
+    max_pages: int,
+    max_results: int,
+    queue: Queue,
+) -> None:
+    try:
+        settings = Settings.load(Path(workspace_root))
+        item = _collect_case(settings, case, max_pages=max_pages, max_results=max_results)
+    except Exception as exc:
+        queue.put({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
+        return
+    queue.put({"status": "ok", "item": item})
+
+
+def _collect_case(
+    settings: Settings,
+    case: dict[str, Any],
+    *,
+    max_pages: int,
+    max_results: int,
+    adapter: Any | None = None,
+) -> dict[str, Any]:
+    try:
+        bidql = compile_intent(str(case["query"]), now=_case_now(case))
+        collector = adapter or MultiSourceAdapter.default(settings)
+        collected = collector.collect(bidql, max_pages=max_pages, max_results=max_results)
+        deduped = clean_and_cluster_notices(collected).notices
+        return {
+            "id": case.get("id"),
+            "query": case.get("query"),
+            "status": "finished",
+            "candidate_count": len(deduped),
+            "source_stats": _source_stats(collector),
+            "candidates": [
+                {
+                    "source_site": notice.source_site,
+                    "notice_id": notice.id,
+                    "title": notice.title,
+                    "publish_time": notice.publish_time,
+                    "source_url": notice.source_url,
+                    "match_keys": sorted(_notice_match_keys(notice)),
+                }
+                for notice in deduped
+            ],
+        }
+    except Exception as exc:
+        return _case_error(case, "failed", f"{type(exc).__name__}: {exc}")
+
+
+def _case_error(case: dict[str, Any], status: str, error: str) -> dict[str, Any]:
+    return {
+        "id": case.get("id"),
+        "query": case.get("query"),
+        "status": status,
+        "error": error,
+        "candidate_count": 0,
+        "source_stats": [],
+        "candidates": [],
+    }
+
+
+def _source_stats(adapter: Any) -> list[dict[str, Any]]:
+    stats = getattr(adapter, "last_source_stats", [])
+    return [item.to_dict() if hasattr(item, "to_dict") else item for item in stats]
+
+
+def _existing_candidate_items(payload: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return {}
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return {}
+    by_id: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if isinstance(item, dict) and item.get("id"):
+            by_id[str(item["id"])] = item
+    return by_id
 
 
 def _resolve_gold_path(settings: Settings, gold_path: Path | None) -> Path:

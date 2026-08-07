@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, json_dumps
+from tendertrace.sanitize import sanitize_stats
 
 
 @dataclass(frozen=True)
@@ -143,5 +144,5 @@ def get_run(settings: Settings, run_id: str) -> dict[str, Any] | None:
     if row is None:
         return None
     value = dict(row)
-    value["stats"] = json.loads(value.pop("stats_json"))
+    value["stats"] = sanitize_stats(json.loads(value.pop("stats_json")))
     return value

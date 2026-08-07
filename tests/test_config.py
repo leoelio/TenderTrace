@@ -20,12 +20,14 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.attachment_max_bytes, 8388608)
         self.assertFalse(settings.vector_enabled)
         self.assertEqual(settings.vector_model, "BAAI/bge-small-zh-v1.5")
+        self.assertFalse(settings.api_token_present)
         self.assertIn("openai_key_configured", settings.safe_summary())
         self.assertIn("openai_api_style", settings.safe_summary())
         self.assertIn("attachment_max_bytes", settings.safe_summary())
         self.assertIn("vector_enabled", settings.safe_summary())
         self.assertNotIn("smtp_password", settings.safe_summary())
         self.assertFalse(settings.safe_summary()["smtp_password_configured"])
+        self.assertFalse(settings.safe_summary()["api_token_configured"])
 
     def test_cloud_mode_requires_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -107,6 +109,41 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.public_base_url, "https://tt.example.com")
         self.assertTrue(summary["feishu_app_secret_configured"])
         self.assertNotIn("secret-feishu-value", str(summary))
+
+    def test_env_local_can_configure_api_token_without_exposing_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_API_TOKEN=local-api-token\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+            token = settings.api_token()
+        summary = settings.safe_summary()
+        self.assertTrue(settings.api_token_present)
+        self.assertEqual(token, "local-api-token")
+        self.assertTrue(summary["api_token_configured"])
+        self.assertNotIn("local-api-token", str(summary))
+
+    def test_prod_mode_requires_api_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text("TENDERTRACE_APP_ENV=prod\n", encoding="utf-8")
+
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
+
+    def test_prod_mode_can_load_with_api_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_APP_ENV=prod\nTENDERTRACE_API_TOKEN=local-api-token\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        self.assertEqual(settings.app_env, "prod")
+        self.assertTrue(settings.api_token_present)
 
 
 if __name__ == "__main__":
