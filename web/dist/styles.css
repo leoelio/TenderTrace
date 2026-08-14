@@ -2752,8 +2752,9 @@ body.theme-dark .smart-card strong {
   align-items: center;
 }
 
-.opportunity-panel #opportunityLevelFilter {
-  width: 180px;
+.opportunity-panel #opportunityLevelFilter,
+.opportunity-panel #opportunityTopicFilter {
+  width: 160px;
 }
 
 .opportunity-market > div {
@@ -3009,11 +3010,12 @@ body.theme-dark .grade-c {
 
   .opportunity-panel .panel-heading .action-group {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
 
-  .opportunity-panel #opportunityLevelFilter {
+  .opportunity-panel #opportunityLevelFilter,
+  .opportunity-panel #opportunityTopicFilter {
     width: 100%;
   }
 

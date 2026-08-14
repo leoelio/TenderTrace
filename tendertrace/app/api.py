@@ -256,11 +256,21 @@ def create_app():
         return compile_intent(query, now=now)
 
     @app.get("/api/opportunities")
-    def opportunities(limit: int = 50, level: str | None = None) -> dict[str, object]:
+    def opportunities(
+        limit: int = 50,
+        level: str | None = None,
+        topic: str | None = None,
+    ) -> dict[str, object]:
         normalized_level = level.upper() if level else None
         if normalized_level and normalized_level not in {"A", "B", "C", "D"}:
             raise HTTPException(status_code=400, detail="level must be one of: A, B, C, D")
-        return list_opportunities(settings, limit=limit, level=normalized_level)
+        normalized_topic = str(topic or "").strip()[:40] or None
+        return list_opportunities(
+            settings,
+            limit=limit,
+            level=normalized_level,
+            topic=normalized_topic,
+        )
 
     @app.post("/api/opportunities/analyze")
     def analyze_opportunity(request: dict[str, object] = Body(...)) -> dict[str, object]:

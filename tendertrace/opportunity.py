@@ -149,6 +149,7 @@ def build_market_context(
     purchasers = Counter(str(item["purchaser"]) for item in entries if item["purchaser"])
     regions = Counter(str(item["region"]) for item in entries if item["region"])
     stages = Counter(str(item["stage"]) for item in entries if item["stage"])
+    category_counts = Counter(str(item["category"]) for item in entries if item["category"])
     high_credibility = sum(1 for item in entries if int(item["credibility"] or 0) >= 80)
     budget_coverage = round(len(budgets) / len(entries) * 100, 1) if entries else 0.0
     signals: list[str] = []
@@ -175,6 +176,7 @@ def build_market_context(
         "budget_coverage": budget_coverage,
         "budget": overall,
         "category_benchmarks": category_benchmarks,
+        "category_distribution": _counter_items(category_counts, limit=20),
         "top_purchasers": _counter_items(purchasers),
         "top_regions": _counter_items(regions),
         "stage_distribution": _counter_items(stages, limit=8),
@@ -195,12 +197,25 @@ def list_opportunities(
     *,
     limit: int = 50,
     level: str | None = None,
+    topic: str | None = None,
 ) -> dict[str, object]:
     limit = max(1, min(int(limit), 200))
-    market_rows = _recent_notices(settings, limit=500)
+    all_rows = _recent_notices(settings, limit=500)
+    all_market = build_market_context([notice for _notice_id, notice in all_rows])
+    market_rows = (
+        [
+            (notice_id, notice)
+            for notice_id, notice in all_rows
+            if _primary_category(_notice_payload(notice)) == topic
+        ]
+        if topic
+        else all_rows
+    )
     rows = market_rows[: min(limit * 4, 500)]
     market_notices = [notice for _notice_id, notice in market_rows]
     market = build_market_context(market_notices)
+    market["available_categories"] = all_market.get("category_distribution", [])
+    market["selected_category"] = topic or ""
     items: list[dict[str, object]] = []
     for notice_id, notice in rows:
         payload = _notice_payload(notice)

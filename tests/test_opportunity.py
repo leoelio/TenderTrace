@@ -141,13 +141,49 @@ class OpportunityIntelligenceTests(unittest.TestCase):
                         json_dumps(notice.fields),
                     ),
                 )
+                medical = replace(
+                    notice,
+                    id="n2",
+                    title="上海某医院医疗设备采购公开招标公告",
+                    source_url="https://www.ccgp.gov.cn/detail/n2.htm",
+                    content_text="项目编号 SH-2026-002，医疗器械采购预算 80 万元。",
+                    core_content="医疗设备采购，预算 80 万元。",
+                )
+                conn.execute(
+                    """
+                    INSERT INTO notices(
+                        id, source_site, source_url, canonical_url, title, publish_time,
+                        region, purchaser, content_text, core_content, attachments_json, fields_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "ccgp:n2",
+                        medical.source_site,
+                        medical.source_url,
+                        medical.source_url,
+                        medical.title,
+                        medical.publish_time,
+                        medical.region,
+                        medical.purchaser,
+                        medical.content_text,
+                        medical.core_content,
+                        json_dumps([]),
+                        json_dumps(medical.fields),
+                    ),
+                )
 
             payload = list_opportunities(settings, limit=10)
+            filtered = list_opportunities(settings, limit=10, topic="服务器")
 
-        self.assertEqual(payload["summary"]["total"], 1)
-        self.assertEqual(payload["summary"]["market"]["notice_count"], 1)
-        self.assertEqual(payload["items"][0]["notice_id"], "ccgp:n1")
-        self.assertTrue(payload["items"][0]["intelligence"]["project_target"])
+        self.assertEqual(payload["summary"]["total"], 2)
+        self.assertEqual(payload["summary"]["market"]["notice_count"], 2)
+        categories = payload["summary"]["market"]["available_categories"]
+        self.assertEqual({item["name"] for item in categories}, {"服务器", "医疗设备"})
+        self.assertEqual(filtered["summary"]["total"], 1)
+        self.assertEqual(filtered["summary"]["market"]["notice_count"], 1)
+        self.assertEqual(filtered["summary"]["market"]["selected_category"], "服务器")
+        self.assertEqual(filtered["items"][0]["notice_id"], "ccgp:n1")
+        self.assertTrue(filtered["items"][0]["intelligence"]["project_target"])
 
 
 def _notice() -> Notice:

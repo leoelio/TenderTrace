@@ -92,6 +92,7 @@ const el = {
   refreshRunsButton: document.querySelector("#refreshRunsButton"),
   refreshEvaluationButton: document.querySelector("#refreshEvaluationButton"),
   refreshOpportunitiesButton: document.querySelector("#refreshOpportunitiesButton"),
+  opportunityTopicFilter: document.querySelector("#opportunityTopicFilter"),
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
   opportunitySummary: document.querySelector("#opportunitySummary"),
   opportunityMarket: document.querySelector("#opportunityMarket"),
@@ -1216,6 +1217,15 @@ function renderOpportunities(payload) {
       marketInsight("重点客户", purchaser?.name || "样本不足", purchaser ? `${purchaser.count} 条关联公告` : "待补充采购人"),
       marketInsight("主要阶段", stage?.name || "待研判", stage ? `${stage.count} / ${market.notice_count || 0} 条` : "暂无阶段样本"),
     ].join("");
+    if (el.opportunityTopicFilter) {
+      const selected = market.selected_category || "";
+      const categories = market.available_categories || [];
+      el.opportunityTopicFilter.innerHTML = [
+        '<option value="">全部品类</option>',
+        ...categories.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)} · ${Number(item.count) || 0}</option>`),
+      ].join("");
+      el.opportunityTopicFilter.value = selected;
+    }
   }
   el.opportunityList.className = items.length
     ? "opportunity-ledger-body"
@@ -1739,8 +1749,10 @@ async function refreshEvaluation() {
 
 async function refreshOpportunities() {
   const level = el.opportunityLevelFilter?.value || "";
+  const topic = el.opportunityTopicFilter?.value || "";
   const query = new URLSearchParams({ limit: "80" });
   if (level) query.set("level", level);
+  if (topic) query.set("topic", topic);
   const payload = await api(`/api/opportunities?${query.toString()}`);
   state.opportunityVisible = 20;
   renderOpportunities(payload);
@@ -2510,6 +2522,9 @@ function bindEvents() {
   );
   el.opportunityLevelFilter?.addEventListener("change", () =>
     refreshOpportunities().catch(toastError("机会情报筛选失败")),
+  );
+  el.opportunityTopicFilter?.addEventListener("change", () =>
+    refreshOpportunities().catch(toastError("机会品类筛选失败")),
   );
   el.loadMoreOpportunitiesButton?.addEventListener("click", () => {
     state.opportunityVisible += 20;
