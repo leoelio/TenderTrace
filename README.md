@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P27</strong> · Managed Crawling · Source Health · SMTP Delivery · Feishu Bitable Ledger
+  <strong>Current stage: P28</strong> · Compact Workbench · Feishu Report Delivery · Delivery Audit
 </p>
 
 ---
@@ -34,6 +34,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 增量推送：用户订阅通过 `sent_history` 保证已经发送过的公告不重复出现在后续 Word。
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
+- 飞书协同：Word 报告、定时订阅和用户周报可发送到默认会话，发送结果写入本地交付账本。
 - 清洗去重：正文噪声清理、URL 规范化、项目编号提取、SimHash 聚类。
 - 附件抽取：支持受限下载并抽取 PDF、DOCX、XLSX 正文片段。
 - 证据链：保存来源链接、正文摘录、附件快照、字段级证据和事实校验结果。
@@ -286,22 +287,26 @@ python -m tendertrace embed-notices
 可用 Web API：
 
 - `GET /api/integrations/feishu/status`：查看脱敏后的配置状态。
+- `GET /api/integrations/feishu/overview`：统一查看消息、报告、多维表格、智能体和最近交付状态。
 - `GET /api/integrations/feishu/chats?page_size=20`：列出机器人所在群，用于获取 `chat_id`。
+- `POST /api/integrations/feishu/receiver`：保存默认接收会话；响应不会返回 `receive_id`。
 - `POST /api/integrations/feishu/test-message`：发送一条显式测试消息。
+- `POST /api/outbox/{filename}/send-feishu`：上传并发送指定 Word 报告。
+- `POST /api/memory/weekly/send-feishu`：发送最近一周的使用摘要与建议。
 
-H5 JSAPI 后续用于把 TenderTrace 工作台嵌入飞书客户端；当前后端已经具备 OpenAPI 鉴权与消息推送底座。
+设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232034`，需要先在飞书开放平台发布应用并确认当前租户已经安装。
 
 ## Web 工作台
 
 Web UI 覆盖以下视图：
 
-- 工作台：输入自然语言问题，选择运行模式、模型策略和搜索深度。
+- 工作台：输入自然语言问题，选择立即运行或订阅以及 Web/飞书交付；模型策略和搜索深度收纳在高级设置中。
 - 历史运行：查看 run 记录、trace、checkpoint 和报告路径。
 - 订阅管理：管理用户定时报告订阅，查看新增/跳过历史、下次触发时间和最近 Word。
 - 数据源：查看公开源、千里马登录态、入口路由、发现规则和来源健康。
 - Agent 评测：查看 RAG、Agent、Harness、Recall、金标评测和向量覆盖率。
 - 用户记忆：查看使用画像、知识偏好、风险信号和生成式行动建议。
-- 设置：查看运行配置与模型连通性。
+- 设置：查看运行配置、模型连通性和飞书消息/报告/多维表格/智能体状态。
 
 ## 本地库检索流程
 
@@ -622,22 +627,26 @@ Feishu integration is disabled by default. After creating a custom Feishu app an
 Available Web APIs:
 
 - `GET /api/integrations/feishu/status`: inspect redacted integration status.
+- `GET /api/integrations/feishu/overview`: inspect messaging, report, Bitable, agent, and recent delivery status.
 - `GET /api/integrations/feishu/chats?page_size=20`: list groups where the bot is a member and find `chat_id`.
+- `POST /api/integrations/feishu/receiver`: persist the default destination without returning its ID.
 - `POST /api/integrations/feishu/test-message`: send one explicit test message.
+- `POST /api/outbox/{filename}/send-feishu`: upload and send a Word report.
+- `POST /api/memory/weekly/send-feishu`: send the weekly usage digest and recommendations.
 
-Feishu H5 JSAPI can be used later to embed the TenderTrace workbench inside the Feishu client. The backend now has the OpenAPI authentication and messaging foundation.
+The Feishu connection center can select a default chat from the bot's visible chats. Queries and subscriptions can opt into automatic Word delivery, while every success or failure is written to the local delivery ledger. Error `232034` means the app must be published and installed in the current tenant first.
 
 ## Web Workbench
 
 The Web UI includes:
 
-- Workbench: enter natural-language queries, choose model strategy and search depth.
+- Workbench: enter natural-language queries, choose immediate or scheduled execution, and select Web/Feishu delivery; model and retrieval controls stay under advanced settings.
 - Run history: inspect runs, trace events, checkpoints, and report paths.
 - Subscription management: manage scheduled user report subscriptions.
 - Data sources: inspect public sources and Qianlima login-state status.
 - Agent evaluation: inspect RAG, agent, harness, recall, gold-set metrics, and vector coverage.
 - User memory: inspect usage profiles, knowledge preferences, risk signals, and generated next-step advice.
-- Settings: inspect runtime configuration and model connectivity.
+- Settings: inspect runtime, model, Feishu messaging/report, Bitable, and agent connectivity.
 
 ## Local-First Retrieval Flow
 

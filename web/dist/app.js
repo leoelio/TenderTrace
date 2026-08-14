@@ -9,6 +9,7 @@ const state = {
   sources: [],
   evaluation: null,
   memory: null,
+  feishu: null,
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
@@ -52,15 +53,17 @@ const el = {
   userLabel: document.querySelector("#userLabel"),
   userMenu: document.querySelector("#userMenu"),
   userMenuContent: document.querySelector("#userMenuContent"),
+  mobileNavButton: document.querySelector("#mobileNavButton"),
+  topNavigation: document.querySelector("#topNavigation"),
   form: document.querySelector("#runForm"),
   queryInput: document.querySelector("#queryInput"),
   chatStream: document.querySelector("#chatStream"),
   smartStartPanel: document.querySelector("#smartStartPanel"),
   smartStartMeta: document.querySelector("#smartStartMeta"),
-  smartLatestReport: document.querySelector("#smartLatestReport"),
-  smartRecommendation: document.querySelector("#smartRecommendation"),
   intentPreview: document.querySelector("#intentPreview"),
   searchDepthSelect: document.querySelector("#searchDepthSelect"),
+  modelStrategySelect: document.querySelector("#modelStrategySelect"),
+  feishuDeliveryInput: document.querySelector("#feishuDeliveryInput"),
   scheduleFrequency: document.querySelector("#scheduleFrequency"),
   scheduleTime: document.querySelector("#scheduleTime"),
   subscriptionControls: document.querySelector("#subscriptionControls"),
@@ -104,6 +107,7 @@ const el = {
   evaluationNotes: document.querySelector("#evaluationNotes"),
   refreshMemoryButton: document.querySelector("#refreshMemoryButton"),
   saveMemoryButton: document.querySelector("#saveMemoryButton"),
+  sendMemoryFeishuButton: document.querySelector("#sendMemoryFeishuButton"),
   memorySummary: document.querySelector("#memorySummary"),
   memoryUsageMetrics: document.querySelector("#memoryUsageMetrics"),
   memoryReportMetrics: document.querySelector("#memoryReportMetrics"),
@@ -116,6 +120,17 @@ const el = {
   memoryEvents: document.querySelector("#memoryEvents"),
   memoryAnalysis: document.querySelector("#memoryAnalysis"),
   settingsSummary: document.querySelector("#settingsSummary"),
+  feishuCenterMeta: document.querySelector("#feishuCenterMeta"),
+  feishuFeatureList: document.querySelector("#feishuFeatureList"),
+  feishuIssueList: document.querySelector("#feishuIssueList"),
+  feishuAttemptList: document.querySelector("#feishuAttemptList"),
+  refreshFeishuButton: document.querySelector("#refreshFeishuButton"),
+  testFeishuButton: document.querySelector("#testFeishuButton"),
+  configureFeishuReceiverButton: document.querySelector("#configureFeishuReceiverButton"),
+  feishuReceiverEditor: document.querySelector("#feishuReceiverEditor"),
+  feishuChatSelect: document.querySelector("#feishuChatSelect"),
+  saveFeishuReceiverButton: document.querySelector("#saveFeishuReceiverButton"),
+  cancelFeishuReceiverButton: document.querySelector("#cancelFeishuReceiverButton"),
   toast: document.querySelector("#toast"),
 };
 
@@ -201,7 +216,10 @@ function activeViewId() {
 function readApiError(text) {
   try {
     const payload = JSON.parse(text);
-    return payload.detail || text;
+    const detail = payload.detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object") return detail.error || detail.message || JSON.stringify(detail);
+    return text;
   } catch {
     return text;
   }
@@ -222,6 +240,7 @@ function statusLabel(status) {
     pass: "通过",
     warn: "提醒",
     skipped: "跳过",
+    sent: "已发送",
     click: "点击",
     download: "下载",
     run_start: "启动运行",
@@ -331,6 +350,8 @@ function setRunning(isRunning) {
 
 function showView(viewId) {
   window.scrollTo(0, 0);
+  el.topNavigation?.classList.remove("open");
+  el.mobileNavButton?.setAttribute("aria-expanded", "false");
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("active", view.id === viewId);
   });
@@ -517,15 +538,21 @@ function renderLatestDownload(item) {
   const createdAt = escapeHtml(item.created_at || "刚刚生成");
   const size = item.size ? ` · ${escapeHtml(formatBytes(item.size))}` : "";
   const downloadUrl = item.download_url || `/api/outbox/${encodeURIComponent(rawName)}`;
+  const feishuDelivery = item.feishu_delivery;
+  const feishuState = feishuDelivery?.status
+    ? `<span class="delivery-state delivery-${escapeHtml(feishuDelivery.status)}">飞书 ${escapeHtml(statusLabel(feishuDelivery.status))}</span>`
+    : '<span class="delivery-state">飞书未发送</span>';
   el.latestDownload.hidden = false;
   el.latestDownload.className = "download-strip";
   el.latestDownload.innerHTML = `
     <div class="download-main">
       <strong title="${name}">${name}</strong>
       <span>${createdAt}${size}${runId ? ` · Run ${runId}` : ""}</span>
+      ${feishuState}
     </div>
     <div class="action-group">
       <a class="link-button" href="${escapeHtml(downloadUrl)}" data-download-outbox-name="${name}">下载</a>
+      <button class="ghost-button" type="button" data-send-feishu-name="${name}" data-send-feishu-run="${runId}">发送飞书</button>
       ${runId ? `<button class="ghost-button" type="button" data-run-id="${runId}">追踪</button>` : ""}
       <button class="danger-button" type="button" data-delete-outbox-name="${name}">删除</button>
     </div>
@@ -696,7 +723,7 @@ function renderSubscriptionTable(target, items) {
     return;
   }
   if (!items.length) {
-    target.innerHTML = '<tr><td colspan="7" class="empty-cell">暂无订阅任务</td></tr>';
+    target.innerHTML = '<tr><td colspan="8" class="empty-cell">暂无订阅任务</td></tr>';
     return;
   }
   target.innerHTML = items
@@ -708,6 +735,7 @@ function renderSubscriptionTable(target, items) {
       const nextRun = escapeHtml(subscriptionNextRunText(item));
       const increment = escapeHtml(subscriptionIncrementText(item));
       const email = escapeHtml(subscriptionEmailText(item));
+      const delivery = escapeHtml(subscriptionDeliveryText(item));
       const download = subscriptionLatestDownloadHtml(item);
       return `
         <tr>
@@ -726,6 +754,7 @@ function renderSubscriptionTable(target, items) {
           <td>
             <span class="table-main-value">${increment}</span>
           </td>
+          <td><span class="table-main-value">${delivery}</span></td>
           <td>
             <div class="action-group">
               <button class="ghost-button" type="button" data-subscription-id="${escapeHtml(item.id)}">运行</button>
@@ -753,6 +782,7 @@ function renderSubscriptionCards(target, items) {
       const nextRun = escapeHtml(subscriptionNextRunText(item));
       const increment = escapeHtml(subscriptionIncrementText(item));
       const email = escapeHtml(subscriptionEmailText(item));
+      const delivery = escapeHtml(subscriptionDeliveryText(item));
       const download = subscriptionLatestDownloadHtml(item);
       return `
         <article class="data-row subscription-row" role="row">
@@ -788,6 +818,10 @@ function renderSubscriptionCards(target, items) {
           <div class="compact-cell" role="cell" data-label="增量">
             <span class="cell-label">增量</span>
             <span class="cell-value">${increment}</span>
+          </div>
+          <div class="compact-cell" role="cell" data-label="交付">
+            <span class="cell-label">交付</span>
+            <span class="cell-value">${delivery}</span>
           </div>
           <div class="compact-cell compact-actions" role="cell" data-label="操作">
             <span class="cell-label">操作</span>
@@ -1228,25 +1262,11 @@ function renderSmartStart() {
   if (!el.smartStartPanel) return;
   const query = el.queryInput?.value.trim() || "";
   const mode = checkedValue("actionMode") === "subscribe" ? "订阅模式" : "立即运行";
-  const strategy = modelStrategyLabel(checkedValue("modelStrategy") || "config");
+  const strategy = modelStrategyLabel(el.modelStrategySelect?.value || "config");
   if (el.smartStartMeta) {
     el.smartStartMeta.textContent = query
-      ? `${mode} · ${strategy} · 已准备解析当前问题`
-      : `${mode} · ${strategy} · 请输入查询问题`;
-  }
-  const latest = state.outbox[0];
-  if (el.smartLatestReport) {
-    el.smartLatestReport.textContent = latest
-      ? `${latest.name} · ${formatBytes(latest.size)}`
-      : "暂无可下载 Word";
-  }
-  const suggestion =
-    state.memory?.generated_advice?.headline ||
-    state.memory?.recommendation_plan?.[0]?.action ||
-    state.memory?.suggestions?.[0];
-  if (el.smartRecommendation) {
-    el.smartRecommendation.textContent =
-      suggestion || "完成一次查询并下载 Word 后，我会依据你的行为生成下一步建议。";
+      ? `${mode} · ${strategy} · 当前问题已就绪`
+      : "选择模板后可继续修改";
   }
 }
 
@@ -1404,6 +1424,71 @@ function renderSettingsSummary(payload) {
   ].join("");
 }
 
+function renderFeishuOverview(payload) {
+  if (!el.feishuFeatureList) return;
+  state.feishu = payload;
+  const features = payload.features || {};
+  const rows = [
+    ["报告与周报", features.report_delivery, "Word 文件和使用周报"],
+    ["多维表格", features.bitable_sync, "公告明细同步"],
+    ["智能体服务", features.agent_service, "独立智能体应用"],
+  ];
+  el.feishuFeatureList.className = "integration-list";
+  el.feishuFeatureList.innerHTML = rows
+    .map(
+      ([name, feature, detail]) => `
+        <div class="integration-row">
+          <div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(detail)}</span></div>
+          <span class="badge badge-${feature?.ready ? "pass" : "warn"}">${feature?.ready ? "可用" : "待配置"}</span>
+        </div>
+      `,
+    )
+    .join("");
+  if (el.feishuCenterMeta) {
+    const receiverLabel = payload.receiver?.label;
+    el.feishuCenterMeta.textContent = payload.status === "ready"
+      ? `报告与周报将发送到 ${receiverLabel || "默认接收目标"}`
+      : "存在待处理配置，发送失败时会保留诊断记录";
+  }
+  const issues = payload.issues || [];
+  if (el.feishuIssueList) {
+    el.feishuIssueList.hidden = !issues.length;
+    el.feishuIssueList.innerHTML = issues
+      .map((item) => `<div class="integration-issue"><strong>${escapeHtml(feishuIssueLabel(item.code))}</strong><span>${escapeHtml(item.message)}</span></div>`)
+      .join("");
+  }
+  const attempts = payload.recent_attempts || [];
+  if (el.feishuAttemptList) {
+    el.feishuAttemptList.hidden = !attempts.length;
+    el.feishuAttemptList.innerHTML = `
+      <h3>最近交付</h3>
+      ${attempts
+        .map(
+          (item) => `
+            <div class="delivery-attempt-row">
+              <span title="${escapeHtml(item.artifact_key)}">${escapeHtml(item.artifact_key)}</span>
+              <span class="badge badge-${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
+              <time>${escapeHtml(compactDateTimeText(item.created_at))}</time>
+              ${item.error ? `<small title="${escapeHtml(item.error)}">${escapeHtml(item.error)}</small>` : ""}
+            </div>
+          `,
+        )
+        .join("")}
+    `;
+  }
+}
+
+function feishuIssueLabel(code) {
+  return (
+    {
+      message_app: "消息应用",
+      receiver: "接收目标",
+      bitable: "多维表格",
+      agent: "智能体服务",
+    }[code] || code
+  );
+}
+
 function settingTile(label, value) {
   return `
     <div class="setting-tile">
@@ -1531,6 +1616,66 @@ async function refreshMemoryWeekly() {
   renderMemory(state.memory);
 }
 
+async function refreshFeishu() {
+  const payload = await api("/api/integrations/feishu/overview");
+  renderFeishuOverview(payload);
+  return payload;
+}
+
+async function testFeishuConnection() {
+  const result = await api("/api/integrations/feishu/test-message", {
+    method: "POST",
+    body: JSON.stringify({ text: `TenderTrace 连接测试 ${new Date().toLocaleString("zh-CN")}` }),
+  });
+  await refreshFeishu();
+  showToast(result.status === "sent" ? "飞书测试消息已发送" : "飞书测试未完成");
+}
+
+async function openFeishuReceiverEditor() {
+  if (!el.feishuReceiverEditor || !el.feishuChatSelect) return;
+  const payload = await api("/api/integrations/feishu/chats?page_size=100");
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  if (!items.length) throw new Error("机器人尚未加入任何可见会话");
+  el.feishuChatSelect.innerHTML = items
+    .map((item) => `<option value="${escapeHtml(item.chat_id || "")}">${escapeHtml(item.name || item.chat_id || "未命名会话")}</option>`)
+    .join("");
+  el.feishuReceiverEditor.hidden = false;
+}
+
+async function saveFeishuReceiverSelection() {
+  const option = el.feishuChatSelect?.selectedOptions?.[0];
+  if (!option?.value) throw new Error("请选择接收会话");
+  await api("/api/integrations/feishu/receiver", {
+    method: "POST",
+    body: JSON.stringify({
+      receive_id: option.value,
+      receive_id_type: "chat_id",
+      label: option.textContent,
+    }),
+  });
+  el.feishuReceiverEditor.hidden = true;
+  await refreshFeishu();
+  showToast(`默认接收会话已设为：${option.textContent}`);
+}
+
+async function sendReportToFeishu(name, runId = "", subscriptionId = "") {
+  const result = await api(`/api/outbox/${encodeURIComponent(name)}/send-feishu`, {
+    method: "POST",
+    body: JSON.stringify({ run_id: runId || null, subscription_id: subscriptionId || null }),
+  });
+  await Promise.all([refreshOutbox(), refreshFeishu()]);
+  showToast(result.status === "sent" ? "Word 报告已发送到飞书" : "飞书发送未完成");
+}
+
+async function sendMemoryWeeklyToFeishu() {
+  const result = await api("/api/memory/weekly/send-feishu", {
+    method: "POST",
+    body: JSON.stringify({ days: 7, user_id: "admin" }),
+  });
+  await refreshFeishu();
+  showToast(result.status === "sent" ? "本周使用周报已发送到飞书" : "周报发送未完成");
+}
+
 async function saveMemoryWeekly() {
   state.memory = await api("/api/memory/weekly", {
     method: "POST",
@@ -1541,7 +1686,7 @@ async function saveMemoryWeekly() {
 }
 
 async function refreshSettings() {
-  const payload = await refreshHealth();
+  const [payload] = await Promise.all([refreshHealth(), refreshFeishu()]);
   if (payload) renderSettingsSummary(payload);
 }
 
@@ -1596,7 +1741,10 @@ function payloadFromComposer() {
     query: el.queryInput?.value.trim() || "",
     max_pages: Number(el.maxPagesInput?.value || 1),
     max_results: Number(el.maxResultsInput?.value || 10),
-    model_strategy: checkedValue("modelStrategy"),
+    model_strategy: el.modelStrategySelect?.value || "config",
+    delivery_channels: el.feishuDeliveryInput?.checked
+      ? ["web", "outbox", "feishu"]
+      : ["web", "outbox"],
   };
 }
 
@@ -1856,6 +2004,15 @@ function subscriptionEmailText(item) {
   return `邮件 ${emailStatusText(status)}`;
 }
 
+function subscriptionDeliveryText(item) {
+  const channels = Array.isArray(item.delivery_channels) ? item.delivery_channels : ["web", "outbox"];
+  if (!channels.includes("feishu")) return "Web 下载";
+  const status = item.last_feishu_status;
+  if (status === "sent") return "Web + 飞书已发送";
+  if (status === "failed") return "Web + 飞书失败";
+  return "Web + 飞书";
+}
+
 function emailStatusText(status) {
   return (
     {
@@ -2045,6 +2202,7 @@ async function refreshAll() {
     refreshRuns(),
     refreshEvaluation(),
     refreshMemoryWeekly(),
+    refreshFeishu(),
   ]);
   const failed = results.filter((item) => item.status === "rejected");
   if (failed.length) showToast(`${failed.length} 个面板刷新失败，请查看网络或服务状态`);
@@ -2070,6 +2228,10 @@ function bindEvents() {
   el.notificationButton?.addEventListener("click", (event) => {
     event.stopPropagation();
     togglePopover("notifications");
+  });
+  el.mobileNavButton?.addEventListener("click", () => {
+    const open = el.topNavigation?.classList.toggle("open") || false;
+    el.mobileNavButton.setAttribute("aria-expanded", String(open));
   });
   el.themeToggleButton?.addEventListener("click", () => {
     applyTheme(state.theme === "dark" ? "light" : "dark");
@@ -2106,6 +2268,15 @@ function bindEvents() {
     const deleteOutboxTarget = event.target.closest("[data-delete-outbox-name]");
     if (deleteOutboxTarget) {
       deleteOutboxFile(deleteOutboxTarget.dataset.deleteOutboxName).catch(toastError("删除 Word 失败"));
+      return;
+    }
+    const sendFeishuTarget = event.target.closest("[data-send-feishu-name]");
+    if (sendFeishuTarget) {
+      sendReportToFeishu(
+        sendFeishuTarget.dataset.sendFeishuName,
+        sendFeishuTarget.dataset.sendFeishuRun || "",
+        sendFeishuTarget.dataset.sendFeishuSubscription || "",
+      ).catch(toastError("飞书发送失败"));
       return;
     }
     const deleteRunTarget = event.target.closest("[data-delete-run-id]");
@@ -2150,9 +2321,7 @@ function bindEvents() {
       syncActionMode();
     });
   });
-  document.querySelectorAll('input[name="modelStrategy"]').forEach((input) => {
-    input.addEventListener("change", renderSmartStart);
-  });
+  el.modelStrategySelect?.addEventListener("change", renderSmartStart);
   document.querySelectorAll("[data-example-query]").forEach((button) => {
     button.addEventListener("click", () => applyExampleQuery(button.dataset.exampleQuery || ""));
   });
@@ -2171,6 +2340,24 @@ function bindEvents() {
   el.saveMemoryButton?.addEventListener("click", () =>
     saveMemoryWeekly().catch(toastError("用户记忆保存失败")),
   );
+  el.sendMemoryFeishuButton?.addEventListener("click", () =>
+    sendMemoryWeeklyToFeishu().catch(toastError("周报发送失败")),
+  );
+  el.refreshFeishuButton?.addEventListener("click", () =>
+    refreshFeishu().catch(toastError("飞书状态刷新失败")),
+  );
+  el.testFeishuButton?.addEventListener("click", () =>
+    testFeishuConnection().catch(toastError("飞书连接测试失败")),
+  );
+  el.configureFeishuReceiverButton?.addEventListener("click", () =>
+    openFeishuReceiverEditor().catch(toastError("飞书会话加载失败")),
+  );
+  el.saveFeishuReceiverButton?.addEventListener("click", () =>
+    saveFeishuReceiverSelection().catch(toastError("接收会话保存失败")),
+  );
+  el.cancelFeishuReceiverButton?.addEventListener("click", () => {
+    if (el.feishuReceiverEditor) el.feishuReceiverEditor.hidden = true;
+  });
   el.runSearchInput?.addEventListener(
     "input",
     debounce(() => {

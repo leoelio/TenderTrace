@@ -11,6 +11,13 @@ from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, database_health, init_db
+from tendertrace.delivery.feishu_report import deliver_report_to_feishu
+from tendertrace.delivery.ledger import list_delivery_attempts, record_delivery_attempt
+from tendertrace.delivery.preferences import (
+    load_feishu_receiver,
+    resolve_feishu_receiver,
+    save_feishu_receiver,
+)
 from tendertrace.evaluation import build_agent_evaluation_report
 from tendertrace.integrations.feishu import (
     FeishuClient,
@@ -125,6 +132,54 @@ def create_app():
     def feishu_agent_integration_status() -> dict[str, object]:
         return feishu_agent_status(settings).to_dict()
 
+    @app.get("/api/integrations/feishu/overview")
+    def feishu_overview() -> dict[str, object]:
+        message = feishu_status(settings).to_dict()
+        agent = feishu_agent_status(settings).to_dict()
+        receiver = load_feishu_receiver(settings)
+        bitable_ready = bool(
+            settings.feishu_app_id
+            and settings.feishu_app_secret_present
+            and settings.feishu_bitable_app_token
+            and settings.feishu_bitable_table_id
+        )
+        receiver_configured = bool(receiver or message["default_receive_id_configured"])
+        report_ready = bool(message["configured"] and receiver_configured)
+        issues: list[dict[str, str]] = []
+        if not message["configured"]:
+            issues.append({"code": "message_app", "message": "消息应用尚未启用或凭据不完整"})
+        elif not receiver_configured:
+            issues.append({"code": "receiver", "message": "尚未设置默认飞书会话或用户"})
+        if not bitable_ready:
+            issues.append({"code": "bitable", "message": "多维表格凭据或数据表标识不完整"})
+        if not agent["configured"]:
+            issues.append({"code": "agent", "message": "智能体应用尚未启用或凭据不完整"})
+        return {
+            "status": "ready" if report_ready else "attention",
+            "message": message,
+            "receiver": (
+                receiver.safe_dict()
+                if receiver is not None
+                else {
+                    "configured": bool(message["default_receive_id_configured"]),
+                    "label": "环境配置" if message["default_receive_id_configured"] else None,
+                    "receive_id_type": message["default_receive_id_type"],
+                }
+            ),
+            "agent": agent,
+            "features": {
+                "report_delivery": {"ready": report_ready},
+                "weekly_digest": {"ready": report_ready},
+                "bitable_sync": {"ready": bitable_ready},
+                "agent_service": {"ready": bool(agent["configured"])},
+            },
+            "issues": issues,
+            "recent_attempts": [
+                attempt.to_dict()
+                for attempt in list_delivery_attempts(settings, channel="feishu", limit=8)
+            ],
+        }
+
     @app.get("/api/integrations/feishu/chats")
     def feishu_chats(page_size: int = 20, page_token: str | None = None) -> dict[str, object]:
         try:
@@ -132,16 +187,34 @@ def create_app():
         except FeishuError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/api/integrations/feishu/receiver")
+    def save_feishu_receiver_api(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        try:
+            preference = save_feishu_receiver(
+                settings,
+                receive_id=str(request.get("receive_id") or ""),
+                receive_id_type=str(request.get("receive_id_type") or "chat_id"),
+                label=_optional_string(request.get("label")),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return preference.safe_dict()
+
     @app.post("/api/integrations/feishu/test-message")
     def feishu_test_message(request: dict[str, object] = Body(...)) -> dict[str, object]:
         text = str(request.get("text") or "").strip()
         if not text:
             raise HTTPException(status_code=400, detail="text is required")
+        receive_id, receive_id_type = resolve_feishu_receiver(
+            settings,
+            receive_id=_optional_string(request.get("receive_id")),
+            receive_id_type=_optional_string(request.get("receive_id_type")),
+        )
         try:
             result = FeishuClient(settings).send_text(
                 text,
-                receive_id=_optional_string(request.get("receive_id")),
-                receive_id_type=_optional_string(request.get("receive_id_type")),
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
             )
         except FeishuError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -169,6 +242,7 @@ def create_app():
             max_pages=max_pages,
             max_results=max_results,
             model_strategy=_model_strategy_from_request(request),
+            delivery_channels=_delivery_channels_from_request(request),
         ).to_dict()
         record_activity(
             settings,
@@ -199,6 +273,7 @@ def create_app():
                 "max_pages": max_pages,
                 "max_results": max_results,
                 "model_strategy": _model_strategy_from_request(request),
+                "delivery_channels": _delivery_channels_from_request(request),
                 "run_id": run_id,
             },
             daemon=True,
@@ -230,6 +305,7 @@ def create_app():
                 max_results=max_results,
                 schedule_override=_schedule_override_from_request(request),
                 model_strategy=_model_strategy_from_request(request),
+                delivery_channels=_delivery_channels_from_request(request),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -422,6 +498,9 @@ def create_app():
     @app.get("/api/outbox")
     def outbox() -> dict[str, object]:
         tracked = list_outbox_messages(settings)
+        latest_feishu: dict[str, dict[str, object]] = {}
+        for attempt in list_delivery_attempts(settings, channel="feishu", limit=500):
+            latest_feishu.setdefault(attempt.artifact_key, attempt.to_dict())
         tracked_paths = {str(Path(item.docx_path).resolve()) for item in tracked}
         files = sorted(
             settings.outbox_dir.glob("*.docx"), key=lambda p: p.stat().st_mtime, reverse=True
@@ -439,6 +518,7 @@ def create_app():
                     "status": item.status,
                     "created_at": item.created_at,
                     "download_url": f"/api/outbox/{Path(item.docx_path).name}",
+                    "feishu_delivery": latest_feishu.get(Path(item.docx_path).name),
                 }
                 for item in tracked
                 if Path(item.docx_path).exists()
@@ -454,10 +534,39 @@ def create_app():
                     "status": "ready",
                     "created_at": None,
                     "download_url": f"/api/outbox/{file.name}",
+                    "feishu_delivery": latest_feishu.get(file.name),
                 }
                 for file in untracked
             ]
         }
+
+    @app.post("/api/outbox/{filename}/send-feishu")
+    def send_outbox_to_feishu(
+        filename: str,
+        request: dict[str, object] | None = Body(default=None),
+    ) -> dict[str, object]:
+        path = _resolve_outbox_path(settings, filename)
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="file not found")
+        request = request or {}
+        result = deliver_report_to_feishu(
+            settings,
+            docx_path=path,
+            run_id=_optional_string(request.get("run_id")),
+            subscription_id=_optional_string(request.get("subscription_id")),
+            receive_id=_optional_string(request.get("receive_id")),
+            receive_id_type=_optional_string(request.get("receive_id_type")),
+        )
+        record_activity(
+            settings,
+            event_type="feishu_report_send",
+            target="outbox",
+            label=path.name,
+            metadata={"filename": path.name, "status": result.status},
+        )
+        if result.status != "sent":
+            raise HTTPException(status_code=400, detail=result.to_dict())
+        return result.to_dict()
 
     @app.get("/api/outbox/{filename}")
     def download_outbox(filename: str):
@@ -553,6 +662,64 @@ def create_app():
         )
         return persist_weekly_report(settings, report)
 
+    @app.post("/api/memory/weekly/send-feishu")
+    def send_weekly_memory_to_feishu(
+        request: dict[str, object] | None = Body(default=None),
+    ) -> dict[str, object]:
+        request = request or {}
+        try:
+            days = int(request.get("days") or 7)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="days must be an integer") from exc
+        if days < 1 or days > 31:
+            raise HTTPException(status_code=400, detail="days must be between 1 and 31")
+        report = build_weekly_report(
+            settings,
+            user_id=str(request.get("user_id") or "admin"),
+            days=days,
+        )
+        period = report.get("period") if isinstance(report.get("period"), dict) else {}
+        artifact_key = f"weekly:{period.get('from', '')}:{period.get('to', '')}"
+        receive_id, receive_id_type = resolve_feishu_receiver(
+            settings,
+            receive_id=_optional_string(request.get("receive_id")),
+            receive_id_type=_optional_string(request.get("receive_id_type")),
+        )
+        try:
+            response = FeishuClient(settings).send_text(
+                _weekly_report_text(report),
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+            )
+            data = response.get("data")
+            message_id = str(data.get("message_id") or "") if isinstance(data, dict) else ""
+            attempt = record_delivery_attempt(
+                settings,
+                channel="feishu",
+                artifact_type="weekly_digest",
+                artifact_key=artifact_key,
+                status="sent",
+                external_id=message_id or None,
+            )
+        except FeishuError as exc:
+            attempt = record_delivery_attempt(
+                settings,
+                channel="feishu",
+                artifact_type="weekly_digest",
+                artifact_key=artifact_key,
+                status="failed",
+                error=str(exc),
+            )
+            raise HTTPException(status_code=400, detail=attempt.to_dict()) from exc
+        record_activity(
+            settings,
+            event_type="feishu_weekly_send",
+            target="memory",
+            label=artifact_key,
+            metadata={"status": "sent"},
+        )
+        return attempt.to_dict()
+
     @app.get("/api/memory/profile")
     def memory_profile(user_id: str = "admin") -> dict[str, object]:
         profile = load_memory_profile(settings, user_id=user_id)
@@ -631,6 +798,26 @@ def _string_list(value: object) -> list[str]:
     return []
 
 
+def _delivery_channels_from_request(request: dict[str, object]) -> tuple[str, ...] | None:
+    if "delivery_channels" not in request:
+        return None
+    raw = request.get("delivery_channels")
+    if not isinstance(raw, list):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="delivery_channels must be an array")
+    aliases = {"feishu_message": "feishu"}
+    selected = {"web", "outbox"}
+    for item in raw:
+        channel = aliases.get(str(item).strip().lower(), str(item).strip().lower())
+        if channel not in {"web", "outbox", "feishu"}:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=400, detail=f"unsupported delivery channel: {channel}")
+        selected.add(channel)
+    return tuple(channel for channel in ("web", "outbox", "feishu") if channel in selected)
+
+
 def _optional_string(value: object) -> str | None:
     if value in (None, ""):
         return None
@@ -666,6 +853,12 @@ def _schedule_override_from_request(request: dict[str, object]) -> dict[str, obj
 
 def _subscription_api_item(settings: Settings, subscription: Subscription) -> dict[str, object]:
     item = subscription.to_dict()
+    runtime = subscription.bidql.get("_runtime")
+    item["delivery_channels"] = (
+        runtime.get("delivery_channels", ["web", "outbox"])
+        if isinstance(runtime, dict)
+        else ["web", "outbox"]
+    )
     item["next_run_at"] = _next_run_at(subscription)
     item.update(_latest_subscription_run(settings, subscription.id))
     return item
@@ -705,12 +898,15 @@ def _latest_subscription_run(settings: Settings, subscription_id: str) -> dict[s
             "last_outbox_name": None,
             "last_download_url": None,
             "last_email_status": None,
+            "last_feishu_status": None,
         }
     stats = sanitize_stats(_loads_json(row["stats_json"]))
     outbox_path = str(outbox["docx_path"]) if outbox else str(row["output_docx_path"] or "")
     outbox_name = Path(outbox_path).name if outbox_path else None
     email = stats.get("email_delivery")
     email_status = email.get("status") if isinstance(email, dict) else None
+    feishu = stats.get("feishu_message_delivery")
+    feishu_status_value = feishu.get("status") if isinstance(feishu, dict) else None
     return {
         "last_run_id": row["id"],
         "last_run_status": row["status"],
@@ -722,7 +918,47 @@ def _latest_subscription_run(settings: Settings, subscription_id: str) -> dict[s
         "last_outbox_name": outbox_name,
         "last_download_url": f"/api/outbox/{outbox_name}" if outbox_name else None,
         "last_email_status": email_status,
+        "last_feishu_status": feishu_status_value,
     }
+
+
+def _resolve_outbox_path(settings: Settings, filename: str) -> Path:
+    path = (settings.outbox_dir / filename).resolve()
+    if settings.outbox_dir.resolve() not in path.parents or path.suffix.lower() != ".docx":
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="invalid outbox path")
+    return path
+
+
+def _weekly_report_text(report: dict[str, object]) -> str:
+    period = report.get("period") if isinstance(report.get("period"), dict) else {}
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    advice = (
+        report.get("generated_advice")
+        if isinstance(report.get("generated_advice"), dict)
+        else {}
+    )
+    lines = [
+        f"TenderTrace 使用周报｜{period.get('from', '-')} 至 {period.get('to', '-')}",
+        (
+            f"运行 {summary.get('runs_finished', 0)} 次 · 下载 {summary.get('downloads', 0)} 次 · "
+            f"新增订阅 {summary.get('subscriptions_created', 0)} 个"
+        ),
+    ]
+    advice_summary = str(advice.get("summary") or "").strip()
+    if advice_summary:
+        lines.extend(["", advice_summary])
+    recommendations = report.get("recommendation_plan")
+    if isinstance(recommendations, list) and recommendations:
+        lines.append("")
+        for item in recommendations[:3]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or item.get("action") or "").strip()
+            if title:
+                lines.append(f"• {title}")
+    return "\n".join(lines)
 
 
 def _next_run_at(subscription: Subscription) -> str | None:

@@ -15,6 +15,7 @@ from tendertrace.config import ModelMode, Settings
 from tendertrace.db import connection, init_db, json_dumps
 from tendertrace.delivery.emailer import send_report_email
 from tendertrace.delivery.feishu_bitable import sync_notices_to_bitable
+from tendertrace.delivery.feishu_report import deliver_report_to_feishu
 from tendertrace.intent import compile_intent
 from tendertrace.llm.enhancer import enhance_bidql_with_model
 from tendertrace.llm.gateway import ModelGateway
@@ -70,6 +71,7 @@ def run_once(
     attachment_downloader: Downloader | None = None,
     model_gateway: ModelGateway | None = None,
     model_strategy: str | None = None,
+    delivery_channels: tuple[str, ...] | list[str] | None = None,
     run_id: str | None = None,
 ) -> RunOnceResult:
     init_db(settings)
@@ -290,6 +292,24 @@ def run_once(
             synced_at=run_at,
         )
         context.emit_tool_call("delivery.feishu_bitable", feishu_result.to_dict())
+        selected_channels = {
+            str(channel).strip().lower()
+            for channel in (delivery_channels or settings.delivery_channels)
+        }
+        if selected_channels.intersection({"feishu", "feishu_message"}):
+            feishu_message_result = deliver_report_to_feishu(
+                settings,
+                docx_path=outbox_path,
+                run_id=state.run_id,
+                subscription_id=subscription_id,
+            ).to_dict()
+        else:
+            feishu_message_result = {
+                "status": "skipped",
+                "file_name": outbox_path.name,
+                "reason": "feishu channel not selected",
+            }
+        context.emit_tool_call("delivery.feishu_message", feishu_message_result)
         if subscription_id and incremental:
             with connection(settings) as conn:
                 for notice in state.notices:
@@ -306,6 +326,7 @@ def run_once(
                 **state.funnel,
                 "email_delivery": email_result.to_dict(),
                 "feishu_bitable_delivery": feishu_result.to_dict(),
+                "feishu_message_delivery": feishu_message_result,
             },
         )
 

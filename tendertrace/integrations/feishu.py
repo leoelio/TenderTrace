@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -73,6 +74,70 @@ class FeishuClient:
             raise FeishuError("text is required")
         if not receive_id:
             raise FeishuError("receive_id is required; set FEISHU_DEFAULT_RECEIVE_ID or pass one")
+        return self._send_message(
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            msg_type="text",
+            content={"text": text},
+        )
+
+    def upload_file(self, path: Path | str) -> str:
+        file_path = Path(path)
+        if not file_path.is_file():
+            raise FeishuError("report file does not exist")
+        size = file_path.stat().st_size
+        if size <= 0:
+            raise FeishuError("report file is empty")
+        if size > 30 * 1024 * 1024:
+            raise FeishuError("report file exceeds Feishu's 30 MB limit")
+        token = self.get_tenant_access_token()
+        with file_path.open("rb") as file_handle:
+            response = self._client.post(
+                self._url("/open-apis/im/v1/files"),
+                headers={"Authorization": f"Bearer {token}"},
+                data={"file_type": "stream", "file_name": file_path.name},
+                files={
+                    "file": (
+                        file_path.name,
+                        file_handle,
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                },
+            )
+        payload = self._parse_response(response)
+        data = payload.get("data")
+        file_key = str(data.get("file_key") or "") if isinstance(data, dict) else ""
+        if not file_key:
+            raise FeishuError("Feishu file_key is missing in response")
+        return file_key
+
+    def send_file(
+        self,
+        path: Path | str,
+        *,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> dict[str, Any]:
+        receive_id = (receive_id or self.settings.feishu_default_receive_id).strip()
+        receive_id_type = (receive_id_type or self.settings.feishu_default_receive_id_type).strip()
+        if not receive_id:
+            raise FeishuError("receive_id is required; set FEISHU_DEFAULT_RECEIVE_ID or pass one")
+        file_key = self.upload_file(path)
+        return self._send_message(
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            msg_type="file",
+            content={"file_key": file_key},
+        )
+
+    def _send_message(
+        self,
+        *,
+        receive_id: str,
+        receive_id_type: str,
+        msg_type: str,
+        content: dict[str, str],
+    ) -> dict[str, Any]:
         token = self.get_tenant_access_token()
         response = self._client.post(
             self._url("/open-apis/im/v1/messages"),
@@ -83,8 +148,8 @@ class FeishuClient:
             params={"receive_id_type": receive_id_type},
             json={
                 "receive_id": receive_id,
-                "msg_type": "text",
-                "content": json.dumps({"text": text}, ensure_ascii=False),
+                "msg_type": msg_type,
+                "content": json.dumps(content, ensure_ascii=False),
             },
         )
         return self._parse_response(response)
@@ -114,18 +179,26 @@ class FeishuClient:
 
     def _parse_response(self, response: httpx.Response) -> dict[str, Any]:
         try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise FeishuError(f"Feishu HTTP {response.status_code}: {response.text[:200]}") from exc
-        try:
             payload = response.json()
         except ValueError as exc:
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as http_exc:
+                raise FeishuError(f"Feishu HTTP {response.status_code}") from http_exc
             raise FeishuError("Feishu response is not JSON") from exc
         if not isinstance(payload, dict):
             raise FeishuError("Feishu response JSON must be an object")
         code = payload.get("code", 0)
         if code != 0:
-            raise FeishuError(f"Feishu API error {code}: {payload.get('msg') or 'unknown error'}")
+            messages = {
+                232034: "应用在当前租户不可用或未启用，请先发布应用并确认租户已安装",
+            }
+            message = messages.get(code, str(payload.get("msg") or "unknown error"))
+            raise FeishuError(f"Feishu API error {code}: {message}")
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise FeishuError(f"Feishu HTTP {response.status_code}") from exc
         return payload
 
     def _url(self, path: str) -> str:

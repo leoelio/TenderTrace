@@ -27,7 +27,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("user_activity_events", health["tables"])
         self.assertIn("weekly_reports", health["tables"])
         self.assertIn("user_memory_profiles", health["tables"])
-        self.assertIn(10, health["schema_versions"])
+        self.assertIn(12, health["schema_versions"])
 
 
 if __name__ == "__main__":

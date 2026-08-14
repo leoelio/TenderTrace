@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 12
 
 
 DDL = (
@@ -275,6 +275,29 @@ DDL = (
         UNIQUE (user_id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS delivery_attempts (
+        id TEXT PRIMARY KEY,
+        channel TEXT NOT NULL,
+        artifact_type TEXT NOT NULL,
+        artifact_key TEXT NOT NULL,
+        run_id TEXT,
+        subscription_id TEXT,
+        status TEXT NOT NULL,
+        external_id TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS integration_preferences (
+        provider TEXT PRIMARY KEY,
+        receive_id TEXT NOT NULL,
+        receive_id_type TEXT NOT NULL,
+        label TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
 )
 
 
@@ -310,6 +333,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_user_activity_type_time ON user_activity_events(event_type, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_weekly_reports_user_period ON weekly_reports(user_id, week_start, week_end)",
     "CREATE INDEX IF NOT EXISTS idx_user_memory_profiles_user ON user_memory_profiles(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_artifact ON delivery_attempts(artifact_key, channel, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_status ON delivery_attempts(status, created_at)",
 )
 
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {

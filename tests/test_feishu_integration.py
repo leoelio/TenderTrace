@@ -124,6 +124,105 @@ class FeishuIntegrationTests(unittest.TestCase):
         with self.assertRaises(FeishuError):
             FeishuClient(settings).send_text("hello", receive_id="oc_test")
 
+    def test_platform_error_has_actionable_message(self) -> None:
+        old_env = _clear_env(FEISHU_ENV_KEYS)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / ".env.local").write_text(
+                    "\n".join(
+                        [
+                            "FEISHU_ENABLED=true",
+                            "FEISHU_APP_ID=cli_test",
+                            "FEISHU_APP_SECRET=secret-value",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                settings = Settings.load(root)
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    if request.url.path.endswith("/tenant_access_token/internal"):
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "tenant_access_token": "t-token"},
+                        )
+                    return httpx.Response(
+                        400,
+                        json={"code": 232034, "msg": "app unavailable"},
+                    )
+
+                client = httpx.Client(transport=httpx.MockTransport(handler))
+                with self.assertRaisesRegex(FeishuError, "发布应用"):
+                    FeishuClient(settings, client=client).list_chats()
+        finally:
+            _restore_env(old_env)
+
+    def test_send_file_uploads_docx_then_sends_file_message(self) -> None:
+        old_env = _clear_env(FEISHU_ENV_KEYS)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                report = root / "report.docx"
+                report.write_bytes(b"docx-content")
+                (root / ".env.local").write_text(
+                    "\n".join(
+                        [
+                            "FEISHU_ENABLED=true",
+                            "FEISHU_APP_ID=cli_test",
+                            "FEISHU_APP_SECRET=secret-value",
+                            "FEISHU_DEFAULT_RECEIVE_ID=oc_test",
+                            "FEISHU_DEFAULT_RECEIVE_ID_TYPE=chat_id",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                settings = Settings.load(root)
+                seen_paths: list[str] = []
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    seen_paths.append(request.url.path)
+                    if request.url.path.endswith("/tenant_access_token/internal"):
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "tenant_access_token": "t-token"},
+                        )
+                    if request.url.path.endswith("/im/v1/files"):
+                        self.assertIn("multipart/form-data", request.headers["Content-Type"])
+                        body = request.content.decode("latin-1")
+                        self.assertIn('name="file_type"', body)
+                        self.assertIn("stream", body)
+                        self.assertIn("report.docx", body)
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "data": {"file_key": "file-test"}},
+                        )
+                    if request.url.path.endswith("/im/v1/messages"):
+                        payload = json.loads(request.content.decode("utf-8"))
+                        self.assertEqual(payload["msg_type"], "file")
+                        self.assertEqual(json.loads(payload["content"]), {"file_key": "file-test"})
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "data": {"message_id": "om-file"}},
+                        )
+                    return httpx.Response(404, json={"code": 404, "msg": "unexpected"})
+
+                client = httpx.Client(transport=httpx.MockTransport(handler))
+                result = FeishuClient(settings, client=client).send_file(report)
+        finally:
+            _restore_env(old_env)
+
+        self.assertEqual(result["data"]["message_id"], "om-file")
+        self.assertEqual(
+            seen_paths,
+            [
+                "/open-apis/auth/v3/tenant_access_token/internal",
+                "/open-apis/im/v1/files",
+                "/open-apis/auth/v3/tenant_access_token/internal",
+                "/open-apis/im/v1/messages",
+            ],
+        )
+
     def test_agent_status_is_safe_and_secret_free(self) -> None:
         old_env = _clear_env(FEISHU_ENV_KEYS)
         try:

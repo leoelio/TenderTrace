@@ -38,6 +38,7 @@ def create_subscription(
     max_results: int = 10,
     schedule_override: dict[str, Any] | None = None,
     model_strategy: str | None = None,
+    delivery_channels: list[str] | tuple[str, ...] | None = None,
 ) -> Subscription:
     init_db(settings)
     bidql = compile_intent(query, now=now)
@@ -50,6 +51,8 @@ def create_subscription(
     runtime: dict[str, Any] = {"max_pages": max_pages, "max_results": max_results}
     if model_strategy:
         runtime["model_strategy"] = model_strategy
+    if delivery_channels is not None:
+        runtime["delivery_channels"] = _normalize_delivery_channels(delivery_channels)
     bidql["_runtime"] = runtime
     subscription_id = str(uuid4())
     with connection(settings) as conn:
@@ -120,6 +123,7 @@ def run_subscription(
     max_pages = int(runtime.get("max_pages") or 1)
     max_results = int(runtime.get("max_results") or 10)
     model_strategy = str(runtime.get("model_strategy") or "config")
+    delivery_channels = _normalize_delivery_channels(runtime.get("delivery_channels"))
     result = run_once(
         settings=settings,
         query=subscription.original_query,
@@ -130,6 +134,7 @@ def run_subscription(
         subscription_id=subscription.id,
         incremental=True,
         model_strategy=model_strategy,
+        delivery_channels=delivery_channels,
     )
     with connection(settings) as conn:
         conn.execute(
@@ -141,6 +146,20 @@ def run_subscription(
             (subscription.id,),
         )
     return result
+
+
+def _normalize_delivery_channels(value: object) -> list[str]:
+    selected = {"web", "outbox"}
+    if isinstance(value, (list, tuple)):
+        selected.update(
+            str(channel).strip().lower()
+            for channel in value
+            if str(channel).strip().lower() in {"web", "outbox", "feishu", "feishu_message"}
+        )
+    if "feishu_message" in selected:
+        selected.remove("feishu_message")
+        selected.add("feishu")
+    return [channel for channel in ("web", "outbox", "feishu") if channel in selected]
 
 
 def _subscription_from_row(row) -> Subscription:

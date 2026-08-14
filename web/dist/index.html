@@ -18,7 +18,18 @@
           </div>
         </div>
 
-        <nav class="topnav" aria-label="主导航">
+        <button
+          id="mobileNavButton"
+          class="mobile-nav-button"
+          type="button"
+          aria-label="打开导航"
+          aria-expanded="false"
+          aria-controls="topNavigation"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+        </button>
+
+        <nav id="topNavigation" class="topnav" aria-label="主导航">
           <button class="nav-tab active" type="button" data-view="workbenchView">工作台</button>
           <button class="nav-tab" type="button" data-view="historyView">历史运行</button>
           <button class="nav-tab" type="button" data-view="subscriptionsView">订阅管理</button>
@@ -114,13 +125,12 @@
                     <p>输入自然语言需求后，我会解析区域、主题、时间、频率，并生成可下载 Word。</p>
                   </div>
                 </article>
-                <section id="smartStartPanel" class="smart-start" aria-label="智能启动建议">
+                <section id="smartStartPanel" class="smart-start" aria-label="常用任务">
                   <div class="smart-start-head">
                     <div>
-                      <strong>智能启动</strong>
-                      <span id="smartStartMeta">正在读取当前配置和记忆库</span>
+                      <strong>常用任务</strong>
+                      <span id="smartStartMeta">选择模板后可继续修改</span>
                     </div>
-                    <button class="ghost-button" type="button" data-view="memoryView">查看周报</button>
                   </div>
                   <div class="smart-grid">
                     <button
@@ -137,16 +147,16 @@
                       data-example-query="最近3个月杭州市空调招标信息都有哪些，请每天9:00发送"
                     >
                       <strong>启用订阅</strong>
-                      <span>识别频率后自动切换订阅</span>
+                      <span>杭州空调，每天 09:00</span>
                     </button>
-                    <div class="smart-card passive">
-                      <strong>最近报告</strong>
-                      <span id="smartLatestReport">暂无可下载 Word</span>
-                    </div>
-                    <div class="smart-card passive">
-                      <strong>下一步建议</strong>
-                      <span id="smartRecommendation">完成一次查询后，我会根据下载和点击给出建议。</span>
-                    </div>
+                    <button
+                      class="smart-card"
+                      type="button"
+                      data-example-query="最近3个月苏州市充电设施相关招标信息都有哪些"
+                    >
+                      <strong>同义检索</strong>
+                      <span>苏州充电设施，最近3个月</span>
+                    </button>
                   </div>
                 </section>
               </div>
@@ -191,27 +201,36 @@
                     </label>
                   </div>
 
-                  <div class="model-switch" role="group" aria-label="模型策略">
-                    <label><input type="radio" name="modelStrategy" value="config" checked /><span>跟随配置</span></label>
-                    <label><input type="radio" name="modelStrategy" value="rules" /><span>本地规则</span></label>
-                    <label><input type="radio" name="modelStrategy" value="local" /><span>本地模型</span></label>
-                    <label><input type="radio" name="modelStrategy" value="cloud" /><span>云端模型</span></label>
-                    <label><input type="radio" name="modelStrategy" value="hybrid" /><span>规则 + 云端</span></label>
+                  <div class="delivery-options" role="group" aria-label="交付方式">
+                    <span class="control-label">交付方式</span>
+                    <span class="fixed-delivery">Web 下载</span>
+                    <label class="delivery-option">
+                      <input id="feishuDeliveryInput" type="checkbox" />
+                      <span>同时发送飞书</span>
+                    </label>
                   </div>
 
-                  <label class="depth-control">
-                    搜索深度
-                    <select id="searchDepthSelect">
-                      <option value="quick">快速：1页 / 5条</option>
-                      <option value="standard" selected>标准：3页 / 8条</option>
-                      <option value="deep">深入：5页 / 15条</option>
-                    </select>
-                    <small>覆盖常用来源，平衡速度与结果。</small>
-                  </label>
-
-                  <details class="advanced-limits">
-                    <summary>高级采集范围</summary>
-                    <div class="form-grid">
+                  <details class="advanced-limits advanced-settings">
+                    <summary>高级设置</summary>
+                    <div class="advanced-settings-grid">
+                      <label class="depth-control">
+                        搜索深度
+                        <select id="searchDepthSelect">
+                          <option value="quick">快速：1页 / 5条</option>
+                          <option value="standard" selected>标准：3页 / 8条</option>
+                          <option value="deep">深入：5页 / 15条</option>
+                        </select>
+                      </label>
+                      <label>
+                        模型策略
+                        <select id="modelStrategySelect">
+                          <option value="config" selected>智能选择</option>
+                          <option value="rules">本地规则</option>
+                          <option value="local">本地模型</option>
+                          <option value="cloud">云端模型</option>
+                          <option value="hybrid">规则 + 云端</option>
+                        </select>
+                      </label>
                       <label>
                         翻页数
                         <input id="maxPagesInput" name="max_pages" type="number" min="1" max="8" value="3" />
@@ -228,7 +247,6 @@
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
                       开始运行
                     </button>
-                    <button id="subscribeButton" class="secondary-button" type="button">创建订阅</button>
                   </div>
                 </div>
               </form>
@@ -296,16 +314,6 @@
                 <div class="download-strip" id="latestDownload" hidden></div>
               </section>
 
-              <section class="panel insight-panel" aria-labelledby="insightTitle">
-                <div class="panel-heading">
-                  <div>
-                    <h2 id="insightTitle">使用洞察</h2>
-                    <span class="panel-meta">来自用户记忆库</span>
-                  </div>
-                  <button class="ghost-button" type="button" data-view="memoryView">查看周报</button>
-                </div>
-                <div id="memoryDigest" class="source-list empty-state">等待周报数据</div>
-              </section>
             </aside>
           </div>
         </section>
@@ -403,11 +411,12 @@
                     <th>状态</th>
                     <th>最近运行</th>
                     <th>增量</th>
+                    <th>交付</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody id="subscriptionPageBody">
-                  <tr><td colspan="7" class="empty-cell">加载中</td></tr>
+                  <tr><td colspan="8" class="empty-cell">加载中</td></tr>
                 </tbody>
               </table>
             </div>
@@ -466,6 +475,7 @@
               <div class="action-group">
                 <button id="refreshMemoryButton" class="primary-lite-button" type="button">刷新周报</button>
                 <button id="saveMemoryButton" class="ghost-button" type="button">保存快照</button>
+                <button id="sendMemoryFeishuButton" class="ghost-button" type="button">发送到飞书</button>
               </div>
             </div>
             <div id="memorySummary" class="eval-summary empty-state">等待记忆数据</div>
@@ -516,6 +526,32 @@
                 <span class="panel-meta">运行环境、目录和模型配置摘要</span>
               </div>
             </div>
+            <section class="feishu-center" aria-labelledby="feishuCenterTitle">
+              <div class="section-heading">
+                <div>
+                  <h2 id="feishuCenterTitle">飞书连接中心</h2>
+                  <span id="feishuCenterMeta">正在检查消息、报告、多维表格与智能体服务</span>
+                </div>
+                <div class="action-group">
+                  <button id="configureFeishuReceiverButton" class="ghost-button" type="button">选择接收会话</button>
+                  <button id="testFeishuButton" class="ghost-button" type="button">发送测试消息</button>
+                  <button id="refreshFeishuButton" class="primary-lite-button" type="button">刷新状态</button>
+                </div>
+              </div>
+              <div id="feishuReceiverEditor" class="receiver-editor" hidden>
+                <label>
+                  默认接收会话
+                  <select id="feishuChatSelect"></select>
+                </label>
+                <div class="action-group">
+                  <button id="saveFeishuReceiverButton" class="primary-lite-button" type="button">保存</button>
+                  <button id="cancelFeishuReceiverButton" class="ghost-button" type="button">取消</button>
+                </div>
+              </div>
+              <div id="feishuFeatureList" class="integration-list empty-state">加载中</div>
+              <div id="feishuIssueList" class="integration-issues" hidden></div>
+              <div id="feishuAttemptList" class="delivery-attempts" hidden></div>
+            </section>
             <div id="settingsSummary" class="settings-grid empty-state">加载中</div>
           </section>
         </section>
