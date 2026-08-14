@@ -207,6 +207,8 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(created["机会评分"], "72")
         self.assertIn("机会点负责人", created["跟进建议"])
         self.assertIn("/api/outbox/report.docx", created["Word 报告"])
+        self.assertEqual(created["市场价格位置"], "高于同品类历史中位数")
+        self.assertEqual(created["市场样本数"], "8")
         updated = FakeFeishuClient.updated_records[0][1]
         self.assertIn("Word 报告", updated)
         self.assertIn("机会评分", updated)
@@ -263,6 +265,12 @@ def _notice(notice_id: str, *, cluster_key: str) -> dict:
                     {"role": "机会点负责人", "action": "确认客户关系和投标窗口。"}
                 ],
                 "risks": ["需补充跨来源佐证"],
+                "market_context": {
+                    "benchmark": {
+                        "message": "高于同品类历史中位数",
+                        "sample_count": 8,
+                    }
+                },
             },
         },
     }

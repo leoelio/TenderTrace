@@ -35,7 +35,11 @@ from tendertrace.memory import (
     persist_weekly_report,
     record_activity,
 )
-from tendertrace.opportunity import analyze_opportunity_payload, get_opportunity, list_opportunities
+from tendertrace.opportunity import (
+    analyze_opportunity_with_market_context,
+    get_opportunity,
+    list_opportunities,
+)
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import run_once
 from tendertrace.sanitize import sanitize_for_output, sanitize_stats
@@ -257,7 +261,7 @@ def create_app():
 
     @app.post("/api/opportunities/analyze")
     def analyze_opportunity(request: dict[str, object] = Body(...)) -> dict[str, object]:
-        return analyze_opportunity_payload(request)
+        return analyze_opportunity_with_market_context(settings, request)
 
     @app.post("/api/opportunities/send-feishu")
     def send_opportunity_feishu(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -1047,6 +1051,16 @@ def _opportunity_message(opportunity: dict[str, object]) -> str:
         else {}
     )
     scores = intelligence.get("scores") if isinstance(intelligence.get("scores"), dict) else {}
+    market_context = (
+        intelligence.get("market_context")
+        if isinstance(intelligence.get("market_context"), dict)
+        else {}
+    )
+    benchmark = (
+        market_context.get("benchmark")
+        if isinstance(market_context.get("benchmark"), dict)
+        else {}
+    )
     actions = intelligence.get("recommended_actions")
     action_lines = []
     if isinstance(actions, list):
@@ -1067,6 +1081,8 @@ def _opportunity_message(opportunity: dict[str, object]) -> str:
         f"目标：{intelligence.get('project_target') or '待确认'}",
         f"策略：{intelligence.get('strategy') or '待确认'}",
     ]
+    if benchmark.get("message"):
+        lines.append(f"市场：{benchmark['message']}")
     if action_lines:
         lines.extend(["", "下一步", *action_lines])
     source_url = str(opportunity.get("source_url") or "").strip()

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 import json
 import re
+from statistics import median
 from typing import Any
 
 from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection
+from tendertrace.intent.topic import extract_topic
 from tendertrace.retrieval import parse_date
 
 
@@ -32,12 +35,17 @@ def enrich_opportunity_intelligence(
     as_of: datetime | date | None = None,
 ) -> OpportunityResult:
     enriched = [_with_intelligence(notice, as_of=as_of) for notice in notices]
+    market = build_market_context(enriched, as_of=as_of)
     levels = {level: 0 for _threshold, level, _label in LEVELS}
     scores: list[int] = []
     for notice in enriched:
         intelligence = notice.fields.get("opportunity_intelligence")
         if not isinstance(intelligence, dict):
             continue
+        intelligence["market_context"] = {
+            "benchmark": market_benchmark_for_notice(notice, market),
+            "signals": list(market.get("signals") or [])[:3],
+        }
         level = str(intelligence.get("level") or "D")
         levels[level] = levels.get(level, 0) + 1
         scores.append(int(intelligence.get("score") or 0))
@@ -48,6 +56,7 @@ def enrich_opportunity_intelligence(
             "opportunity_levels": levels,
             "opportunity_average_score": round(sum(scores) / len(scores), 1) if scores else 0.0,
             "opportunity_high_priority": levels.get("A", 0),
+            "opportunity_market": market,
         },
     )
 
@@ -57,6 +66,10 @@ def analyze_opportunity_payload(
     *,
     as_of: datetime | date | None = None,
 ) -> dict[str, object]:
+    return _analyze(_normalized_payload(payload), as_of=as_of)
+
+
+def _normalized_payload(payload: dict[str, Any]) -> dict[str, Any]:
     structured = _mapping(payload.get("structured_fields"))
     evidence = _mapping(payload.get("evidence"))
     fields = _mapping(payload.get("fields"))
@@ -64,7 +77,7 @@ def analyze_opportunity_payload(
     nested_evidence = _mapping(fields.get("evidence"))
     structured = {**nested_structured, **structured}
     evidence = {**nested_evidence, **evidence}
-    normalized = {
+    return {
         "title": _first(payload, "title", "标题"),
         "publish_time": _first(payload, "publish_time", "发布时间"),
         "region": _first(payload, "region", "地区"),
@@ -88,12 +101,92 @@ def analyze_opportunity_payload(
         or payload.get("关联来源数")
         or 1,
     }
-    return _analyze(normalized, as_of=as_of)
+
+
+def analyze_opportunity_with_market_context(
+    settings: Settings,
+    payload: dict[str, Any],
+    *,
+    as_of: datetime | date | None = None,
+) -> dict[str, object]:
+    intelligence = analyze_opportunity_payload(payload, as_of=as_of)
+    notices = [notice for _notice_id, notice in _recent_notices(settings, limit=500)]
+    market = build_market_context(notices, as_of=as_of)
+    normalized = _normalized_payload(payload)
+    intelligence["market_context"] = {
+        "benchmark": _market_benchmark(normalized, market),
+        "signals": list(market.get("signals") or [])[:3],
+        "sample_scope": {
+            "notice_count": market.get("notice_count", 0),
+            "budget_sample_count": market.get("budget_sample_count", 0),
+        },
+    }
+    return intelligence
 
 
 def intelligence_for_notice(notice: Notice) -> dict[str, object]:
-    value = notice.fields.get("opportunity_intelligence")
-    return value if isinstance(value, dict) else _analyze(_notice_payload(notice), as_of=None)
+    # Freshness and deadline readiness must reflect the current day, not the ingest day.
+    return _analyze(_notice_payload(notice), as_of=None)
+
+
+def build_market_context(
+    notices: list[Notice],
+    *,
+    as_of: datetime | date | None = None,
+) -> dict[str, object]:
+    entries = [_market_entry(_notice_payload(notice), as_of=as_of) for notice in notices]
+    budgets = [float(item["budget_cny"]) for item in entries if item["budget_cny"]]
+    categories: dict[str, list[float]] = {}
+    for item in entries:
+        category = str(item["category"] or "")
+        budget = item["budget_cny"]
+        if category and budget:
+            categories.setdefault(category, []).append(float(budget))
+    category_benchmarks = {
+        category: _budget_stats(values) for category, values in categories.items()
+    }
+    purchasers = Counter(str(item["purchaser"]) for item in entries if item["purchaser"])
+    regions = Counter(str(item["region"]) for item in entries if item["region"])
+    stages = Counter(str(item["stage"]) for item in entries if item["stage"])
+    high_credibility = sum(1 for item in entries if int(item["credibility"] or 0) >= 80)
+    budget_coverage = round(len(budgets) / len(entries) * 100, 1) if entries else 0.0
+    signals: list[str] = []
+    if budgets:
+        overall = _budget_stats(budgets)
+        signals.append(
+            f"价格样本：{len(budgets)} 条有效预算，中位数 {_format_cny(overall['median_cny'])}，"
+            f"覆盖率 {budget_coverage}%"
+        )
+    else:
+        overall = _budget_stats([])
+        signals.append("价格样本不足：当前公告未形成可计算的预算基准")
+    if purchasers:
+        name, count = purchasers.most_common(1)[0]
+        signals.append(f"客户集中度：{name} 出现 {count} 次，建议核查连续采购计划")
+    if stages:
+        stage, count = stages.most_common(1)[0]
+        signals.append(f"采购阶段：{stage} 占 {count}/{len(entries)} 条")
+    if entries and budget_coverage < 30:
+        signals.append("数据提示：预算覆盖率低于 30%，价格判断仅作线索参考")
+    return {
+        "notice_count": len(entries),
+        "budget_sample_count": len(budgets),
+        "budget_coverage": budget_coverage,
+        "budget": overall,
+        "category_benchmarks": category_benchmarks,
+        "top_purchasers": _counter_items(purchasers),
+        "top_regions": _counter_items(regions),
+        "stage_distribution": _counter_items(stages, limit=8),
+        "high_credibility_count": high_credibility,
+        "signals": signals[:4],
+    }
+
+
+def market_benchmark_for_notice(
+    notice: Notice,
+    market: dict[str, object],
+) -> dict[str, object]:
+    return _market_benchmark(_notice_payload(notice), market)
 
 
 def list_opportunities(
@@ -103,27 +196,23 @@ def list_opportunities(
     level: str | None = None,
 ) -> dict[str, object]:
     limit = max(1, min(int(limit), 200))
-    with connection(settings) as conn:
-        rows = conn.execute(
-            """
-            SELECT id, source_site, source_url, title, publish_time, region, purchaser,
-                   content_text, core_content, attachments_json, fields_json, created_at
-            FROM notices
-            ORDER BY publish_time DESC, created_at DESC
-            LIMIT ?
-            """,
-            (min(limit * 4, 500),),
-        ).fetchall()
+    market_rows = _recent_notices(settings, limit=500)
+    rows = market_rows[: min(limit * 4, 500)]
+    market_notices = [notice for _notice_id, notice in market_rows]
+    market = build_market_context(market_notices)
     items: list[dict[str, object]] = []
-    for row in rows:
-        notice = _notice_from_row(row)
+    for notice_id, notice in rows:
         intelligence = intelligence_for_notice(notice)
         if level and str(intelligence.get("level") or "").upper() != level.upper():
             continue
+        intelligence["market_context"] = {
+            "benchmark": _market_benchmark(_notice_payload(notice), market),
+            "signals": list(market.get("signals") or [])[:3],
+        }
         structured = _mapping(notice.fields.get("structured_fields"))
         items.append(
             {
-                "notice_id": str(row["id"]),
+                "notice_id": notice_id,
                 "title": notice.title,
                 "publish_time": notice.publish_time,
                 "region": notice.region,
@@ -154,6 +243,7 @@ def list_opportunities(
             )
             if items
             else 0.0,
+            "market": market,
         },
     }
 
@@ -173,6 +263,14 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         return None
     notice = _notice_from_row(row)
     structured = _mapping(notice.fields.get("structured_fields"))
+    intelligence = intelligence_for_notice(notice)
+    market = build_market_context(
+        [item for _notice_id, item in _recent_notices(settings, limit=500)]
+    )
+    intelligence["market_context"] = {
+        "benchmark": _market_benchmark(_notice_payload(notice), market),
+        "signals": list(market.get("signals") or [])[:3],
+    }
     return {
         "notice_id": str(row["id"]),
         "title": notice.title,
@@ -183,8 +281,141 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "source_url": notice.source_url,
         "budget": str(structured.get("budget") or ""),
         "bid_deadline": str(structured.get("bid_deadline") or ""),
-        "intelligence": intelligence_for_notice(notice),
+        "intelligence": intelligence,
     }
+
+
+def parse_budget_cny(value: object) -> float | None:
+    text = _string_value(value).replace(",", "").replace("，", "")
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(亿元|万元|元|million)?", text, re.IGNORECASE)
+    if not match:
+        return None
+    amount = float(match.group(1))
+    unit = (match.group(2) or "元").lower()
+    multiplier = 100_000_000 if unit == "亿元" else 10_000 if unit == "万元" else 1_000_000 if unit == "million" else 1
+    return amount * multiplier if amount > 0 else None
+
+
+def _recent_notices(settings: Settings, *, limit: int) -> list[tuple[str, Notice]]:
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, source_site, source_url, title, publish_time, region, purchaser,
+                   content_text, core_content, attachments_json, fields_json, created_at
+            FROM notices
+            ORDER BY publish_time DESC, created_at DESC
+            LIMIT ?
+            """,
+            (max(1, min(int(limit), 500)),),
+        ).fetchall()
+    return [(str(row["id"]), _notice_from_row(row)) for row in rows]
+
+
+def _market_entry(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[str, object]:
+    structured = _mapping(payload.get("structured_fields"))
+    evidence = _mapping(payload.get("evidence"))
+    credibility, _basis = _credibility_score(payload, evidence)
+    return {
+        "category": _primary_category(payload),
+        "budget_cny": parse_budget_cny(structured.get("budget")),
+        "purchaser": str(structured.get("purchaser") or payload.get("purchaser") or "").strip(),
+        "region": str(payload.get("region") or "").strip(),
+        "stage": _stage(structured, _as_date(as_of)),
+        "credibility": credibility,
+    }
+
+
+def _primary_category(payload: dict[str, Any]) -> str:
+    text = " ".join(
+        str(payload.get(key) or "") for key in ("title", "core_content", "content_text")
+    )
+    topic = extract_topic(text)
+    if topic.get("origin") != "category_dict":
+        return ""
+    core = topic.get("core")
+    return str(core[0]) if isinstance(core, list) and core else ""
+
+
+def _budget_stats(values: list[float]) -> dict[str, object]:
+    if not values:
+        return {
+            "sample_count": 0,
+            "median_cny": None,
+            "min_cny": None,
+            "max_cny": None,
+        }
+    return {
+        "sample_count": len(values),
+        "median_cny": round(float(median(values)), 2),
+        "min_cny": round(min(values), 2),
+        "max_cny": round(max(values), 2),
+    }
+
+
+def _market_benchmark(payload: dict[str, Any], market: dict[str, object]) -> dict[str, object]:
+    category = _primary_category(payload)
+    structured = _mapping(payload.get("structured_fields"))
+    amount = parse_budget_cny(structured.get("budget"))
+    category_map = _mapping(market.get("category_benchmarks"))
+    stats = _mapping(category_map.get(category)) if category else {}
+    sample_count = int(stats.get("sample_count") or 0)
+    median_cny = stats.get("median_cny")
+    if not category:
+        return {
+            "status": "insufficient",
+            "category": "",
+            "sample_count": 0,
+            "message": "尚未识别可比采购品类，暂不生成价格判断",
+        }
+    if sample_count < 2 or not median_cny:
+        return {
+            "status": "insufficient",
+            "category": category,
+            "sample_count": sample_count,
+            "amount_cny": amount,
+            "message": f"{category} 有效预算样本少于 2 条，暂不生成价格位置判断",
+        }
+    median_value = float(median_cny)
+    position = "unknown"
+    position_label = "当前公告缺少可换算预算"
+    if amount:
+        ratio = amount / median_value
+        if ratio < 0.8:
+            position, position_label = "below", "低于同品类历史中位数"
+        elif ratio > 1.2:
+            position, position_label = "above", "高于同品类历史中位数"
+        else:
+            position, position_label = "near", "接近同品类历史中位数"
+    return {
+        "status": "ready",
+        "category": category,
+        "sample_count": sample_count,
+        "amount_cny": amount,
+        "median_cny": median_value,
+        "min_cny": stats.get("min_cny"),
+        "max_cny": stats.get("max_cny"),
+        "position": position,
+        "message": (
+            f"{category} 可比样本 {sample_count} 条，中位数 {_format_cny(median_value)}；"
+            f"{position_label}"
+        ),
+    }
+
+
+def _counter_items(counter: Counter[str], *, limit: int = 5) -> list[dict[str, object]]:
+    return [{"name": name, "count": count} for name, count in counter.most_common(limit)]
+
+
+def _format_cny(value: object) -> str:
+    try:
+        amount = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return "待确认"
+    if amount >= 100_000_000:
+        return f"{amount / 100_000_000:.2f}".rstrip("0").rstrip(".") + " 亿元"
+    if amount >= 10_000:
+        return f"{amount / 10_000:.1f}".rstrip("0").rstrip(".") + " 万元"
+    return f"{amount:.0f} 元"
 
 
 def _with_intelligence(notice: Notice, *, as_of: datetime | date | None) -> Notice:
@@ -291,7 +522,8 @@ def _analyze(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[
             "evidence_hash": str(evidence.get("snapshot_sha256") or ""),
             "source_url": str(payload.get("source_url") or ""),
         },
-        "engine": "tendertrace_opportunity_rules_v1",
+        "evaluated_at": reference_date.isoformat(),
+        "engine": "tendertrace_opportunity_rules_v2",
     }
 
 
@@ -499,7 +731,7 @@ def _as_date(value: datetime | date | None) -> date:
         return value.date()
     if isinstance(value, date):
         return value
-    return datetime.now(timezone.utc).date()
+    return date.today()
 
 
 def _mapping(value: object) -> dict[str, Any]:

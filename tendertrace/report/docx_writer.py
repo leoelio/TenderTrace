@@ -12,7 +12,11 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from tendertrace.adapters.ccgp import Notice
-from tendertrace.opportunity import intelligence_for_notice
+from tendertrace.opportunity import (
+    build_market_context,
+    intelligence_for_notice,
+    market_benchmark_for_notice,
+)
 from tendertrace.report.naming import safe_report_filename
 
 
@@ -194,7 +198,11 @@ def _add_opportunity_summary(doc: Document, notices: list[Notice]) -> None:
     _set_table_geometry(table, [700, 750, 750, 800, 800, 1000, 4560])
 
 
-def _add_opportunity_detail(doc: Document, notice: Notice) -> None:
+def _add_opportunity_detail(
+    doc: Document,
+    notice: Notice,
+    market: dict[str, object],
+) -> None:
     intelligence = _intelligence(notice)
     _add_label_value(
         doc,
@@ -212,6 +220,8 @@ def _add_opportunity_detail(doc: Document, notice: Notice) -> None:
     )
     _add_label_value(doc, "项目目标", str(intelligence.get("project_target") or "待确认"))
     _add_label_value(doc, "建议策略", str(intelligence.get("strategy") or "待确认"))
+    benchmark = market_benchmark_for_notice(notice, market)
+    _add_label_value(doc, "市场价格位置", str(benchmark.get("message") or "样本不足"))
     risks = intelligence.get("risks")
     if isinstance(risks, list) and risks:
         _add_label_value(doc, "风险提示", "；".join(str(item) for item in risks))
@@ -224,6 +234,22 @@ def _add_opportunity_detail(doc: Document, notice: Notice) -> None:
             paragraph = doc.add_paragraph(style="List Bullet")
             run = paragraph.add_run(f"{item.get('role', '负责人')}：{item.get('action', '')}")
             _set_run_font(run)
+
+
+def _add_market_context(doc: Document, market: dict[str, object]) -> None:
+    doc.add_heading("市场研判", level=1)
+    table = doc.add_table(rows=0, cols=2)
+    table.style = "Table Grid"
+    signals = market.get("signals")
+    rows = list(signals) if isinstance(signals, list) else []
+    if not rows:
+        rows = ["当前结果不足以形成市场基准"]
+    for index, value in enumerate(rows, start=1):
+        cells = table.add_row().cells
+        _set_cell_text(cells[0], f"研判 {index}", bold=True)
+        _shade(cells[0], "F3F7FB")
+        _set_cell_text(cells[1], str(value))
+    _set_table_geometry(table, [1400, 7960])
 
 
 def _notice_from_dict(value: dict[str, Any]) -> Notice:
@@ -508,7 +534,9 @@ def write_report(
         doc.save(path)
         return path
 
+    market = build_market_context(normalized, as_of=generated_at)
     _add_opportunity_summary(doc, normalized)
+    _add_market_context(doc, market)
 
     doc.add_heading("结果总览", level=1)
     table = doc.add_table(rows=1, cols=6)
@@ -539,7 +567,7 @@ def write_report(
         _add_label_value(doc, "来源链接", notice.source_url)
         _add_label_value(doc, "采购人", notice.purchaser)
         _add_label_value(doc, "核心内容", notice.core_content)
-        _add_opportunity_detail(doc, notice)
+        _add_opportunity_detail(doc, notice, market)
         _add_structured_fields(doc, notice)
         evidence = _evidence(notice)
         if evidence:

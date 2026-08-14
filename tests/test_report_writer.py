@@ -115,6 +115,8 @@ class ReportWriterTests(unittest.TestCase):
         self.assertIn("多源覆盖：本轮尝试 2 个来源，1 个来源命中，0 个来源异常。", text)
         self.assertIn("来源覆盖与抓取健康", text)
         self.assertIn("机会优先级", text)
+        self.assertIn("市场研判", text)
+        self.assertIn("市场价格位置", text)
         self.assertIn("ccgp", table_text)
         self.assertIn("城市无结果，已放宽到省级", table_text)
         self.assertIn("标题：上海某单位服务器采购公开招标公告", text)

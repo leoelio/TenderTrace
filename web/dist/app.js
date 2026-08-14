@@ -11,6 +11,7 @@ const state = {
   memory: null,
   feishu: null,
   opportunities: [],
+  opportunitySummaryData: {},
   opportunityVisible: 20,
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
@@ -93,6 +94,7 @@ const el = {
   refreshOpportunitiesButton: document.querySelector("#refreshOpportunitiesButton"),
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
   opportunitySummary: document.querySelector("#opportunitySummary"),
+  opportunityMarket: document.querySelector("#opportunityMarket"),
   opportunityList: document.querySelector("#opportunityList"),
   opportunityFooter: document.querySelector("#opportunityFooter"),
   opportunityListHint: document.querySelector("#opportunityListHint"),
@@ -1188,6 +1190,7 @@ function renderOpportunities(payload) {
   const items = payload?.items || [];
   const summary = payload?.summary || {};
   state.opportunities = items;
+  state.opportunitySummaryData = summary;
   const visibleItems = items.slice(0, state.opportunityVisible);
   if (el.opportunitySummary) {
     const levels = summary.levels || {};
@@ -1200,6 +1203,19 @@ function renderOpportunities(payload) {
     ].join("");
   }
   if (!el.opportunityList) return;
+  if (el.opportunityMarket) {
+    const market = summary.market || {};
+    const budget = market.budget || {};
+    const purchaser = market.top_purchasers?.[0];
+    const stage = market.stage_distribution?.[0];
+    el.opportunityMarket.className = "opportunity-market";
+    el.opportunityMarket.innerHTML = [
+      marketInsight("价格样本", market.budget_sample_count || 0, `${market.budget_coverage || 0}% 预算覆盖`),
+      marketInsight("历史中位数", formatCny(budget.median_cny), `区间 ${formatCny(budget.min_cny)} - ${formatCny(budget.max_cny)}`),
+      marketInsight("重点客户", purchaser?.name || "样本不足", purchaser ? `${purchaser.count} 条关联公告` : "待补充采购人"),
+      marketInsight("主要阶段", stage?.name || "待研判", stage ? `${stage.count} / ${market.notice_count || 0} 条` : "暂无阶段样本"),
+    ].join("");
+  }
   el.opportunityList.className = items.length
     ? "opportunity-ledger-body"
     : "opportunity-ledger-body empty-state";
@@ -1247,6 +1263,18 @@ function renderOpportunities(payload) {
     el.opportunityListHint.textContent = `已展示 ${visibleItems.length} / ${items.length} 条机会`;
     el.loadMoreOpportunitiesButton.hidden = visibleItems.length >= items.length;
   }
+}
+
+function marketInsight(label, value, detail) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(detail)}</small></div>`;
+}
+
+function formatCny(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "待确认";
+  if (amount >= 100000000) return `${Number((amount / 100000000).toFixed(2))} 亿元`;
+  if (amount >= 10000) return `${Number((amount / 10000).toFixed(1))} 万元`;
+  return `${Math.round(amount)} 元`;
 }
 
 function qualityBar(label, value) {
@@ -2478,24 +2506,7 @@ function bindEvents() {
     state.opportunityVisible += 20;
     renderOpportunities({
       items: state.opportunities,
-      summary: {
-        total: state.opportunities.length,
-        levels: state.opportunities.reduce((counts, item) => {
-          const level = item.intelligence?.level || "D";
-          counts[level] = (counts[level] || 0) + 1;
-          return counts;
-        }, { A: 0, B: 0, C: 0, D: 0 }),
-        average_score: state.opportunities.length
-          ? Math.round(
-              (state.opportunities.reduce(
-                (total, item) => total + Number(item.intelligence?.score || 0),
-                0,
-              ) /
-                state.opportunities.length) *
-                10,
-            ) / 10
-          : 0,
-      },
+      summary: state.opportunitySummaryData,
     });
   });
   el.refreshMemoryButton?.addEventListener("click", () =>

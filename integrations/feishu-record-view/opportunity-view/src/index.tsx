@@ -15,6 +15,11 @@ type Intelligence = {
   project_target: string;
   strategy: string;
   market_signals: string[];
+  market_context?: {
+    benchmark?: { message?: string; sample_count?: number };
+    signals?: string[];
+    sample_scope?: { notice_count?: number; budget_sample_count?: number };
+  };
 };
 
 type RecordContext = {
@@ -138,8 +143,14 @@ function App() {
   const sourceUrl = context?.values["来源链接"] || "";
   const noticeId = context?.values["公告ID"] || "";
   const quality = intelligence?.scores || {};
+  const marketBenchmark = intelligence?.market_context?.benchmark;
+  const marketContextSignals = intelligence?.market_context?.signals || [];
   const actionCount = intelligence?.recommended_actions?.length || 0;
-  const riskCount = intelligence?.risks?.length || 0;
+  const riskCount =
+    (intelligence?.risks?.length || 0) +
+    (intelligence?.market_signals?.length || 0) +
+    marketContextSignals.length +
+    (marketBenchmark?.message ? 1 : 0);
   const statusText = useMemo(
     () => intelligence ? `${intelligence.level} 级 · ${intelligence.level_label}` : "等待研判",
     [intelligence],
@@ -166,6 +177,8 @@ function App() {
       "建议策略": intelligence.strategy,
       "跟进建议": intelligence.recommended_actions.map((item) => `${item.role}：${item.action}`).join("\n"),
       "风险提示": intelligence.risks.join("\n"),
+      "市场价格位置": marketBenchmark?.message || "样本不足",
+      "市场样本数": String(marketBenchmark?.sample_count || 0),
     };
     try {
       for (const [name, value] of Object.entries(updates)) {
@@ -246,7 +259,9 @@ function App() {
           <section>
             <div className="section-title"><strong>风险与市场信号</strong><span>{riskCount}</span></div>
             <div className="signal-list">
+              {marketBenchmark?.message && <p>{marketBenchmark.message}</p>}
               {intelligence.risks.map((item, index) => <p className="risk" key={`risk-${index}`}>{item}</p>)}
+              {marketContextSignals.map((item, index) => <p key={`context-${index}`}>{item}</p>)}
               {intelligence.market_signals.map((item, index) => <p key={`signal-${index}`}>{item}</p>)}
             </div>
           </section>

@@ -36,6 +36,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书协同：Word 报告、定时订阅和用户周报可发送到默认会话，发送结果写入本地交付账本。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
+- 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
 - 飞书记录视图：指定的记录视图插件可在多维表格内读取当前线索、调用统一研判 API 并回写评分与策略。
 - 清洗去重：正文噪声清理、URL 规范化、项目编号提取、SimHash 聚类。
 - 附件抽取：支持受限下载并抽取 PDF、DOCX、XLSX 正文片段。
@@ -386,7 +387,7 @@ docs/evaluation/gold_benchmark.json
 当前验证基线：
 
 - Current stage: P29
-- 157 unit tests pass, including 421 subtests.
+- 159 unit tests pass, including 421 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -429,6 +430,7 @@ The current architecture is local-first: background ingestion continuously store
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
+- Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
 - A Feishu record-view extension that uses the same TenderTrace analysis API and writes decisions back to the current record.
 - Text cleaning, URL canonicalization, project-number extraction, SimHash clustering.
 - Bounded attachment download and extraction for PDF, DOCX, and XLSX.
@@ -734,7 +736,7 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 Current verified baseline:
 
 - Current stage: P29
-- 157 unit tests pass, including 421 subtests.
+- 159 unit tests pass, including 421 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

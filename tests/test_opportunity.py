@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 import tempfile
@@ -8,7 +9,10 @@ from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
 from tendertrace.opportunity import (
     analyze_opportunity_payload,
+    build_market_context,
     enrich_opportunity_intelligence,
+    market_benchmark_for_notice,
+    parse_budget_cny,
     list_opportunities,
 )
 
@@ -28,7 +32,30 @@ class OpportunityIntelligenceTests(unittest.TestCase):
         self.assertGreaterEqual(intelligence["scores"]["credibility"], 80)
         self.assertEqual(intelligence["stage"], "机会确认")
         self.assertTrue(intelligence["recommended_actions"])
+        self.assertEqual(intelligence["evaluated_at"], "2026-08-15")
         self.assertEqual(result.stats["opportunity_analyzed"], 1)
+
+    def test_budget_normalization_supports_chinese_and_english_units(self) -> None:
+        self.assertEqual(parse_budget_cny("预算金额 120 万元"), 1_200_000)
+        self.assertEqual(parse_budget_cny("2 million CNY"), 2_000_000)
+        self.assertEqual(parse_budget_cny("最高限价 1,280,000元"), 1_280_000)
+
+    def test_market_context_uses_comparable_category_samples(self) -> None:
+        notices = [
+            _market_notice("n1", "100万元", "客户甲"),
+            _market_notice("n2", "120万元", "客户甲"),
+            _market_notice("n3", "300万元", "客户乙"),
+        ]
+
+        market = build_market_context(notices, as_of=datetime(2026, 8, 15, 10, 0))
+        benchmark = market_benchmark_for_notice(notices[2], market)
+
+        self.assertEqual(market["budget_sample_count"], 3)
+        self.assertEqual(market["budget"]["median_cny"], 1_200_000)
+        self.assertEqual(market["top_purchasers"][0], {"name": "客户甲", "count": 2})
+        self.assertEqual(benchmark["status"], "ready")
+        self.assertEqual(benchmark["position"], "above")
+        self.assertIn("可比样本 3 条", benchmark["message"])
 
     def test_missing_evidence_is_exposed_instead_of_hidden(self) -> None:
         intelligence = analyze_opportunity_payload(
@@ -75,6 +102,7 @@ class OpportunityIntelligenceTests(unittest.TestCase):
             payload = list_opportunities(settings, limit=10)
 
         self.assertEqual(payload["summary"]["total"], 1)
+        self.assertEqual(payload["summary"]["market"]["notice_count"], 1)
         self.assertEqual(payload["items"][0]["notice_id"], "ccgp:n1")
         self.assertTrue(payload["items"][0]["intelligence"]["project_target"])
 
@@ -106,6 +134,20 @@ def _notice() -> Notice:
                 "snapshot_sha256": "a" * 64,
             },
         },
+    )
+
+
+def _market_notice(notice_id: str, budget: str, purchaser: str) -> Notice:
+    notice = _notice()
+    structured = dict(notice.fields["structured_fields"])
+    structured["budget"] = budget
+    structured["purchaser"] = purchaser
+    return replace(
+        notice,
+        id=notice_id,
+        title=f"{purchaser}服务器采购项目",
+        purchaser=purchaser,
+        fields={**notice.fields, "structured_fields": structured},
     )
 
 

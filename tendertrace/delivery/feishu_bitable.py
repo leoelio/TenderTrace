@@ -40,6 +40,8 @@ REQUIRED_FIELDS = (
     "建议策略",
     "跟进建议",
     "风险提示",
+    "市场价格位置",
+    "市场样本数",
 )
 
 
@@ -387,6 +389,16 @@ def _record_fields(
         else {}
     )
     scores = intelligence.get("scores") if isinstance(intelligence.get("scores"), dict) else {}
+    market_context = (
+        intelligence.get("market_context")
+        if isinstance(intelligence.get("market_context"), dict)
+        else {}
+    )
+    benchmark = (
+        market_context.get("benchmark")
+        if isinstance(market_context.get("benchmark"), dict)
+        else {}
+    )
     cluster_key = _cluster_key(notice)
     topic = bidql.get("topic") if isinstance(bidql.get("topic"), dict) else {}
     keywords = topic.get("core") if isinstance(topic.get("core"), list) else []
@@ -418,6 +430,8 @@ def _record_fields(
         "建议策略": str(intelligence.get("strategy") or ""),
         "跟进建议": "\n".join(_action_texts(intelligence)),
         "风险提示": "\n".join(str(item) for item in intelligence.get("risks") or []),
+        "市场价格位置": str(benchmark.get("message") or "样本不足"),
+        "市场样本数": str(benchmark.get("sample_count") or 0),
     }
 
 
@@ -436,6 +450,8 @@ def _update_fields(row: dict[str, object]) -> dict[str, object]:
         "建议策略": row["建议策略"],
         "跟进建议": row["跟进建议"],
         "风险提示": row["风险提示"],
+        "市场价格位置": row["市场价格位置"],
+        "市场样本数": row["市场样本数"],
     }
 
 
