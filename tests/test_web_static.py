@@ -11,6 +11,12 @@ class WebStaticTests(unittest.TestCase):
         feishu_view = Path(
             "integrations/feishu-record-view/opportunity-view/src/index.tsx"
         ).read_text(encoding="utf-8")
+        feishu_webpack = Path(
+            "integrations/feishu-record-view/opportunity-view/webpack.config.js"
+        ).read_text(encoding="utf-8")
+        feishu_package = Path(
+            "integrations/feishu-record-view/opportunity-view/package.json"
+        ).read_text(encoding="utf-8")
 
         self.assertIn('id="runForm"', html)
         self.assertIn("/api/runs", js)
@@ -32,6 +38,10 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("onSelectionChange", feishu_view)
         self.assertIn('"竞争情报"', feishu_view)
         self.assertIn('"需求覆盖率"', feishu_view)
+        self.assertIn("new BitableAppWebpackPlugin({ open: false })", feishu_webpack)
+        self.assertIn("process.env.NODE_ENV = argv.mode", feishu_webpack)
+        self.assertNotIn('argv.mode === "development"', feishu_webpack)
+        self.assertIn("opdev upload ./dist -t block", feishu_package)
         self.assertIn("/api/integrations/feishu/receiver", js)
         self.assertIn("/send-feishu", js)
         self.assertIn("/api/traces/", js)
