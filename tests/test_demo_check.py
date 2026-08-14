@@ -75,6 +75,23 @@ class DemoCheckTests(unittest.TestCase):
         self.assertIn("trace_flow", failed)
         self.assertIn("subscription_incremental", failed)
 
+    def test_demo_check_resolves_migrated_output_by_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = Settings.load(root)
+            init_db(settings)
+            report_path = _write_report(settings.outputs_dir / "迁移报告_202607061301.docx")
+            settings.outbox_dir.mkdir(parents=True, exist_ok=True)
+            outbox_path = settings.outbox_dir / report_path.name
+            outbox_path.write_bytes(report_path.read_bytes())
+            stale_path = Path("D:/old-workspace/outputs") / report_path.name
+            _insert_run(settings, "run-migrated", "迁移后的查询", stale_path)
+
+            report = run_demo_check(settings)
+
+        checks = {check.name: check for check in report.checks}
+        self.assertNotEqual(checks["word_outbox"].status, "fail")
+
 
 def _write_report(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)

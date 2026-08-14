@@ -64,7 +64,7 @@ def run_demo_check(settings: Settings) -> DemoEvidenceReport:
         _check_model(settings, evidence),
         _check_sources(settings, evidence),
         _check_finished_runs(evidence),
-        _check_word_outbox(evidence),
+        _check_word_outbox(settings, evidence),
         _check_trace_flow(evidence),
         _check_subscription_incremental(evidence),
         _check_video_file(settings, evidence),
@@ -225,7 +225,7 @@ def _check_finished_runs(evidence: dict[str, Any]) -> DemoCheck:
     return DemoCheck("finished_runs", "pass", f"{run_count} finished runs, {query_count} distinct queries")
 
 
-def _check_word_outbox(evidence: dict[str, Any]) -> DemoCheck:
+def _check_word_outbox(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
     output_count = len(evidence["outputs_docx"])
     outbox_count = len(evidence["outbox_docx"])
     latest = evidence.get("latest_finished_run") or {}
@@ -236,7 +236,10 @@ def _check_word_outbox(evidence: dict[str, Any]) -> DemoCheck:
         return DemoCheck("word_outbox", "fail", "latest finished run has no output_docx_path")
     path = Path(path_raw)
     if not path.exists():
-        return DemoCheck("word_outbox", "fail", f"latest output missing: {path.name}")
+        migrated_path = settings.outputs_dir / path.name
+        if not migrated_path.exists():
+            return DemoCheck("word_outbox", "fail", f"latest output missing: {path.name}")
+        path = migrated_path
     missing = _missing_report_terms(path)
     if missing:
         return DemoCheck("word_outbox", "warn", f"{path.name} missing visible terms: {', '.join(missing)}")
