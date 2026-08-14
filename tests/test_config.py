@@ -110,6 +110,23 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(summary["feishu_app_secret_configured"])
         self.assertNotIn("secret-feishu-value", str(summary))
 
+    def test_bitable_reuses_message_app_credentials_when_not_overridden(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "FEISHU_ENABLED=true\n"
+                "FEISHU_APP_ID=cli_shared\n"
+                "FEISHU_APP_SECRET=shared-secret\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+            secret = settings.feishu_app_secret()
+        summary = settings.safe_summary()
+        self.assertEqual(settings.feishu_app_id, "cli_shared")
+        self.assertEqual(secret, "shared-secret")
+        self.assertTrue(summary["feishu_app_secret_configured"])
+        self.assertNotIn("shared-secret", str(summary))
+
     def test_env_local_can_configure_api_token_without_exposing_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

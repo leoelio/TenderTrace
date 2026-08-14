@@ -149,6 +149,7 @@ TENDERTRACE_SMTP_TO=
 TENDERTRACE_SMTP_USE_TLS=true
 
 # 可选飞书多维表格台账。启用前把 feishu_bitable 加入 TENDERTRACE_DELIVERY_CHANNELS。
+# 未单独配置 App ID/Secret 时，会自动复用下方 FEISHU_APP_ID/FEISHU_APP_SECRET。
 TENDERTRACE_FEISHU_APP_ID=
 TENDERTRACE_FEISHU_APP_SECRET=
 TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
@@ -623,6 +624,8 @@ python -m tendertrace embed-notices
 ## Feishu Integration
 
 Feishu integration is disabled by default. After creating a custom Feishu app and enabling bot capability, put `FEISHU_APP_ID` and `FEISHU_APP_SECRET` in `.env.local`, then set `FEISHU_ENABLED=true`. Never commit real credentials to `.env.example`, README, or source code.
+
+The Bitable integration reuses `FEISHU_APP_ID` and `FEISHU_APP_SECRET` by default. Set `TENDERTRACE_FEISHU_APP_ID` and `TENDERTRACE_FEISHU_APP_SECRET` only when Bitable uses a separate app.
 
 Available Web APIs:
 

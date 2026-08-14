@@ -170,9 +170,6 @@ class Settings:
             "TENDERTRACE_MODEL_REQUEST_TIMEOUT",
         )
         smtp_password = _first_value("TENDERTRACE_SMTP_PASSWORD", env_files, "")
-        feishu_bitable_app_secret = _first_value(
-            "TENDERTRACE_FEISHU_APP_SECRET", env_files, ""
-        )
         public_base_url = _first_value(
             "TENDERTRACE_PUBLIC_BASE_URL",
             env_files,
@@ -187,6 +184,12 @@ class Settings:
         feishu_enabled = _parse_bool(_first_value("FEISHU_ENABLED", env_files, "false"))
         feishu_message_app_id = _first_value("FEISHU_APP_ID", env_files, "")
         feishu_message_app_secret = _first_value("FEISHU_APP_SECRET", env_files, "")
+        feishu_bitable_app_id = _first_value(
+            "TENDERTRACE_FEISHU_APP_ID", env_files, feishu_message_app_id
+        )
+        feishu_bitable_app_secret = _first_value(
+            "TENDERTRACE_FEISHU_APP_SECRET", env_files, feishu_message_app_secret
+        )
         if feishu_enabled and (
             not _bool_secret_present(feishu_message_app_id)
             or not _bool_secret_present(feishu_message_app_secret)
@@ -235,7 +238,7 @@ class Settings:
                 _first_value("TENDERTRACE_SMTP_TIMEOUT", env_files, "15"),
                 "TENDERTRACE_SMTP_TIMEOUT",
             ),
-            feishu_app_id=_first_value("TENDERTRACE_FEISHU_APP_ID", env_files, ""),
+            feishu_app_id=feishu_bitable_app_id,
             feishu_app_secret_present=_bool_secret_present(feishu_bitable_app_secret),
             feishu_bitable_app_token=_first_value(
                 "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN",
@@ -428,7 +431,11 @@ class Settings:
             _read_env_file(self.workspace_root / ".env.local"),
             _read_env_file(self.workspace_root / ".env"),
         ]
-        return _first_value("TENDERTRACE_FEISHU_APP_SECRET", env_files, "")
+        return _first_value(
+            "TENDERTRACE_FEISHU_APP_SECRET",
+            env_files,
+            _first_value("FEISHU_APP_SECRET", env_files, ""),
+        )
 
     def api_token(self) -> str:
         env_files = [
