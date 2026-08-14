@@ -95,6 +95,7 @@ const el = {
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
   opportunitySummary: document.querySelector("#opportunitySummary"),
   opportunityMarket: document.querySelector("#opportunityMarket"),
+  openFeishuBitableButton: document.querySelector("#openFeishuBitableButton"),
   opportunityList: document.querySelector("#opportunityList"),
   opportunityFooter: document.querySelector("#opportunityFooter"),
   opportunityListHint: document.querySelector("#opportunityListHint"),
@@ -1560,8 +1561,11 @@ function renderFeishuOverview(payload) {
     .map(
       ([name, feature, detail]) => `
         <div class="integration-row">
-          <div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(detail)}</span></div>
-          <span class="badge badge-${feature?.ready ? "pass" : "warn"}">${feature?.ready ? "可用" : "待配置"}</span>
+          <div class="integration-copy"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(detail)}</span></div>
+          <div class="integration-actions">
+            ${feature?.url ? `<a class="text-link" href="${escapeHtml(feature.url)}" target="_blank" rel="noreferrer">打开</a>` : ""}
+            <span class="badge badge-${feature?.ready ? "pass" : "warn"}">${feature?.ready ? "可用" : "待配置"}</span>
+          </div>
         </div>
       `,
     )
@@ -1760,8 +1764,13 @@ async function refreshFeishu() {
   if (payload.features?.bitable_sync) {
     payload.features.bitable_sync.ready = bitableCheck.status === "pass";
     payload.features.bitable_sync.detail = bitableCheck.table_name
-      ? `${bitableCheck.table_name} · ${bitableCheck.field_count || 0} 个字段`
+      ? `${bitableCheck.table_name} · ${bitableCheck.field_count || 0} 个字段 · ${bitableCheck.record_count || 0} 条线索`
       : bitableCheck.message;
+    if (el.openFeishuBitableButton) {
+      const url = payload.features.bitable_sync.url || "";
+      el.openFeishuBitableButton.hidden = !url;
+      if (url) el.openFeishuBitableButton.href = url;
+    }
   }
   renderFeishuOverview(payload);
   return payload;

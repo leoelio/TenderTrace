@@ -187,7 +187,10 @@ def create_app():
             "features": {
                 "report_delivery": {"ready": report_ready},
                 "weekly_digest": {"ready": report_ready},
-                "bitable_sync": {"ready": bitable_ready},
+                "bitable_sync": {
+                    "ready": bitable_ready,
+                    "url": settings.feishu_bitable_base_url,
+                },
                 "agent_service": {"ready": bool(agent["configured"])},
             },
             "issues": issues,

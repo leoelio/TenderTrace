@@ -152,6 +152,7 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(result.status, "pass")
         self.assertEqual(result.table_id, "tbl_test")
         self.assertEqual(result.table_name, "招标机会")
+        self.assertEqual(result.record_count, 1)
         self.assertEqual(result.missing_fields, ())
 
     def test_check_can_create_missing_fields_when_requested(self) -> None:

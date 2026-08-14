@@ -86,6 +86,7 @@ class Settings:
     feishu_app_secret_present: bool
     feishu_bitable_app_token: str
     feishu_bitable_table_id: str
+    feishu_bitable_base_url: str
     feishu_timeout: float
     public_base_url: str
     db_path: Path
@@ -250,6 +251,11 @@ class Settings:
                 env_files,
                 "",
             ),
+            feishu_bitable_base_url=_first_value(
+                "TENDERTRACE_FEISHU_BITABLE_BASE_URL",
+                env_files,
+                "",
+            ),
             feishu_timeout=_parse_positive_float(
                 _first_value("TENDERTRACE_FEISHU_TIMEOUT", env_files, "20"),
                 "TENDERTRACE_FEISHU_TIMEOUT",
@@ -372,6 +378,7 @@ class Settings:
             "feishu_app_secret_configured": self.feishu_app_secret_present,
             "feishu_bitable_app_token_configured": bool(self.feishu_bitable_app_token),
             "feishu_bitable_table_id": self.feishu_bitable_table_id,
+            "feishu_bitable_base_url": self.feishu_bitable_base_url,
             "feishu_timeout": self.feishu_timeout,
             "public_base_url": self.public_base_url,
             "db_path": str(self.db_path),

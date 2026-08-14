@@ -18,6 +18,8 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("/api/memory/events", js)
         self.assertIn("/api/memory/weekly", js)
         self.assertIn("/api/integrations/feishu/overview", js)
+        self.assertIn('id="openFeishuBitableButton"', html)
+        self.assertIn("bitableCheck.record_count", js)
         self.assertIn("/api/integrations/feishu/receiver", js)
         self.assertIn("/send-feishu", js)
         self.assertIn("/api/traces/", js)

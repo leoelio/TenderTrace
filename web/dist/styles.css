@@ -2747,6 +2747,15 @@ body.theme-dark .smart-card strong {
   background: var(--surface);
 }
 
+.opportunity-panel .panel-heading .action-group {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.opportunity-panel #opportunityLevelFilter {
+  width: 180px;
+}
+
 .opportunity-market > div {
   min-width: 0;
   padding: 13px 18px;
@@ -2993,6 +3002,21 @@ body.theme-dark .grade-c {
 }
 
 @media (max-width: 700px) {
+  .opportunity-panel .panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .opportunity-panel .panel-heading .action-group {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
+  .opportunity-panel #opportunityLevelFilter {
+    width: 100%;
+  }
+
   .opportunity-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3273,10 +3297,17 @@ button.smart-card:hover {
   display: block;
 }
 
-.integration-row div > span {
+.integration-copy > span {
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.integration-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
 .integration-issues {

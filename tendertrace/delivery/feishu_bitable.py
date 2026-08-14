@@ -70,6 +70,7 @@ class FeishuBitableCheckResult:
     table_id: str = ""
     table_name: str = ""
     field_count: int = 0
+    record_count: int = 0
     missing_fields: tuple[str, ...] = ()
     created_fields: tuple[str, ...] = ()
 
@@ -94,6 +95,7 @@ def check_feishu_bitable(
             token = _tenant_access_token(settings, client)
             table_name = _table_name(settings, client, token)
             fields = _list_fields(settings, client, token)
+            record_count = _record_count(settings, client, token)
             missing_fields = tuple(field for field in REQUIRED_FIELDS if field not in fields)
             created_fields: tuple[str, ...] = ()
             if ensure_fields and missing_fields:
@@ -108,6 +110,7 @@ def check_feishu_bitable(
                         table_id=settings.feishu_bitable_table_id,
                         table_name=table_name,
                         field_count=len(fields),
+                        record_count=record_count,
                         missing_fields=missing_fields,
                         created_fields=tuple(created),
                     )
@@ -128,6 +131,7 @@ def check_feishu_bitable(
         table_id=settings.feishu_bitable_table_id,
         table_name=table_name,
         field_count=len(fields),
+        record_count=record_count,
         missing_fields=missing_fields,
         created_fields=created_fields,
     )
@@ -278,6 +282,31 @@ def _list_fields(settings: Settings, client: httpx.Client, token: str) -> dict[s
         for item in _items(data)
         if item.get("field_name")
     }
+
+
+def _record_count(settings: Settings, client: httpx.Client, token: str) -> int:
+    count = 0
+    page_token = ""
+    while True:
+        params = {"page_size": 500}
+        if page_token:
+            params["page_token"] = page_token
+        data = _request_json(
+            client.get(
+                _table_url(settings, "records"),
+                params=params,
+                headers=_auth_header(token),
+            )
+        )
+        for item in _items(data):
+            fields = item.get("fields") if isinstance(item.get("fields"), dict) else {}
+            if _string_value(fields.get("项目指纹")) or _string_value(fields.get("公告ID")):
+                count += 1
+        if not data.get("has_more"):
+            return count
+        page_token = str(data.get("page_token") or "")
+        if not page_token:
+            return count
 
 
 def _create_text_field(

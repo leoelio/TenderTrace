@@ -159,6 +159,7 @@ TENDERTRACE_FEISHU_APP_ID=
 TENDERTRACE_FEISHU_APP_SECRET=
 TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
 TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
+TENDERTRACE_FEISHU_BITABLE_BASE_URL=
 TENDERTRACE_PUBLIC_BASE_URL=http://127.0.0.1:8000
 TENDERTRACE_API_TOKEN=
 
@@ -307,9 +308,12 @@ python -m tendertrace embed-notices
 ```env
 TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
 TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
+TENDERTRACE_FEISHU_BITABLE_BASE_URL=
 ```
 
 记录视图插件位于 `integrations/feishu-record-view/`，已配置 App ID 与 BlockTypeID，未包含任何密钥。安装官方 CLI 后先执行 `opdev login`，再进入 `opportunity-view` 执行 `npm install` 和 `npm run start`。本地调试必须在 `block.json` 增加实际 Base 文档 URL；生产构建可直接执行 `npm run build`。插件调用 TenderTrace `/api/opportunities/analyze`，并可把研判结果回写当前记录或发送到默认飞书会话。
+
+配置 `TENDERTRACE_FEISHU_BITABLE_BASE_URL` 后，机会情报页和设置页会提供飞书台账直达入口；连接中心展示的线索数仅统计含项目指纹或公告 ID 的 TenderTrace 业务记录，不包含飞书默认空白行。
 
 ## Web 工作台
 
@@ -659,6 +663,8 @@ The Feishu connection center can select a default chat from the bot's visible ch
 Server-side Bitable sync also requires the target Base document's `app_token` and table `table_id`. Extract both from the actual Base URL; neither the application App ID nor the record-view `blk_...` BlockTypeID can replace them.
 
 The record-view extension lives in `integrations/feishu-record-view/`. Its App ID and BlockTypeID are committed, while credentials are not. Run `opdev login`, then `npm install` and `npm run start` under `opportunity-view`. Local debugging requires an actual Base document URL in `block.json`; production assets build with `npm run build`. The extension calls `/api/opportunities/analyze`, writes scores and strategy back to the current row, and can send the opportunity digest to the configured Feishu chat.
+
+When `TENDERTRACE_FEISHU_BITABLE_BASE_URL` is configured, the Opportunity Intelligence and Settings views expose a direct Base link. The synced lead count excludes Feishu's default blank rows and counts only TenderTrace records with a project fingerprint or notice ID.
 
 ## Web Workbench
 

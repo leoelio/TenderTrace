@@ -95,6 +95,7 @@ class SettingsTests(unittest.TestCase):
                 "TENDERTRACE_FEISHU_APP_SECRET=secret-feishu-value\n"
                 "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=base_token\n"
                 "TENDERTRACE_FEISHU_BITABLE_TABLE_ID=tbl_test\n"
+                "TENDERTRACE_FEISHU_BITABLE_BASE_URL=https://tenant.feishu.cn/base/base_token\n"
                 "TENDERTRACE_FEISHU_TIMEOUT=9\n"
                 "TENDERTRACE_PUBLIC_BASE_URL=https://tt.example.com\n",
                 encoding="utf-8",
@@ -105,9 +106,17 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.feishu_app_id, "cli_test")
         self.assertEqual(settings.feishu_bitable_app_token, "base_token")
         self.assertEqual(settings.feishu_bitable_table_id, "tbl_test")
+        self.assertEqual(
+            settings.feishu_bitable_base_url,
+            "https://tenant.feishu.cn/base/base_token",
+        )
         self.assertEqual(settings.feishu_timeout, 9)
         self.assertEqual(settings.public_base_url, "https://tt.example.com")
         self.assertTrue(summary["feishu_app_secret_configured"])
+        self.assertEqual(
+            summary["feishu_bitable_base_url"],
+            "https://tenant.feishu.cn/base/base_token",
+        )
         self.assertNotIn("secret-feishu-value", str(summary))
 
     def test_bitable_reuses_message_app_credentials_when_not_overridden(self) -> None:
