@@ -355,10 +355,13 @@ def _topic_terms(bidql: dict[str, Any]) -> list[str]:
 
 
 def _fts_query(terms: list[str]) -> str:
-    tokens = []
+    groups: list[str] = []
     for term in terms:
-        tokens.extend(segment_for_fts(term).split())
-    return " OR ".join(f'"{token.replace(chr(34), chr(34) + chr(34))}"' for token in _dedupe(tokens))
+        tokens = _dedupe(segment_for_fts(term).split())
+        quoted = [f'"{token.replace(chr(34), chr(34) + chr(34))}"' for token in tokens]
+        if quoted:
+            groups.append(f"({' AND '.join(quoted)})" if len(quoted) > 1 else quoted[0])
+    return " OR ".join(_dedupe(groups))
 
 
 def _notice_from_row(row: sqlite3.Row) -> Notice:

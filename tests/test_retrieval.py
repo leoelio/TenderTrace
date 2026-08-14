@@ -53,6 +53,28 @@ class RetrievalTests(unittest.TestCase):
 
         self.assertEqual(result.notices[0].id, "title-hit")
 
+    def test_fts_does_not_match_generic_service_tokens_for_server_query(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_notice(
+                settings,
+                notice_id="ccgp:server-hit",
+                title="上海存储服务器扩容项目公开招标公告",
+                content_text="采购机架式服务器及配套存储设备。",
+            )
+            _insert_notice(
+                settings,
+                notice_id="ccgp:medical-noise",
+                title="上海社区卫生服务中心医疗设备采购公告",
+                content_text="采购医用诊断设备和呼吸机。",
+            )
+
+            bidql = compile_intent("最近1个月上海服务器招标信息都有哪些", now=NOW)
+            result = search_notices(settings, bidql, max_results=5)
+
+        self.assertEqual([notice.id for notice in result.notices], ["server-hit"])
+
 
 def _insert_notice(
     settings: Settings,
