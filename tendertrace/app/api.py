@@ -12,6 +12,12 @@ from zoneinfo import ZoneInfo
 from tendertrace.config import Settings
 from tendertrace.db import connection, database_health, init_db
 from tendertrace.evaluation import build_agent_evaluation_report
+from tendertrace.integrations.feishu import (
+    FeishuClient,
+    FeishuError,
+    feishu_agent_status,
+    feishu_status,
+)
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
@@ -110,6 +116,36 @@ def create_app():
     @app.get("/api/model/doctor")
     def model_doctor_api(live: bool = False) -> dict[str, object]:
         return model_doctor(settings, live=live).to_dict()
+
+    @app.get("/api/integrations/feishu/status")
+    def feishu_integration_status() -> dict[str, object]:
+        return feishu_status(settings).to_dict()
+
+    @app.get("/api/integrations/feishu/agent/status")
+    def feishu_agent_integration_status() -> dict[str, object]:
+        return feishu_agent_status(settings).to_dict()
+
+    @app.get("/api/integrations/feishu/chats")
+    def feishu_chats(page_size: int = 20, page_token: str | None = None) -> dict[str, object]:
+        try:
+            return FeishuClient(settings).list_chats(page_size=page_size, page_token=page_token)
+        except FeishuError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/integrations/feishu/test-message")
+    def feishu_test_message(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        text = str(request.get("text") or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="text is required")
+        try:
+            result = FeishuClient(settings).send_text(
+                text,
+                receive_id=_optional_string(request.get("receive_id")),
+                receive_id_type=_optional_string(request.get("receive_id_type")),
+            )
+        except FeishuError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "sent", "response": result}
 
     @app.post("/api/intent/parse")
     def parse_intent(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -593,6 +629,12 @@ def _string_list(value: object) -> list[str]:
     if isinstance(value, str):
         return [part.strip() for part in value.split(",") if part.strip()]
     return []
+
+
+def _optional_string(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    return str(value).strip() or None
 
 
 def _model_strategy_from_request(request: dict[str, object]) -> str | None:

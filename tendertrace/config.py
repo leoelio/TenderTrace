@@ -103,6 +103,16 @@ class Settings:
     openai_base_url: str
     openai_model: str
     openai_api_style: OpenAIAPIStyle
+    feishu_enabled: bool
+    feishu_base_url: str
+    feishu_message_app_id_present: bool
+    feishu_message_app_secret_present: bool
+    feishu_default_receive_id: str
+    feishu_default_receive_id_type: str
+    feishu_agent_enabled: bool
+    feishu_agent_base_url: str
+    feishu_agent_app_id_present: bool
+    feishu_agent_app_secret_present: bool
     scheduler_enabled: bool
     ingest_enabled: bool
     ingest_cron: str
@@ -160,7 +170,9 @@ class Settings:
             "TENDERTRACE_MODEL_REQUEST_TIMEOUT",
         )
         smtp_password = _first_value("TENDERTRACE_SMTP_PASSWORD", env_files, "")
-        feishu_app_secret = _first_value("TENDERTRACE_FEISHU_APP_SECRET", env_files, "")
+        feishu_bitable_app_secret = _first_value(
+            "TENDERTRACE_FEISHU_APP_SECRET", env_files, ""
+        )
         public_base_url = _first_value(
             "TENDERTRACE_PUBLIC_BASE_URL",
             env_files,
@@ -172,6 +184,33 @@ class Settings:
             api_token
         ):
             raise ConfigError("TENDERTRACE_API_TOKEN is required when TENDERTRACE_APP_ENV=prod")
+        feishu_enabled = _parse_bool(_first_value("FEISHU_ENABLED", env_files, "false"))
+        feishu_message_app_id = _first_value("FEISHU_APP_ID", env_files, "")
+        feishu_message_app_secret = _first_value("FEISHU_APP_SECRET", env_files, "")
+        if feishu_enabled and (
+            not _bool_secret_present(feishu_message_app_id)
+            or not _bool_secret_present(feishu_message_app_secret)
+        ):
+            raise ConfigError("FEISHU_ENABLED=true requires FEISHU_APP_ID and FEISHU_APP_SECRET")
+        feishu_receive_id_type = _first_value(
+            "FEISHU_DEFAULT_RECEIVE_ID_TYPE",
+            env_files,
+            "chat_id",
+        ).strip() or "chat_id"
+        _validate_feishu_receive_id_type(feishu_receive_id_type)
+        feishu_agent_enabled = _parse_bool(
+            _first_value("FEISHU_AGENT_ENABLED", env_files, "false")
+        )
+        feishu_agent_app_id = _first_value("FEISHU_AGENT_APP_ID", env_files, "")
+        feishu_agent_app_secret = _first_value("FEISHU_AGENT_APP_SECRET", env_files, "")
+        if feishu_agent_enabled and (
+            not _bool_secret_present(feishu_agent_app_id)
+            or not _bool_secret_present(feishu_agent_app_secret)
+        ):
+            raise ConfigError(
+                "FEISHU_AGENT_ENABLED=true requires FEISHU_AGENT_APP_ID and "
+                "FEISHU_AGENT_APP_SECRET"
+            )
 
         return cls(
             workspace_root=root,
@@ -197,7 +236,7 @@ class Settings:
                 "TENDERTRACE_SMTP_TIMEOUT",
             ),
             feishu_app_id=_first_value("TENDERTRACE_FEISHU_APP_ID", env_files, ""),
-            feishu_app_secret_present=_bool_secret_present(feishu_app_secret),
+            feishu_app_secret_present=_bool_secret_present(feishu_bitable_app_secret),
             feishu_bitable_app_token=_first_value(
                 "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN",
                 env_files,
@@ -244,6 +283,24 @@ class Settings:
             openai_base_url=_first_value("OPENAI_BASE_URL", env_files, "https://api.openai.com/v1"),
             openai_model=openai_model,
             openai_api_style=openai_api_style,
+            feishu_enabled=feishu_enabled,
+            feishu_base_url=_first_value(
+                "FEISHU_BASE_URL",
+                env_files,
+                "https://open.feishu.cn",
+            ).rstrip("/"),
+            feishu_message_app_id_present=_bool_secret_present(feishu_message_app_id),
+            feishu_message_app_secret_present=_bool_secret_present(feishu_message_app_secret),
+            feishu_default_receive_id=_first_value("FEISHU_DEFAULT_RECEIVE_ID", env_files, ""),
+            feishu_default_receive_id_type=feishu_receive_id_type,
+            feishu_agent_enabled=feishu_agent_enabled,
+            feishu_agent_base_url=_first_value(
+                "FEISHU_AGENT_BASE_URL",
+                env_files,
+                "https://open.feishu.cn",
+            ).rstrip("/"),
+            feishu_agent_app_id_present=_bool_secret_present(feishu_agent_app_id),
+            feishu_agent_app_secret_present=_bool_secret_present(feishu_agent_app_secret),
             scheduler_enabled=_parse_bool(
                 _first_value("TENDERTRACE_SCHEDULER_ENABLED", env_files, "true")
             ),
@@ -329,6 +386,16 @@ class Settings:
             "openai_base_url": self.openai_base_url,
             "openai_model": self.openai_model,
             "openai_api_style": self.openai_api_style.value,
+            "feishu_enabled": self.feishu_enabled,
+            "feishu_base_url": self.feishu_base_url,
+            "feishu_message_app_id_configured": self.feishu_message_app_id_present,
+            "feishu_message_app_secret_configured": self.feishu_message_app_secret_present,
+            "feishu_default_receive_id_configured": bool(self.feishu_default_receive_id),
+            "feishu_default_receive_id_type": self.feishu_default_receive_id_type,
+            "feishu_agent_enabled": self.feishu_agent_enabled,
+            "feishu_agent_base_url": self.feishu_agent_base_url,
+            "feishu_agent_app_id_configured": self.feishu_agent_app_id_present,
+            "feishu_agent_app_secret_configured": self.feishu_agent_app_secret_present,
             "scheduler_enabled": self.scheduler_enabled,
             "ingest_enabled": self.ingest_enabled,
             "ingest_cron": self.ingest_cron,
@@ -370,6 +437,34 @@ class Settings:
         ]
         return _first_value("TENDERTRACE_API_TOKEN", env_files, "")
 
+    def feishu_message_app_id(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("FEISHU_APP_ID", env_files, "")
+
+    def feishu_message_app_secret(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("FEISHU_APP_SECRET", env_files, "")
+
+    def feishu_agent_app_id(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("FEISHU_AGENT_APP_ID", env_files, "")
+
+    def feishu_agent_app_secret(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("FEISHU_AGENT_APP_SECRET", env_files, "")
+
 
 def _parse_positive_int(value: str, name: str) -> int:
     try:
@@ -389,3 +484,12 @@ def _parse_positive_float(value: str, name: str) -> float:
     if parsed <= 0:
         raise ConfigError(f"{name} must be positive")
     return parsed
+
+
+def _validate_feishu_receive_id_type(value: str) -> None:
+    allowed = {"chat_id", "open_id", "user_id", "union_id", "email"}
+    if value not in allowed:
+        raise ConfigError(
+            "FEISHU_DEFAULT_RECEIVE_ID_TYPE must be one of: "
+            + ", ".join(sorted(allowed))
+        )

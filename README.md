@@ -154,6 +154,14 @@ TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
 TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
 TENDERTRACE_PUBLIC_BASE_URL=http://127.0.0.1:8000
 TENDERTRACE_API_TOKEN=
+
+# 可选飞书消息/群聊接口。
+FEISHU_ENABLED=false
+FEISHU_BASE_URL=https://open.feishu.cn
+FEISHU_APP_ID=
+FEISHU_APP_SECRET=
+FEISHU_DEFAULT_RECEIVE_ID=
+FEISHU_DEFAULT_RECEIVE_ID_TYPE=chat_id
 ```
 
 模型模式：
@@ -234,6 +242,14 @@ python -m tendertrace model-status
 python -m tendertrace model-doctor
 ```
 
+检查飞书集成状态与发送测试消息：
+
+```powershell
+python -m tendertrace feishu-status
+python -m tendertrace feishu-list-chats --page-size 20
+python -m tendertrace feishu-send-text --text "TenderTrace 飞书联调消息"
+```
+
 生成用户记忆周报与画像快照：
 
 ```powershell
@@ -262,6 +278,18 @@ python -m tendertrace evaluate-gold --out docs/evaluation/recall_after_p23.json
 python -m pip install -e .[vector]
 python -m tendertrace embed-notices
 ```
+
+## 飞书集成
+
+飞书集成默认关闭。创建飞书自建应用并开启机器人能力后，在 `.env.local` 填入 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`，再把 `FEISHU_ENABLED` 改为 `true`。真实密钥不要写入 `.env.example`、README 或代码。
+
+可用 Web API：
+
+- `GET /api/integrations/feishu/status`：查看脱敏后的配置状态。
+- `GET /api/integrations/feishu/chats?page_size=20`：列出机器人所在群，用于获取 `chat_id`。
+- `POST /api/integrations/feishu/test-message`：发送一条显式测试消息。
+
+H5 JSAPI 后续用于把 TenderTrace 工作台嵌入飞书客户端；当前后端已经具备 OpenAPI 鉴权与消息推送底座。
 
 ## Web 工作台
 
@@ -481,6 +509,14 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-5.5
 TENDERTRACE_OPENAI_API_STYLE=responses
 TENDERTRACE_API_TOKEN=
+
+# Optional Feishu messaging/chat integration.
+FEISHU_ENABLED=false
+FEISHU_BASE_URL=https://open.feishu.cn
+FEISHU_APP_ID=
+FEISHU_APP_SECRET=
+FEISHU_DEFAULT_RECEIVE_ID=
+FEISHU_DEFAULT_RECEIVE_ID_TYPE=chat_id
 ```
 
 Model modes:
@@ -542,6 +578,14 @@ python -m tendertrace model-status
 python -m tendertrace model-doctor
 ```
 
+Check Feishu integration status and send a test message:
+
+```powershell
+python -m tendertrace feishu-status
+python -m tendertrace feishu-list-chats --page-size 20
+python -m tendertrace feishu-send-text --text "TenderTrace Feishu smoke message"
+```
+
 Build and persist a user-memory weekly profile snapshot:
 
 ```powershell
@@ -570,6 +614,18 @@ Enable optional vector retrieval:
 python -m pip install -e .[vector]
 python -m tendertrace embed-notices
 ```
+
+## Feishu Integration
+
+Feishu integration is disabled by default. After creating a custom Feishu app and enabling bot capability, put `FEISHU_APP_ID` and `FEISHU_APP_SECRET` in `.env.local`, then set `FEISHU_ENABLED=true`. Never commit real credentials to `.env.example`, README, or source code.
+
+Available Web APIs:
+
+- `GET /api/integrations/feishu/status`: inspect redacted integration status.
+- `GET /api/integrations/feishu/chats?page_size=20`: list groups where the bot is a member and find `chat_id`.
+- `POST /api/integrations/feishu/test-message`: send one explicit test message.
+
+Feishu H5 JSAPI can be used later to embed the TenderTrace workbench inside the Feishu client. The backend now has the OpenAPI authentication and messaging foundation.
 
 ## Web Workbench
 

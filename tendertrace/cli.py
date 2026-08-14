@@ -15,6 +15,12 @@ from tendertrace.demo_video import generate_demo_video
 from tendertrace.delivery.feishu_bitable import check_feishu_bitable
 from tendertrace.gold import build_gold_candidates, build_gold_coverage, evaluate_gold_recall
 from tendertrace.ingest import run_ingest_cycle
+from tendertrace.integrations.feishu import (
+    FeishuClient,
+    FeishuError,
+    feishu_agent_status,
+    feishu_status,
+)
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
@@ -76,6 +82,47 @@ def cmd_model_doctor(args: argparse.Namespace) -> int:
     report = model_doctor(settings, live=args.live)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     return 0 if report.status == "pass" else 1
+
+
+def cmd_feishu_status(_: argparse.Namespace) -> int:
+    settings = _settings()
+    print(json.dumps(feishu_status(settings).to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_feishu_agent_status(_: argparse.Namespace) -> int:
+    settings = _settings()
+    print(json.dumps(feishu_agent_status(settings).to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_feishu_send_text(args: argparse.Namespace) -> int:
+    settings = _settings()
+    try:
+        result = FeishuClient(settings).send_text(
+            args.text,
+            receive_id=args.receive_id,
+            receive_id_type=args.receive_id_type,
+        )
+    except FeishuError as exc:
+        print(f"feishu error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps({"status": "sent", "response": result}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_feishu_list_chats(args: argparse.Namespace) -> int:
+    settings = _settings()
+    try:
+        result = FeishuClient(settings).list_chats(
+            page_size=args.page_size,
+            page_token=args.page_token,
+        )
+    except FeishuError as exc:
+        print(f"feishu error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
 
 
 def cmd_health(_: argparse.Namespace) -> int:
@@ -496,6 +543,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="Call the configured model once with a safe JSON probe.",
     )
     model_doctor_parser.set_defaults(func=cmd_model_doctor)
+    sub.add_parser(
+        "feishu-status",
+        help="Print safe Feishu integration status without secrets.",
+    ).set_defaults(func=cmd_feishu_status)
+    sub.add_parser(
+        "feishu-agent-status",
+        help="Print safe Feishu agent-service status without secrets.",
+    ).set_defaults(func=cmd_feishu_agent_status)
+    feishu_send = sub.add_parser(
+        "feishu-send-text",
+        help="Send one Feishu text message through the configured custom app.",
+    )
+    feishu_send.add_argument("--text", required=True, help="Text message body.")
+    feishu_send.add_argument(
+        "--receive-id",
+        default=None,
+        help="Override FEISHU_DEFAULT_RECEIVE_ID for this message.",
+    )
+    feishu_send.add_argument(
+        "--receive-id-type",
+        default=None,
+        choices=("chat_id", "open_id", "user_id", "union_id", "email"),
+        help="Override FEISHU_DEFAULT_RECEIVE_ID_TYPE for this message.",
+    )
+    feishu_send.set_defaults(func=cmd_feishu_send_text)
+    feishu_chats = sub.add_parser(
+        "feishu-list-chats",
+        help="List groups where the Feishu bot is a member.",
+    )
+    feishu_chats.add_argument("--page-size", type=int, default=20)
+    feishu_chats.add_argument("--page-token", default=None)
+    feishu_chats.set_defaults(func=cmd_feishu_list_chats)
     sub.add_parser("health", help="Print local database health.").set_defaults(func=cmd_health)
     acceptance = sub.add_parser(
         "acceptance-check",
