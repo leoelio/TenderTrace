@@ -25,6 +25,8 @@ FEISHU_ENV_KEYS = (
     "FEISHU_APP_SECRET",
     "FEISHU_DEFAULT_RECEIVE_ID",
     "FEISHU_DEFAULT_RECEIVE_ID_TYPE",
+    "FEISHU_CALENDAR_ID",
+    "FEISHU_CALLBACK_VERIFICATION_TOKEN",
     "FEISHU_AGENT_ENABLED",
     "FEISHU_AGENT_BASE_URL",
     "FEISHU_AGENT_APP_ID",
@@ -117,6 +119,76 @@ class FeishuIntegrationTests(unittest.TestCase):
                 "/open-apis/im/v1/messages",
             ],
         )
+
+    def test_card_task_and_calendar_use_official_endpoints(self) -> None:
+        old_env = _clear_env(FEISHU_ENV_KEYS)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / ".env.local").write_text(
+                    "FEISHU_ENABLED=true\n"
+                    "FEISHU_APP_ID=cli_test\n"
+                    "FEISHU_APP_SECRET=secret-value\n"
+                    "FEISHU_DEFAULT_RECEIVE_ID=oc_test\n",
+                    encoding="utf-8",
+                )
+                settings = Settings.load(root)
+                seen: list[str] = []
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    seen.append(request.url.path)
+                    if request.url.path.endswith("/tenant_access_token/internal"):
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "tenant_access_token": "t-token"},
+                        )
+                    payload = json.loads(request.content.decode("utf-8"))
+                    if request.url.path.endswith("/im/v1/messages"):
+                        self.assertEqual(payload["msg_type"], "interactive")
+                        self.assertEqual(json.loads(payload["content"])["header"]["template"], "blue")
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "data": {"message_id": "om-card"}},
+                        )
+                    if request.url.path.endswith("/task/v2/tasks"):
+                        self.assertEqual(payload["client_token"], "task-token")
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "data": {"task": {"guid": "task-guid"}}},
+                        )
+                    if request.url.path.endswith("/calendar/v4/calendars/primary/events"):
+                        self.assertEqual(request.url.params["idempotency_key"], "calendar-token")
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "data": {"event": {"event_id": "event-id"}}},
+                        )
+                    return httpx.Response(404, json={"code": 404, "msg": "unexpected"})
+
+                client = FeishuClient(
+                    settings,
+                    client=httpx.Client(transport=httpx.MockTransport(handler)),
+                )
+                card = client.send_card({"header": {"template": "blue"}})
+                task = client.create_task(
+                    summary="跟进机会",
+                    description="核对预算",
+                    client_token="task-token",
+                )
+                event = client.create_calendar_event(
+                    calendar_id="primary",
+                    summary="投标截止",
+                    description="截止提醒",
+                    start_timestamp="1788051600",
+                    end_timestamp="1788053400",
+                    idempotency_key="calendar-token",
+                )
+        finally:
+            _restore_env(old_env)
+
+        self.assertEqual(card["data"]["message_id"], "om-card")
+        self.assertEqual(task["data"]["task"]["guid"], "task-guid")
+        self.assertEqual(event["data"]["event"]["event_id"], "event-id")
+        self.assertIn("/open-apis/task/v2/tasks", seen)
 
     def test_disabled_client_does_not_call_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

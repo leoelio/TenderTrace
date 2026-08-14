@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P30</strong> · Competition Intelligence · Requirement Review · Feishu Collaboration
+  <strong>Current stage: P31</strong> · Global Sources · Opportunity Workflow · Feishu Collaboration
 </p>
 
 ---
@@ -26,7 +26,8 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 ## 核心能力
 
 - 自然语言意图解析：识别主题、同义词、地区、省市区、时间范围、发送频率。
-- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源。
+- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源，以及 TED 欧盟招标与世界银行采购公告官方 API。
+- 范围路由：国内、省市查询只启用国内源；欧盟、世界银行、全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
 - 托管抓取：统一 retry、阻断识别、浏览器兜底、批量详情抓取和页面快照。
 - 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码。
 - 本地优先检索：公告入库后写入 SQLite FTS5，使用 jieba 分词和 BM25 排序。
@@ -34,7 +35,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 增量推送：用户订阅通过 `sent_history` 保证已经发送过的公告不重复出现在后续 Word。
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
-- 飞书协同：Word 报告、定时订阅和用户周报可发送到默认会话，发送结果写入本地交付账本。
+- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作回写本地状态流、多维表格与审计事件。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
 - 竞争情报：从结果/合同公告提取成交供应商、成交金额和证据摘录，聚合同品类历史供应商；无法可靠提取时明确标记样本不足。
@@ -83,6 +84,7 @@ tendertrace/
   linking.py             # URL Map / LinkExtractor 发现规则
   memory.py              # 用户记忆库、知识画像和生成式建议
   opportunity.py         # 机会质量评分、定级、风险和角色行动
+  workflow.py            # 销售机会阶段、负责人、任务/日程标识和动作审计
   retrieval.py           # FTS5 / LIKE / 向量融合检索
   runner.py              # 一次完整运行流程
   source_map.py          # 数据源地图和来源健康统计
@@ -172,6 +174,8 @@ FEISHU_APP_ID=
 FEISHU_APP_SECRET=
 FEISHU_DEFAULT_RECEIVE_ID=
 FEISHU_DEFAULT_RECEIVE_ID_TYPE=chat_id
+FEISHU_CALENDAR_ID=
+FEISHU_CALLBACK_VERIFICATION_TOKEN=
 ```
 
 模型模式：
@@ -302,8 +306,13 @@ python -m tendertrace embed-notices
 - `POST /api/integrations/feishu/test-message`：发送一条显式测试消息。
 - `POST /api/outbox/{filename}/send-feishu`：上传并发送指定 Word 报告。
 - `POST /api/memory/weekly/send-feishu`：发送最近一周的使用摘要与建议。
+- `POST /api/opportunities/send-feishu`：发送可操作机会卡片，并按需创建幂等任务与截止日程。
+- `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
+- `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态并同步多维表格。
 
 设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232025`，需要先在应用后台启用机器人能力并发布新版本；若返回 `232034`，需要确认当前租户已经安装已发布应用。
+
+机会协同使用公告 ID 生成任务 `client_token` 与日程 `idempotency_key`，重复同步不会重复创建任务或日程。启用截止日程需配置 `FEISHU_CALENDAR_ID`；启用卡片动作需配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，并在飞书开发者后台把可公网访问的 `/api/integrations/feishu/callback` 注册为回调地址。本地 `127.0.0.1` 不能直接接收飞书云端回调。
 
 多维表格服务端同步还需要具体 Base 文档的 `app_token` 与数据表的 `table_id`。二者可以从实际多维表格 URL 获取，不能使用应用 App ID 或记录视图的 `blk_...` BlockTypeID 替代：
 
@@ -328,7 +337,7 @@ Web UI 覆盖以下视图：
 - Agent 评测：查看 RAG、Agent、Harness、Recall、金标评测和向量覆盖率。
 - 用户记忆：查看使用画像、知识偏好、风险信号和生成式行动建议。
 - 机会情报：按采购品类和机会等级筛选，查看市场基准，并在详情弹窗中研判竞争者、需求覆盖、证据边界、风险与角色行动。
-- 设置：查看运行配置、模型连通性和飞书消息/报告/多维表格/智能体状态。
+- 设置：查看运行配置，以及飞书报告、台账、机会卡片、任务、截止日程、状态回调和智能体能力矩阵。
 
 ## 本地库检索流程
 
@@ -429,13 +438,15 @@ The current architecture is local-first: background ingestion continuously store
 ## Key Features
 
 - Natural-language intent parsing for topic, synonyms, region, time range, and delivery schedule.
-- Multi-source collection from public procurement platforms and a Qianlima login-state source.
+- Multi-source collection from Chinese procurement platforms, a Qianlima login-state source, the official TED Search API, and the World Bank procurement notices API.
+- Scope-aware routing that keeps domestic queries on domestic sources and activates TED/World Bank only for EU, World Bank, or global intent.
 - Login-state vault based on Playwright `storage_state`; credentials are never stored in code.
 - Local-first retrieval with SQLite FTS5, jieba tokenization, and BM25 ranking.
 - Background ingest subscriptions separated from user report subscriptions.
 - Incremental scheduled delivery with `sent_history` deduplication.
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
+- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, callback-driven sales stages, and an auditable local event stream.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
 - Competition intelligence extracted from result and contract notices, including awarded suppliers, amounts, evidence excerpts, and comparable-category supplier history.
@@ -482,6 +493,7 @@ tendertrace/
   db.py                  # SQLite schema and migrations
   memory.py              # User memory, knowledge profile, and generated advice
   retrieval.py           # FTS5 / LIKE / vector-fused retrieval
+  workflow.py            # Opportunity stages, owners, Feishu IDs, and action audit
   runner.py              # End-to-end run orchestration
   gold.py                # Gold-set Recall@K evaluation
   vector.py              # Optional local vector indexing
@@ -549,6 +561,8 @@ FEISHU_APP_ID=
 FEISHU_APP_SECRET=
 FEISHU_DEFAULT_RECEIVE_ID=
 FEISHU_DEFAULT_RECEIVE_ID_TYPE=chat_id
+FEISHU_CALENDAR_ID=
+FEISHU_CALLBACK_VERIFICATION_TOKEN=
 ```
 
 Model modes:
@@ -662,8 +676,13 @@ Available Web APIs:
 - `POST /api/integrations/feishu/test-message`: send one explicit test message.
 - `POST /api/outbox/{filename}/send-feishu`: upload and send a Word report.
 - `POST /api/memory/weekly/send-feishu`: send the weekly usage digest and recommendations.
+- `POST /api/opportunities/send-feishu`: send an actionable opportunity card and optionally create an idempotent task and deadline event.
+- `GET /api/opportunities/{notice_id}/workflow`: inspect the owner, sales stage, and Feishu artifact state.
+- `POST /api/integrations/feishu/callback`: verify card callbacks, advance the opportunity stage, and update Bitable.
 
 The Feishu connection center can select a default chat from the bot's visible chats. Queries and subscriptions can opt into automatic Word delivery, while every success or failure is written to the local delivery ledger. Error `232025` means bot capability must be enabled and a new app version published; error `232034` means the published app is not installed in the current tenant.
+
+Task `client_token` and calendar `idempotency_key` values are derived from the notice ID, so repeated synchronization does not duplicate those artifacts. Set `FEISHU_CALENDAR_ID` to enable deadline events. Set `FEISHU_CALLBACK_VERIFICATION_TOKEN` and register the publicly reachable `/api/integrations/feishu/callback` endpoint in Feishu Developer Console to enable card actions; a local `127.0.0.1` URL is not reachable from Feishu Cloud.
 
 Server-side Bitable sync also requires the target Base document's `app_token` and table `table_id`. Extract both from the actual Base URL; neither the application App ID nor the record-view `blk_...` BlockTypeID can replace them.
 
@@ -682,7 +701,7 @@ The Web UI includes:
 - Agent evaluation: inspect RAG, agent, harness, recall, gold-set metrics, and vector coverage.
 - User memory: inspect usage profiles, knowledge preferences, risk signals, and generated next-step advice.
 - Opportunity intelligence: filter by procurement category and grade, inspect market benchmarks, and open a detailed evidence, competition, requirement, risk, and role-action review.
-- Settings: inspect runtime, model, Feishu messaging/report, Bitable, and agent connectivity.
+- Settings: inspect runtime plus Feishu report, Bitable, opportunity-card, task, deadline-calendar, callback, and agent readiness.
 
 ## Local-First Retrieval Flow
 

@@ -1,0 +1,209 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from datetime import datetime
+import json
+from typing import Any
+from uuid import uuid4
+
+from tendertrace.config import Settings
+from tendertrace.db import connection, init_db
+
+
+STAGES = {
+    "identified": "线索识别",
+    "qualifying": "机会确认",
+    "pursuing": "策略制定",
+    "bidding": "投标准备",
+    "won": "已中标",
+    "lost": "未中标",
+    "archived": "已归档",
+}
+
+ACTION_STAGE = {
+    "claim": "qualifying",
+    "pursue": "pursuing",
+    "prepare_bid": "bidding",
+    "mark_won": "won",
+    "mark_lost": "lost",
+    "archive": "archived",
+}
+
+
+@dataclass(frozen=True)
+class OpportunityWorkflow:
+    notice_id: str
+    stage: str
+    stage_label: str
+    owner_open_id: str
+    owner_name: str
+    next_action: str
+    due_at: str
+    feishu_task_guid: str
+    feishu_event_id: str
+    feishu_message_id: str
+    updated_by: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, str]:
+        return asdict(self)
+
+
+def get_workflow(settings: Settings, notice_id: str) -> OpportunityWorkflow:
+    init_db(settings)
+    with connection(settings) as conn:
+        row = conn.execute(
+            "SELECT * FROM opportunity_workflows WHERE notice_id = ?", (notice_id,)
+        ).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO opportunity_workflows(notice_id) VALUES (?)", (notice_id,)
+            )
+            row = conn.execute(
+                "SELECT * FROM opportunity_workflows WHERE notice_id = ?", (notice_id,)
+            ).fetchone()
+    assert row is not None
+    return _from_row(row)
+
+
+def workflow_snapshots(
+    settings: Settings,
+    notice_ids: list[str],
+) -> dict[str, OpportunityWorkflow]:
+    unique_ids = list(dict.fromkeys(notice_id for notice_id in notice_ids if notice_id))
+    if not unique_ids:
+        return {}
+    placeholders = ",".join("?" for _ in unique_ids)
+    with connection(settings) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM opportunity_workflows WHERE notice_id IN ({placeholders})",
+            unique_ids,
+        ).fetchall()
+    found = {str(row["notice_id"]): _from_row(row) for row in rows}
+    return {
+        notice_id: found.get(notice_id, _default_workflow(notice_id))
+        for notice_id in unique_ids
+    }
+
+
+def update_workflow(
+    settings: Settings,
+    notice_id: str,
+    *,
+    stage: str | None = None,
+    owner_open_id: str | None = None,
+    owner_name: str | None = None,
+    next_action: str | None = None,
+    due_at: str | None = None,
+    feishu_task_guid: str | None = None,
+    feishu_event_id: str | None = None,
+    feishu_message_id: str | None = None,
+    updated_by: str | None = None,
+) -> OpportunityWorkflow:
+    current = get_workflow(settings, notice_id)
+    target_stage = stage or current.stage
+    if target_stage not in STAGES:
+        raise ValueError(f"unsupported opportunity stage: {target_stage}")
+    values = {
+        "stage": target_stage,
+        "owner_open_id": current.owner_open_id if owner_open_id is None else owner_open_id,
+        "owner_name": current.owner_name if owner_name is None else owner_name,
+        "next_action": current.next_action if next_action is None else next_action,
+        "due_at": current.due_at if due_at is None else due_at,
+        "feishu_task_guid": (
+            current.feishu_task_guid if feishu_task_guid is None else feishu_task_guid
+        ),
+        "feishu_event_id": (
+            current.feishu_event_id if feishu_event_id is None else feishu_event_id
+        ),
+        "feishu_message_id": (
+            current.feishu_message_id if feishu_message_id is None else feishu_message_id
+        ),
+        "updated_by": current.updated_by if updated_by is None else updated_by,
+    }
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            UPDATE opportunity_workflows
+            SET stage = ?, owner_open_id = ?, owner_name = ?, next_action = ?, due_at = ?,
+                feishu_task_guid = ?, feishu_event_id = ?, feishu_message_id = ?,
+                updated_by = ?, updated_at = datetime('now')
+            WHERE notice_id = ?
+            """,
+            (*values.values(), notice_id),
+        )
+    return get_workflow(settings, notice_id)
+
+
+def apply_action(
+    settings: Settings,
+    notice_id: str,
+    action: str,
+    *,
+    actor_open_id: str = "",
+    payload: dict[str, Any] | None = None,
+) -> OpportunityWorkflow:
+    if action not in ACTION_STAGE:
+        raise ValueError(f"unsupported opportunity action: {action}")
+    current = get_workflow(settings, notice_id)
+    owner = actor_open_id if action == "claim" and actor_open_id else None
+    updated = update_workflow(
+        settings,
+        notice_id,
+        stage=ACTION_STAGE[action],
+        owner_open_id=owner,
+        updated_by=actor_open_id,
+    )
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO opportunity_events(
+                id, notice_id, action, from_stage, to_stage, actor_open_id, payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid4()),
+                notice_id,
+                action,
+                current.stage,
+                updated.stage,
+                actor_open_id,
+                json.dumps(payload or {}, ensure_ascii=False),
+            ),
+        )
+    return updated
+
+
+def _from_row(row: Any) -> OpportunityWorkflow:
+    stage = str(row["stage"] or "identified")
+    return OpportunityWorkflow(
+        notice_id=str(row["notice_id"]),
+        stage=stage,
+        stage_label=STAGES.get(stage, stage),
+        owner_open_id=str(row["owner_open_id"] or ""),
+        owner_name=str(row["owner_name"] or ""),
+        next_action=str(row["next_action"] or ""),
+        due_at=str(row["due_at"] or ""),
+        feishu_task_guid=str(row["feishu_task_guid"] or ""),
+        feishu_event_id=str(row["feishu_event_id"] or ""),
+        feishu_message_id=str(row["feishu_message_id"] or ""),
+        updated_by=str(row["updated_by"] or ""),
+        updated_at=str(row["updated_at"] or datetime.now().isoformat(timespec="seconds")),
+    )
+
+
+def _default_workflow(notice_id: str) -> OpportunityWorkflow:
+    return OpportunityWorkflow(
+        notice_id=notice_id,
+        stage="identified",
+        stage_label=STAGES["identified"],
+        owner_open_id="",
+        owner_name="",
+        next_action="",
+        due_at="",
+        feishu_task_guid="",
+        feishu_event_id="",
+        feishu_message_id="",
+        updated_by="",
+        updated_at="",
+    )

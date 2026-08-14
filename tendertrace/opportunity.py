@@ -13,6 +13,7 @@ from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.intent.topic import extract_topic
 from tendertrace.retrieval import parse_date
+from tendertrace.workflow import workflow_snapshots
 
 
 LEVELS = (
@@ -273,6 +274,7 @@ def list_opportunities(
     market["available_categories"] = all_market.get("category_distribution", [])
     market["selected_category"] = topic or ""
     items: list[dict[str, object]] = []
+    workflows = workflow_snapshots(settings, [notice_id for notice_id, _notice in rows])
     for notice_id, notice in rows:
         payload = _notice_payload(notice)
         intelligence = _analyze(payload, as_of=None)
@@ -292,6 +294,7 @@ def list_opportunities(
                 "budget": str(structured.get("budget") or ""),
                 "bid_deadline": str(structured.get("bid_deadline") or ""),
                 "intelligence": intelligence,
+                "workflow": workflows[notice_id].to_dict(),
             }
         )
         if len(items) >= limit:
@@ -339,6 +342,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         [item for _notice_id, item in _recent_notices(settings, limit=500)]
     )
     _attach_market_context(intelligence, payload, market)
+    workflow = workflow_snapshots(settings, [notice_id])[notice_id]
     return {
         "notice_id": str(row["id"]),
         "title": notice.title,
@@ -350,6 +354,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "budget": str(structured.get("budget") or ""),
         "bid_deadline": str(structured.get("bid_deadline") or ""),
         "intelligence": intelligence,
+        "workflow": workflow.to_dict(),
     }
 
 

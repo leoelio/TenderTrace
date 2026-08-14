@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -81,6 +82,100 @@ class FeishuClient:
             content={"text": text},
         )
 
+    def send_card(
+        self,
+        card: dict[str, Any],
+        *,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> dict[str, Any]:
+        receive_id = (receive_id or self.settings.feishu_default_receive_id).strip()
+        receive_id_type = (receive_id_type or self.settings.feishu_default_receive_id_type).strip()
+        if not receive_id:
+            raise FeishuError("receive_id is required; set FEISHU_DEFAULT_RECEIVE_ID or pass one")
+        if not card:
+            raise FeishuError("card is required")
+        return self._send_message(
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+            msg_type="interactive",
+            content=card,
+        )
+
+    def create_task(
+        self,
+        *,
+        summary: str,
+        description: str,
+        client_token: str,
+        due_timestamp_ms: str = "",
+        assignee_open_id: str = "",
+    ) -> dict[str, Any]:
+        if not summary.strip():
+            raise FeishuError("task summary is required")
+        token = self.get_tenant_access_token()
+        body: dict[str, Any] = {
+            "summary": summary[:3000],
+            "description": description[:3000],
+            "client_token": client_token[:100],
+        }
+        if due_timestamp_ms:
+            body["due"] = {"timestamp": due_timestamp_ms, "is_all_day": False}
+            body["reminders"] = [{"relative_fire_minute": 1440}]
+        if assignee_open_id:
+            body["members"] = [
+                {"type": "user", "id": assignee_open_id, "role": "assignee"}
+            ]
+        response = self._client.post(
+            self._url("/open-apis/task/v2/tasks"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            params={"user_id_type": "open_id"},
+            json=body,
+        )
+        return self._parse_response(response)
+
+    def create_calendar_event(
+        self,
+        *,
+        calendar_id: str,
+        summary: str,
+        description: str,
+        start_timestamp: str,
+        end_timestamp: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        if not calendar_id.strip():
+            raise FeishuError("calendar_id is required")
+        token = self.get_tenant_access_token()
+        response = self._client.post(
+            self._url(
+                f"/open-apis/calendar/v4/calendars/{quote(calendar_id, safe='')}/events"
+            ),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            params={"idempotency_key": idempotency_key, "user_id_type": "open_id"},
+            json={
+                "summary": summary[:1000],
+                "description": description[:40960],
+                "need_notification": True,
+                "start_time": {
+                    "timestamp": start_timestamp,
+                    "timezone": self.settings.timezone,
+                },
+                "end_time": {
+                    "timestamp": end_timestamp,
+                    "timezone": self.settings.timezone,
+                },
+                "visibility": "public",
+            },
+        )
+        return self._parse_response(response)
+
     def upload_file(self, path: Path | str) -> str:
         file_path = Path(path)
         if not file_path.is_file():
@@ -136,7 +231,7 @@ class FeishuClient:
         receive_id: str,
         receive_id_type: str,
         msg_type: str,
-        content: dict[str, str],
+        content: dict[str, Any],
     ) -> dict[str, Any]:
         token = self.get_tenant_access_token()
         response = self._client.post(

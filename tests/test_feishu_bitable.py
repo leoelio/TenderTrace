@@ -10,6 +10,7 @@ from tendertrace.delivery.feishu_bitable import (
     REQUIRED_FIELDS,
     check_feishu_bitable,
     sync_notices_to_bitable,
+    update_opportunity_workflow_in_bitable,
 )
 
 
@@ -102,7 +103,10 @@ class FakeFeishuClient:
                         "items": [
                             {
                                 "record_id": "rec-existing",
-                                "fields": {"项目指纹": "ccgp:existing"},
+                                "fields": {
+                                    "项目指纹": "ccgp:existing",
+                                    "公告ID": "existing",
+                                },
                             }
                         ],
                         "has_more": False,
@@ -222,6 +226,31 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertIn("建议策略", updated)
         self.assertIn("竞争情报", updated)
         self.assertIn("需求覆盖率", updated)
+
+    def test_workflow_update_uses_notice_id_and_preserves_notice_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            result = update_opportunity_workflow_in_bitable(
+                settings,
+                notice_id="existing",
+                workflow={
+                    "stage": "qualifying",
+                    "stage_label": "机会确认",
+                    "owner_name": "张三",
+                    "next_action": "确认预算",
+                    "feishu_task_guid": "task-guid",
+                    "feishu_event_id": "event-id",
+                    "updated_at": "2026-08-15T10:00:00",
+                },
+                http_client_factory=FakeFeishuClient,
+            )
+
+        self.assertEqual(result.status, "sent")
+        fields = FakeFeishuClient.updated_records[0][1]
+        self.assertEqual(fields["协同状态"], "机会确认")
+        self.assertEqual(fields["机会负责人"], "张三")
+        self.assertNotIn("标题", fields)
 
 
 def _settings(root: Path) -> Settings:

@@ -29,6 +29,16 @@ class FailingAdapter:
         raise RuntimeError("source unavailable")
 
 
+class ScopedAdapter:
+    name = "scoped"
+
+    def supports(self, bidql) -> bool:
+        return bidql.get("region", {}).get("scope") == "global"
+
+    def collect(self, bidql, *, max_pages: int = 1, max_results: int = 10) -> list[Notice]:
+        return [_notice("scoped", "1")]
+
+
 def _notice(source: str, notice_id: str) -> Notice:
     return Notice(
         id=notice_id,
@@ -87,6 +97,14 @@ class MultiSourceAdapterTests(unittest.TestCase):
 
         self.assertEqual(len(notices), 1)
         self.assertTrue(adapter.last_source_stats[0].relaxed_city)
+
+    def test_collect_skips_adapter_outside_its_scope(self) -> None:
+        adapter = MultiSourceAdapter([ScopedAdapter()])
+
+        notices = adapter.collect({"region": {"scope": "domestic"}})
+
+        self.assertEqual(notices, [])
+        self.assertEqual(adapter.last_source_stats[0].status, "skipped")
 
 
 if __name__ == "__main__":

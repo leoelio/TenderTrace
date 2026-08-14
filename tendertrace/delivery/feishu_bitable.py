@@ -48,6 +48,12 @@ REQUIRED_FIELDS = (
     "需求覆盖率",
     "需求待核对",
     "需求优化建议",
+    "机会负责人",
+    "协同状态",
+    "下一步行动",
+    "飞书任务ID",
+    "飞书日程ID",
+    "协同更新时间",
 )
 
 
@@ -227,6 +233,65 @@ def sync_notices_to_bitable(
     )
 
 
+def update_opportunity_workflow_in_bitable(
+    settings: Settings,
+    *,
+    notice_id: str,
+    workflow: dict[str, object],
+    http_client_factory=httpx.Client,
+) -> FeishuBitableResult:
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        return FeishuBitableResult(
+            status="skipped",
+            message=f"missing Feishu settings: {', '.join(missing_settings)}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    try:
+        with _client_context(http_client_factory, settings.feishu_timeout) as client:
+            token = _tenant_access_token(settings, client)
+            fields = _list_fields(settings, client, token)
+            workflow_fields = _workflow_fields(workflow)
+            missing_fields = [name for name in workflow_fields if name not in fields]
+            if missing_fields:
+                return FeishuBitableResult(
+                    status="failed",
+                    message=f"missing Feishu fields: {', '.join(missing_fields)}",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            record_id = _existing_records_by_notice_id(settings, client, token).get(notice_id)
+            if not record_id:
+                return FeishuBitableResult(
+                    status="skipped",
+                    message="opportunity has not been synced to Feishu bitable",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            updated_count = _update_record(
+                settings,
+                client,
+                token,
+                record_id,
+                workflow_fields,
+            )
+    except Exception as exc:
+        return FeishuBitableResult(
+            status="failed",
+            message=f"{type(exc).__name__}: {exc}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    return FeishuBitableResult(
+        status="sent",
+        record_count=updated_count,
+        updated_count=updated_count,
+        app_token=settings.feishu_bitable_app_token,
+        table_id=settings.feishu_bitable_table_id,
+    )
+
+
 def _missing_settings(settings: Settings) -> list[str]:
     missing = []
     if not settings.feishu_app_id:
@@ -363,6 +428,37 @@ def _existing_records_by_cluster(
             return existing
 
 
+def _existing_records_by_notice_id(
+    settings: Settings,
+    client: httpx.Client,
+    token: str,
+) -> dict[str, str]:
+    existing: dict[str, str] = {}
+    page_token = ""
+    while True:
+        params = {"page_size": 500}
+        if page_token:
+            params["page_token"] = page_token
+        data = _request_json(
+            client.get(
+                _table_url(settings, "records"),
+                params=params,
+                headers=_auth_header(token),
+            )
+        )
+        for item in _items(data):
+            fields = item.get("fields") if isinstance(item.get("fields"), dict) else {}
+            notice_id = _string_value(fields.get("公告ID"))
+            record_id = str(item.get("record_id") or "")
+            if notice_id and record_id:
+                existing[notice_id] = record_id
+        if not data.get("has_more"):
+            return existing
+        page_token = str(data.get("page_token") or "")
+        if not page_token:
+            return existing
+
+
 def _batch_create_records(
     settings: Settings,
     client: httpx.Client,
@@ -491,6 +587,12 @@ def _record_fields(
         "需求优化建议": "\n".join(
             str(item) for item in requirement_review.get("recommendations") or []
         ),
+        "机会负责人": "",
+        "协同状态": "线索识别",
+        "下一步行动": "",
+        "飞书任务ID": "",
+        "飞书日程ID": "",
+        "协同更新时间": synced_at.isoformat(timespec="seconds"),
     }
 
 
@@ -517,6 +619,17 @@ def _update_fields(row: dict[str, object]) -> dict[str, object]:
         "需求覆盖率": row["需求覆盖率"],
         "需求待核对": row["需求待核对"],
         "需求优化建议": row["需求优化建议"],
+    }
+
+
+def _workflow_fields(workflow: dict[str, object]) -> dict[str, object]:
+    return {
+        "机会负责人": str(workflow.get("owner_name") or ""),
+        "协同状态": str(workflow.get("stage_label") or workflow.get("stage") or ""),
+        "下一步行动": str(workflow.get("next_action") or ""),
+        "飞书任务ID": str(workflow.get("feishu_task_guid") or ""),
+        "飞书日程ID": str(workflow.get("feishu_event_id") or ""),
+        "协同更新时间": str(workflow.get("updated_at") or ""),
     }
 
 

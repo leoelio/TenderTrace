@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 DDL = (
@@ -298,6 +298,36 @@ DDL = (
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS opportunity_workflows (
+        notice_id TEXT PRIMARY KEY,
+        stage TEXT NOT NULL DEFAULT 'identified',
+        owner_open_id TEXT,
+        owner_name TEXT,
+        next_action TEXT,
+        due_at TEXT,
+        feishu_task_guid TEXT,
+        feishu_event_id TEXT,
+        feishu_message_id TEXT,
+        updated_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS opportunity_events (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        from_stage TEXT,
+        to_stage TEXT,
+        actor_open_id TEXT,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
 )
 
 
@@ -335,6 +365,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_user_memory_profiles_user ON user_memory_profiles(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_artifact ON delivery_attempts(artifact_key, channel, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_status ON delivery_attempts(status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_workflows_stage ON opportunity_workflows(stage, updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_events_notice ON opportunity_events(notice_id, created_at)",
 )
 
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {

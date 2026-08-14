@@ -6,6 +6,8 @@ from typing import Any, Protocol
 
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
+from tendertrace.adapters.ted import TedAdapter
+from tendertrace.adapters.worldbank import WorldBankAdapter
 from tendertrace.config import Settings
 
 
@@ -50,7 +52,12 @@ class MultiSourceAdapter:
 
     @classmethod
     def default(cls, settings: Settings) -> "MultiSourceAdapter":
-        adapters: list[SourceAdapter] = [CcgpAdapter(), GgzyAdapter()]
+        adapters: list[SourceAdapter] = [
+            CcgpAdapter(),
+            GgzyAdapter(),
+            TedAdapter(),
+            WorldBankAdapter(),
+        ]
         try:
             from tendertrace.vault.qianlima import QianlimaAdapter, QianlimaSessionVault
 
@@ -73,6 +80,13 @@ class MultiSourceAdapter:
         seen: set[str] = set()
         for adapter in self.adapters:
             source_name = getattr(adapter, "name", adapter.__class__.__name__)
+            supports = getattr(adapter, "supports", None)
+            if callable(supports) and not supports(bidql):
+                self.last_source_stats.append(
+                    SourceRunStat(source=source_name, status="skipped")
+                )
+                results_by_source.append([])
+                continue
             try:
                 notices = adapter.collect(bidql, max_pages=max_pages, max_results=max_results)
                 relaxed_city = False

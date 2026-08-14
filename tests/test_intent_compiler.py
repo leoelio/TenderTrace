@@ -89,6 +89,13 @@ class IntentCompilerTests(unittest.TestCase):
         self.assertIn("充电设施", expanded)
         self.assertGreaterEqual(bidql["meta"]["confidence"]["topic"], 0.9)
 
+    def test_global_scope_enables_official_overseas_source_terms(self) -> None:
+        bidql = compile_intent("最近1个月全球服务器招标信息", now=NOW)
+
+        self.assertEqual(bidql["region"]["scope"], "global")
+        self.assertIn("server", bidql["topic"]["source_terms"])
+        self.assertNotIn("region", bidql["meta"]["clarify_needed"])
+
     def test_low_confidence_topic_requests_clarification(self) -> None:
         bidql = compile_intent("最近1个月上海相关信息有哪些", now=NOW)
 

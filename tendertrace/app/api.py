@@ -11,7 +11,10 @@ from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, database_health, init_db
-from tendertrace.delivery.feishu_bitable import check_feishu_bitable
+from tendertrace.delivery.feishu_bitable import (
+    check_feishu_bitable,
+    update_opportunity_workflow_in_bitable,
+)
 from tendertrace.delivery.feishu_report import deliver_report_to_feishu
 from tendertrace.delivery.ledger import list_delivery_attempts, record_delivery_attempt
 from tendertrace.delivery.preferences import (
@@ -26,6 +29,7 @@ from tendertrace.integrations.feishu import (
     feishu_agent_status,
     feishu_status,
 )
+from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
@@ -63,6 +67,7 @@ from tendertrace.scheduling.subscriptions import (
     run_subscription,
 )
 from tendertrace.source_map import build_source_map
+from tendertrace.workflow import apply_action, get_workflow
 
 
 def create_app():
@@ -192,6 +197,17 @@ def create_app():
                     "url": settings.feishu_bitable_base_url,
                 },
                 "agent_service": {"ready": bool(agent["configured"])},
+                "opportunity_cards": {"ready": bool(message["configured"])},
+                "task_sync": {"ready": bool(message["configured"])},
+                "deadline_calendar": {
+                    "ready": bool(message["configured"] and settings.feishu_calendar_id),
+                },
+                "card_callback": {
+                    "ready": bool(
+                        message["configured"]
+                        and settings.feishu_callback_verification_token_present
+                    ),
+                },
             },
             "issues": issues,
             "recent_attempts": [
@@ -290,22 +306,25 @@ def create_app():
             receive_id_type=_optional_string(request.get("receive_id_type")),
         )
         try:
-            response = FeishuClient(settings).send_text(
-                _opportunity_message(opportunity),
+            result = start_opportunity_collaboration(
+                settings,
+                opportunity,
                 receive_id=receive_id,
                 receive_id_type=receive_id_type,
+                owner_open_id=str(request.get("owner_open_id") or "").strip(),
+                owner_name=str(request.get("owner_name") or "").strip(),
+                create_task=bool(request.get("create_task", True)),
+                create_calendar_event=bool(request.get("create_calendar_event", True)),
             )
-            data = response.get("data") if isinstance(response.get("data"), dict) else {}
-            message_id = str(data.get("message_id") or "")
             attempt = record_delivery_attempt(
                 settings,
                 channel="feishu",
                 artifact_type="opportunity",
                 artifact_key=notice_id,
                 status="sent",
-                external_id=message_id or None,
+                external_id=result.message_id or None,
             )
-        except FeishuError as exc:
+        except (FeishuError, ValueError) as exc:
             attempt = record_delivery_attempt(
                 settings,
                 channel="feishu",
@@ -321,7 +340,75 @@ def create_app():
             target=notice_id,
             label=str(opportunity.get("title") or ""),
         )
-        return {"status": "sent", "attempt_id": attempt.id, "message_id": message_id or None}
+        return {"status": "sent", "attempt_id": attempt.id, **result.to_dict()}
+
+    @app.get("/api/opportunities/{notice_id}/workflow")
+    def opportunity_workflow(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return get_workflow(settings, notice_id).to_dict()
+
+    @app.post("/api/integrations/feishu/callback")
+    def feishu_card_callback(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        expected = settings.feishu_callback_verification_token()
+        if not expected:
+            raise HTTPException(
+                status_code=503,
+                detail="FEISHU_CALLBACK_VERIFICATION_TOKEN is not configured",
+            )
+        supplied = _feishu_callback_token(request)
+        if not supplied or not secrets.compare_digest(supplied, expected):
+            raise HTTPException(status_code=401, detail="invalid Feishu callback token")
+        challenge = str(request.get("challenge") or "")
+        if challenge:
+            return {"challenge": challenge}
+        event = request.get("event") if isinstance(request.get("event"), dict) else request
+        action_payload = (
+            event.get("action") if isinstance(event.get("action"), dict) else {}
+        )
+        value = (
+            action_payload.get("value")
+            if isinstance(action_payload.get("value"), dict)
+            else {}
+        )
+        action = str(value.get("action") or "").strip()
+        notice_id = str(value.get("notice_id") or "").strip()
+        if not action or not notice_id:
+            raise HTTPException(status_code=400, detail="callback action and notice_id are required")
+        operator = event.get("operator") if isinstance(event.get("operator"), dict) else {}
+        operator_id = (
+            operator.get("operator_id")
+            if isinstance(operator.get("operator_id"), dict)
+            else {}
+        )
+        actor_open_id = str(operator_id.get("open_id") or operator.get("open_id") or "")
+        try:
+            workflow = apply_action(
+                settings,
+                notice_id,
+                action,
+                actor_open_id=actor_open_id,
+                payload={"event_id": _feishu_event_id(request)},
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        bitable = update_opportunity_workflow_in_bitable(
+            settings,
+            notice_id=notice_id,
+            workflow=workflow.to_dict(),
+        )
+        record_activity(
+            settings,
+            event_type="feishu_opportunity_action",
+            target=notice_id,
+            label=workflow.stage_label,
+            metadata={"action": action, "actor_open_id": actor_open_id},
+        )
+        return {
+            "toast": {"type": "success", "content": f"机会已更新为{workflow.stage_label}"},
+            "workflow": workflow.to_dict(),
+            "bitable_status": bitable.status,
+        }
 
     @app.post("/api/runs")
     def create_run(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -920,6 +1007,16 @@ def _optional_string(value: object) -> str | None:
     return str(value).strip() or None
 
 
+def _feishu_callback_token(payload: dict[str, object]) -> str:
+    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+    return str(header.get("token") or payload.get("token") or "")
+
+
+def _feishu_event_id(payload: dict[str, object]) -> str:
+    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+    return str(header.get("event_id") or "")
+
+
 def _model_strategy_from_request(request: dict[str, object]) -> str | None:
     value = request.get("model_strategy")
     if value in (None, ""):
@@ -1223,7 +1320,10 @@ def _requires_api_token(settings: Settings, request) -> bool:
     if not settings.api_token_present:
         return False
     path = request.url.path
-    if not path.startswith("/api/") or path == "/api/health":
+    if not path.startswith("/api/") or path in {
+        "/api/health",
+        "/api/integrations/feishu/callback",
+    }:
         return False
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         return True

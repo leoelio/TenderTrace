@@ -153,6 +153,9 @@ class QianlimaAdapter:
         self.timeout_ms = timeout_ms
         self.last_fetch_stats: dict[str, object] = {}
 
+    def supports(self, bidql: dict[str, Any]) -> bool:
+        return bidql.get("region", {}).get("scope") not in {"global", "eu", "worldbank"}
+
     def collect(
         self,
         bidql: dict[str, Any],

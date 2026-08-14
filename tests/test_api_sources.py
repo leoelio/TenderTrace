@@ -56,20 +56,25 @@ class SourcesApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         items = response.json()["items"]
-        self.assertEqual([item["site"] for item in items], ["ccgp", "ggzy", "qianlima"])
+        self.assertEqual(
+            [item["site"] for item in items],
+            ["ccgp", "ggzy", "ted", "worldbank", "qianlima"],
+        )
         self.assertEqual(items[0]["status"], "configured")
         self.assertEqual(items[1]["status"], "configured")
-        self.assertEqual(items[2]["status"], "login_required")
-        self.assertEqual(items[2]["validation"], "missing")
-        self.assertFalse(items[2]["ready"])
+        self.assertEqual(items[2]["status"], "configured")
+        self.assertEqual(items[3]["status"], "configured")
+        self.assertEqual(items[4]["status"], "login_required")
+        self.assertEqual(items[4]["validation"], "missing")
+        self.assertFalse(items[4]["ready"])
         self.assertIn("routes", items[0])
         self.assertIn("health", items[0])
         self.assertIn("discovery_rules", items[0])
         self.assertEqual(source_map_response.status_code, 200)
         source_map_payload = source_map_response.json()
-        self.assertEqual(source_map_payload["source_count"], 3)
+        self.assertEqual(source_map_payload["source_count"], 5)
         self.assertFalse(source_map_payload["login_source_ready"])
-        self.assertTrue(source_map_payload["items"][2]["requires_login"])
+        self.assertTrue(source_map_payload["items"][4]["requires_login"])
         self.assertEqual(model_response.status_code, 200)
         model_payload = model_response.json()
         self.assertEqual(model_payload["mode"], "local")

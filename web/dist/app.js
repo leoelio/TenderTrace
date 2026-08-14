@@ -1237,6 +1237,7 @@ function renderOpportunities(payload) {
     ? visibleItems
         .map((item) => {
           const intelligence = item.intelligence || {};
+          const workflow = item.workflow || {};
           const scores = intelligence.scores || {};
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
           return `
@@ -1259,12 +1260,13 @@ function renderOpportunities(payload) {
                 ${qualityBar("可信", scores.credibility || 0)}
               </div>
               <div class="opportunity-strategy">
-                <strong>${escapeHtml(intelligence.stage || "线索识别")}</strong>
+                <strong>${escapeHtml(workflow.stage_label || "线索识别")}</strong>
                 <span>${escapeHtml(intelligence.project_target || "目标待确认")}</span>
+                ${workflow.owner_name ? `<small>负责人：${escapeHtml(workflow.owner_name)}</small>` : ""}
                 ${risks.length ? `<small>${escapeHtml(risks[0])}</small>` : ""}
               </div>
               <div class="opportunity-actions">
-                <button class="ghost-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">发送飞书</button>
+                <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${workflow.feishu_message_id ? "同步协同" : "启动协同"}</button>
                 <button class="text-link" type="button" data-view-opportunity="${escapeHtml(item.notice_id)}">研判详情</button>
               </div>
             </article>
@@ -1283,6 +1285,7 @@ function openOpportunityDetail(noticeId) {
   const item = state.opportunities.find((value) => value.notice_id === noticeId);
   if (!item || !el.opportunityDetailDialog || !el.opportunityDetailContent) return;
   const intelligence = item.intelligence || {};
+  const workflow = item.workflow || {};
   const scores = intelligence.scores || {};
   const market = intelligence.market_context || {};
   const benchmark = market.benchmark || {};
@@ -1302,9 +1305,9 @@ function openOpportunityDetail(noticeId) {
         <strong>${escapeHtml(intelligence.level || "D")}</strong><span>${escapeHtml(intelligence.score || 0)} 分</span>
       </div>
       <div>
-        <strong>${escapeHtml(intelligence.stage || "线索识别")}</strong>
+        <strong>${escapeHtml(workflow.stage_label || "线索识别")}</strong>
         <span>${escapeHtml(item.purchaser || "采购人待确认")} · ${escapeHtml(item.region || "地区待确认")}</span>
-        <small>${escapeHtml(item.source_site || "未知来源")} · ${escapeHtml(item.publish_time || "时间待确认")}</small>
+        <small>${escapeHtml(workflow.owner_name || "负责人待认领")} · ${escapeHtml(item.source_site || "未知来源")} · ${escapeHtml(item.publish_time || "时间待确认")}</small>
       </div>
     </div>
     <div class="opportunity-detail-metrics">
@@ -1342,8 +1345,16 @@ function openOpportunityDetail(noticeId) {
       </div>
       ${risks.length ? `<div class="opportunity-detail-risks">${risks.map((value) => `<p>${escapeHtml(value)}</p>`).join("")}</div>` : ""}
     </section>
+    <section class="opportunity-detail-section">
+      <h3>飞书协同</h3>
+      ${detailLine("销售阶段", workflow.stage_label || "线索识别")}
+      ${detailLine("机会负责人", workflow.owner_name || "待认领")}
+      ${detailLine("下一步行动", workflow.next_action || "启动协同后自动生成")}
+      ${detailLine("任务状态", workflow.feishu_task_guid ? "已创建" : "待创建")}
+      ${detailLine("截止日程", workflow.feishu_event_id ? "已创建" : (item.bid_deadline ? "待创建" : "未识别截止时间"))}
+    </section>
     <div class="opportunity-detail-footer">
-      <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">发送飞书</button>
+      <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${workflow.feishu_message_id ? "同步飞书协同" : "启动飞书协同"}</button>
       ${item.source_url ? `<a class="ghost-button" href="${escapeHtml(item.source_url)}" target="_blank" rel="noreferrer">查看原文</a>` : ""}
     </div>
   `;
@@ -1646,6 +1657,10 @@ function renderFeishuOverview(payload) {
   const rows = [
     ["报告与周报", features.report_delivery, "Word 文件和使用周报"],
     ["多维表格", features.bitable_sync, features.bitable_sync?.detail || "公告明细同步"],
+    ["机会卡片", features.opportunity_cards, "可操作机会卡片与原文入口"],
+    ["销售任务", features.task_sync, "负责人任务与下一步行动"],
+    ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],
+    ["状态回调", features.card_callback, "卡片动作回写台账与审计流"],
     ["智能体服务", features.agent_service, "独立智能体应用"],
   ];
   el.feishuFeatureList.className = "integration-list";
@@ -1927,10 +1942,18 @@ async function sendMemoryWeeklyToFeishu() {
 async function sendOpportunityToFeishu(noticeId) {
   const result = await api("/api/opportunities/send-feishu", {
     method: "POST",
-    body: JSON.stringify({ notice_id: noticeId }),
+    body: JSON.stringify({
+      notice_id: noticeId,
+      create_task: true,
+      create_calendar_event: true,
+    }),
   });
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (item && result.workflow) item.workflow = result.workflow;
+  renderOpportunities({ items: state.opportunities, summary: state.opportunitySummaryData });
   await refreshFeishu();
-  showToast(result.status === "sent" ? "机会情报已发送到飞书" : "机会情报发送未完成");
+  const created = [result.task_guid && "任务", result.event_id && "日程"].filter(Boolean).join("与");
+  showToast(result.status === "sent" ? `飞书协同已启动${created ? `，已关联${created}` : ""}` : "飞书协同未完成");
 }
 
 async function saveMemoryWeekly() {

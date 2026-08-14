@@ -231,6 +231,9 @@ class CcgpAdapter:
         )
         self.last_fetch_stats: dict[str, object] = {}
 
+    def supports(self, bidql: dict[str, Any]) -> bool:
+        return bidql.get("region", {}).get("scope") not in {"global", "eu", "worldbank"}
+
     def list_urls(self, max_pages: int) -> list[str]:
         urls: list[str] = []
         for base in CCGP_LIST_URLS:

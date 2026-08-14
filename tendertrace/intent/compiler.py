@@ -23,12 +23,21 @@ def compile_intent(query: str, *, now: datetime | None = None) -> dict[str, Any]
     topic_confidence = float(topic.get("confidence") or 0.0)
     if topic_confidence < 0.65 and not topic.get("open_scope"):
         clarify_needed.append("topic")
-    if not parsed_region.value["province"]:
+    if not parsed_region.value["province"] and parsed_region.value.get("scope") not in {
+        "global",
+        "eu",
+        "worldbank",
+    }:
         clarify_needed.append("region")
 
     confidence = {
         "topic": topic_confidence if topic["core"] else 0.8 if topic.get("open_scope") else 0.0,
-        "region": 1.0 if parsed_region.value["province"] else 0.0,
+        "region": (
+            1.0
+            if parsed_region.value["province"]
+            or parsed_region.value.get("scope") in {"global", "eu", "worldbank"}
+            else 0.0
+        ),
         "time": 0.96 if parsed_time.value.get("origin") == "rule" else 0.65,
         "schedule": 0.98,
     }

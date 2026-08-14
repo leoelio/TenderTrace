@@ -17,6 +17,18 @@ _CATEGORY_SYNONYMS = {
     "网络设备": ["网络设备", "交换机", "路由器", "防火墙", "无线控制器"],
 }
 
+_CATEGORY_SOURCE_TERMS = {
+    "充电桩": ["electric vehicle charging", "charging station", "EV charger"],
+    "服务器": ["server", "data center server", "computing infrastructure"],
+    "空调": ["air conditioning", "HVAC", "cooling system"],
+    "储能": ["energy storage", "battery storage", "BESS"],
+    "医疗设备": ["medical equipment", "medical device", "diagnostic equipment"],
+    "电梯": ["elevator", "lift", "escalator"],
+    "消防": ["fire protection", "fire safety equipment", "fire suppression"],
+    "安防": ["security system", "video surveillance", "access control"],
+    "网络设备": ["network equipment", "network infrastructure", "switch router"],
+}
+
 _NEGATIVE = ["中标", "成交", "废标", "流标", "终止", "结果"]
 
 _STOP_PHRASES = [
@@ -104,6 +116,7 @@ def extract_topic(
         return {
             "core": core,
             "expanded": _dedupe_expanded(expanded, core),
+            "source_terms": _source_terms(core),
             "negative": list(_NEGATIVE),
             "origin": "category_dict",
             "confidence": 0.94,
@@ -118,6 +131,7 @@ def extract_topic(
     return {
         "core": core,
         "expanded": [],
+        "source_terms": [term for term in core if re.search(r"[A-Za-z]", term)],
         "negative": list(_NEGATIVE),
         "origin": "jieba_pos" if confidence >= 0.7 else "fallback",
         "confidence": confidence,
@@ -216,3 +230,10 @@ def _dedupe_expanded(items: list[dict[str, object]], core: list[str]) -> list[di
         seen.add(term)
         result.append(item)
     return result
+
+
+def _source_terms(core: list[str]) -> list[str]:
+    terms: list[str] = []
+    for category in core:
+        terms.extend(_CATEGORY_SOURCE_TERMS.get(category, ()))
+    return _dedupe_terms(terms)

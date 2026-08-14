@@ -110,6 +110,8 @@ class Settings:
     feishu_message_app_secret_present: bool
     feishu_default_receive_id: str
     feishu_default_receive_id_type: str
+    feishu_calendar_id: str
+    feishu_callback_verification_token_present: bool
     feishu_agent_enabled: bool
     feishu_agent_base_url: str
     feishu_agent_app_id_present: bool
@@ -302,6 +304,10 @@ class Settings:
             feishu_message_app_secret_present=_bool_secret_present(feishu_message_app_secret),
             feishu_default_receive_id=_first_value("FEISHU_DEFAULT_RECEIVE_ID", env_files, ""),
             feishu_default_receive_id_type=feishu_receive_id_type,
+            feishu_calendar_id=_first_value("FEISHU_CALENDAR_ID", env_files, ""),
+            feishu_callback_verification_token_present=_bool_secret_present(
+                _first_value("FEISHU_CALLBACK_VERIFICATION_TOKEN", env_files, "")
+            ),
             feishu_agent_enabled=feishu_agent_enabled,
             feishu_agent_base_url=_first_value(
                 "FEISHU_AGENT_BASE_URL",
@@ -402,6 +408,10 @@ class Settings:
             "feishu_message_app_secret_configured": self.feishu_message_app_secret_present,
             "feishu_default_receive_id_configured": bool(self.feishu_default_receive_id),
             "feishu_default_receive_id_type": self.feishu_default_receive_id_type,
+            "feishu_calendar_id_configured": bool(self.feishu_calendar_id),
+            "feishu_callback_verification_token_configured": (
+                self.feishu_callback_verification_token_present
+            ),
             "feishu_agent_enabled": self.feishu_agent_enabled,
             "feishu_agent_base_url": self.feishu_agent_base_url,
             "feishu_agent_app_id_configured": self.feishu_agent_app_id_present,
@@ -464,6 +474,13 @@ class Settings:
             _read_env_file(self.workspace_root / ".env"),
         ]
         return _first_value("FEISHU_APP_SECRET", env_files, "")
+
+    def feishu_callback_verification_token(self) -> str:
+        env_files = [
+            _read_env_file(self.workspace_root / ".env.local"),
+            _read_env_file(self.workspace_root / ".env"),
+        ]
+        return _first_value("FEISHU_CALLBACK_VERIFICATION_TOKEN", env_files, "")
 
     def feishu_agent_app_id(self) -> str:
         env_files = [

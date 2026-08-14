@@ -76,6 +76,15 @@ _PROVINCE_SHORT_NAMES: dict[str, tuple[str, ...]] = {
     "澳门": ("澳",),
 }
 
+_INTERNATIONAL_SCOPES = (
+    ("世界银行", "worldbank"),
+    ("欧盟", "eu"),
+    ("欧洲", "eu"),
+    ("全球", "global"),
+    ("海外", "global"),
+    ("国际", "global"),
+)
+
 
 def _short_name(value: str) -> str:
     for suffix in _PLACE_SUFFIXES:
@@ -163,6 +172,24 @@ _DISTRICT_ALIASES = sorted(
 
 
 def parse_region(query: str) -> RegionMatch:
+    for alias, scope in _INTERNATIONAL_SCOPES:
+        if alias in query:
+            return RegionMatch(
+                value={
+                    "province": None,
+                    "city": None,
+                    "district": None,
+                    "adcode": None,
+                    "city_adcode": None,
+                    "district_adcode": None,
+                    "aliases": [alias],
+                    "city_aliases": [],
+                    "district_aliases": [],
+                    "scope": scope,
+                    "origin": "rule",
+                },
+                matched_text=alias,
+            )
     for alias, district, province, city, district_adcode, district_aliases in _DISTRICT_ALIASES:
         if alias in query:
             province_full = _province_full_name(province)
@@ -248,6 +275,7 @@ def parse_region(query: str) -> RegionMatch:
             "aliases": [],
             "city_aliases": [],
             "district_aliases": [],
+            "scope": "domestic",
             "origin": "missing",
         },
         matched_text="",

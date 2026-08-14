@@ -6,6 +6,8 @@ from typing import Any
 
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
+from tendertrace.adapters.ted import TED_SEARCH_API
+from tendertrace.adapters.worldbank import WORLD_BANK_API
 from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.vault.qianlima import QIANLIMA_SEARCH_URL, QianlimaSessionVault
@@ -73,6 +75,36 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "allow": [r"/information/deal/html/.+\.html$", r"\.(pdf|docx?|xlsx?|zip|rar)$"],
                 "deny": [],
                 "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="ted",
+            engine="official-json-api",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(name="ted-search-api", url=TED_SEARCH_API, kind="api", method="POST")
+            ],
+            health=health.get("ted", {}),
+            discovery_rules={
+                "scope": ["global", "eu"],
+                "authority": "Publications Office of the European Union",
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="worldbank",
+            engine="official-json-api",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(name="worldbank-procurement-api", url=WORLD_BANK_API, kind="api")
+            ],
+            health=health.get("worldbank", {}),
+            discovery_rules={
+                "scope": ["global", "worldbank"],
+                "authority": "World Bank Group",
+                "same_domain": False,
             },
         ),
         SourceMapItem(
