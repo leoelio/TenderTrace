@@ -116,15 +116,18 @@ def _collect_evidence(settings: Settings) -> dict[str, Any]:
             WHERE status = 'finished'
             """
         ).fetchone()
-        latest_run = conn.execute(
+        finished_runs = conn.execute(
             """
             SELECT id, subscription_id, original_query, status, output_docx_path, stats_json
             FROM runs
             WHERE status = 'finished'
             ORDER BY finished_at DESC
-            LIMIT 1
             """
-        ).fetchone()
+        ).fetchall()
+        latest_run = next(
+            (row for row in finished_runs if _run_output_exists(settings, row)),
+            finished_runs[0] if finished_runs else None,
+        )
         active_subscriptions = conn.execute(
             "SELECT COUNT(*) AS count FROM subscriptions WHERE status = 'active'"
         ).fetchone()["count"]
@@ -178,6 +181,14 @@ def _latest_run_dict(row) -> dict[str, Any] | None:
         "output_docx_path": row["output_docx_path"],
         "stats": stats,
     }
+
+
+def _run_output_exists(settings: Settings, row) -> bool:
+    path_raw = row["output_docx_path"]
+    if not path_raw:
+        return False
+    path = Path(path_raw)
+    return path.exists() or (settings.outputs_dir / path.name).exists()
 
 
 

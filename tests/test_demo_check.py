@@ -92,6 +92,32 @@ class DemoCheckTests(unittest.TestCase):
         checks = {check.name: check for check in report.checks}
         self.assertNotEqual(checks["word_outbox"].status, "fail")
 
+    def test_demo_check_uses_latest_finished_run_with_existing_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = Settings.load(root)
+            init_db(settings)
+            report_path = _write_report(settings.outputs_dir / "existing_202607061301.docx")
+            settings.outbox_dir.mkdir(parents=True, exist_ok=True)
+            (settings.outbox_dir / report_path.name).write_bytes(report_path.read_bytes())
+            _insert_run(settings, "run-existing", "existing report", report_path)
+            _insert_run(settings, "run-missing", "removed report", root / "removed.docx")
+            with connection(settings) as conn:
+                conn.execute(
+                    "UPDATE runs SET finished_at = '2026-07-06 13:01:00' "
+                    "WHERE id = 'run-existing'"
+                )
+                conn.execute(
+                    "UPDATE runs SET finished_at = '2026-07-06 13:02:00' "
+                    "WHERE id = 'run-missing'"
+                )
+
+            report = run_demo_check(settings)
+
+        self.assertEqual(report.evidence["latest_finished_run"]["id"], "run-existing")
+        checks = {check.name: check for check in report.checks}
+        self.assertNotEqual(checks["word_outbox"].status, "fail")
+
 
 def _write_report(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)

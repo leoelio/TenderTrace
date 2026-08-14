@@ -15,6 +15,20 @@ type Intelligence = {
   project_target: string;
   strategy: string;
   market_signals: string[];
+  competition?: {
+    message?: string;
+    evidence_excerpt?: string;
+    historical_suppliers?: Array<{ name: string; count: number }>;
+  };
+  requirement_review?: {
+    coverage_score: number;
+    covered_count: number;
+    total_count: number;
+    missing: string[];
+    recommendations: string[];
+    basis: string;
+    dimensions: Array<{ name: string; status: string; evidence?: string }>;
+  };
   market_context?: {
     benchmark?: { message?: string; sample_count?: number };
     signals?: string[];
@@ -137,7 +151,10 @@ function App() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    return bitable.base.onSelectionChange(() => load());
+  }, [load]);
 
   const title = context?.values["标题"] || "当前机会";
   const sourceUrl = context?.values["来源链接"] || "";
@@ -145,12 +162,13 @@ function App() {
   const quality = intelligence?.scores || {};
   const marketBenchmark = intelligence?.market_context?.benchmark;
   const marketContextSignals = intelligence?.market_context?.signals || [];
+  const competition = intelligence?.competition;
+  const requirementReview = intelligence?.requirement_review;
   const actionCount = intelligence?.recommended_actions?.length || 0;
   const riskCount =
     (intelligence?.risks?.length || 0) +
     (intelligence?.market_signals?.length || 0) +
-    marketContextSignals.length +
-    (marketBenchmark?.message ? 1 : 0);
+    marketContextSignals.length;
   const statusText = useMemo(
     () => intelligence ? `${intelligence.level} 级 · ${intelligence.level_label}` : "等待研判",
     [intelligence],
@@ -179,6 +197,12 @@ function App() {
       "风险提示": intelligence.risks.join("\n"),
       "市场价格位置": marketBenchmark?.message || "样本不足",
       "市场样本数": String(marketBenchmark?.sample_count || 0),
+      "竞争情报": competition?.message || "样本不足",
+      "竞争证据": competition?.evidence_excerpt || "",
+      "历史竞争者": (competition?.historical_suppliers || []).map((item) => `${item.name}（${item.count} 次）`).join("、"),
+      "需求覆盖率": `${requirementReview?.coverage_score || 0}/100 · ${requirementReview?.covered_count || 0}/${requirementReview?.total_count || 0} 项`,
+      "需求待核对": (requirementReview?.missing || []).join("、"),
+      "需求优化建议": (requirementReview?.recommendations || []).join("\n"),
     };
     try {
       for (const [name, value] of Object.entries(updates)) {
@@ -250,6 +274,37 @@ function App() {
           </section>
 
           <section>
+            <div className="section-title"><strong>市场与竞争</strong><span>{competition?.historical_suppliers?.length || 0} 家样本</span></div>
+            <div className="decision-section market-section">
+              <div><span>价格位置</span><strong>{marketBenchmark?.message || "同品类预算样本不足"}</strong></div>
+              <div><span>竞争结论</span><strong>{competition?.message || "同品类结果样本不足"}</strong></div>
+            </div>
+            {!!competition?.historical_suppliers?.length && (
+              <div className="supplier-list">
+                {competition.historical_suppliers.slice(0, 5).map((item, index) => <span key={index}>{item.name} · {item.count}</span>)}
+              </div>
+            )}
+            {competition?.evidence_excerpt && <blockquote>{competition.evidence_excerpt}</blockquote>}
+          </section>
+
+          <section>
+            <div className="section-title"><strong>需求覆盖</strong><span>{requirementReview?.covered_count || 0} / {requirementReview?.total_count || 0} 项</span></div>
+            <div className="requirement-grid">
+              {(requirementReview?.dimensions || []).map((item, index) => (
+                <div className={item.status === "covered" ? "covered" : "verify"} key={index}>
+                  <span>{item.status === "covered" ? "已覆盖" : "待核对"}</span><strong>{item.name}</strong>
+                </div>
+              ))}
+            </div>
+            {!!requirementReview?.recommendations?.length && (
+              <div className="advice-list">
+                {requirementReview.recommendations.map((item, index) => <p key={index}>{item}</p>)}
+              </div>
+            )}
+            {requirementReview?.basis && <small className="basis">{requirementReview.basis}</small>}
+          </section>
+
+          <section>
             <div className="section-title"><strong>角色行动</strong><span>{actionCount}</span></div>
             <div className="action-list">
               {intelligence.recommended_actions.map((item, index) => <div key={index}><span>{item.role}</span><strong>{item.action}</strong></div>)}
@@ -259,7 +314,6 @@ function App() {
           <section>
             <div className="section-title"><strong>风险与市场信号</strong><span>{riskCount}</span></div>
             <div className="signal-list">
-              {marketBenchmark?.message && <p>{marketBenchmark.message}</p>}
               {intelligence.risks.map((item, index) => <p className="risk" key={`risk-${index}`}>{item}</p>)}
               {marketContextSignals.map((item, index) => <p key={`context-${index}`}>{item}</p>)}
               {intelligence.market_signals.map((item, index) => <p key={`signal-${index}`}>{item}</p>)}

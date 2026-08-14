@@ -82,6 +82,26 @@ section { padding: 16px 0; border-bottom: 1px solid #e8edf4; }
 .decision-section strong { font-size: 13px; line-height: 1.55; }
 .section-title { margin-bottom: 9px; }
 
+.market-section { gap: 9px; }
+.market-section > div { padding: 8px 0; border-top: 1px solid #eef2f6; }
+
+.supplier-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.supplier-list span { padding: 5px 7px; border: 1px solid #dfe6ef; border-radius: 5px; color: #445168; background: #f8fafc; font-size: 10px; }
+
+blockquote { margin: 10px 0 0; padding: 9px 11px; border-left: 3px solid #1463ff; color: #58657a; background: #f7f9fc; font-size: 11px; line-height: 1.55; }
+
+.requirement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #e5eaf1; border-left: 1px solid #e5eaf1; }
+.requirement-grid > div { display: grid; gap: 3px; min-width: 0; padding: 8px; border-right: 1px solid #e5eaf1; border-bottom: 1px solid #e5eaf1; }
+.requirement-grid span { color: #69758a; font-size: 9px; }
+.requirement-grid strong { font-size: 11px; }
+.requirement-grid .covered span { color: #087443; }
+.requirement-grid .verify span { color: #956500; }
+
+.advice-list { margin-top: 10px; border-top: 1px solid #eef2f6; }
+.advice-list p { padding: 7px 0; color: #445168; font-size: 11px; line-height: 1.5; }
+.advice-list p + p { border-top: 1px solid #eef2f6; }
+.basis { display: block; margin-top: 9px; color: #69758a; font-size: 10px; line-height: 1.5; }
+
 .action-list, .signal-list { display: grid; }
 .action-list > div { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-top: 1px solid #eef2f6; }
 .action-list span { color: #58657a; font-size: 11px; }

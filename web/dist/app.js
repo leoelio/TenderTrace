@@ -101,6 +101,9 @@ const el = {
   opportunityFooter: document.querySelector("#opportunityFooter"),
   opportunityListHint: document.querySelector("#opportunityListHint"),
   loadMoreOpportunitiesButton: document.querySelector("#loadMoreOpportunitiesButton"),
+  opportunityDetailDialog: document.querySelector("#opportunityDetailDialog"),
+  opportunityDetailTitle: document.querySelector("#opportunityDetailTitle"),
+  opportunityDetailContent: document.querySelector("#opportunityDetailContent"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
   runSearchInput: document.querySelector("#runSearchInput"),
@@ -1262,7 +1265,7 @@ function renderOpportunities(payload) {
               </div>
               <div class="opportunity-actions">
                 <button class="ghost-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">发送飞书</button>
-                <a class="text-link" href="${escapeHtml(item.source_url || "#")}" target="_blank" rel="noreferrer">查看原文</a>
+                <button class="text-link" type="button" data-view-opportunity="${escapeHtml(item.notice_id)}">研判详情</button>
               </div>
             </article>
           `;
@@ -1274,6 +1277,85 @@ function renderOpportunities(payload) {
     el.opportunityListHint.textContent = `已展示 ${visibleItems.length} / ${items.length} 条机会`;
     el.loadMoreOpportunitiesButton.hidden = visibleItems.length >= items.length;
   }
+}
+
+function openOpportunityDetail(noticeId) {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (!item || !el.opportunityDetailDialog || !el.opportunityDetailContent) return;
+  const intelligence = item.intelligence || {};
+  const scores = intelligence.scores || {};
+  const market = intelligence.market_context || {};
+  const benchmark = market.benchmark || {};
+  const competition = intelligence.competition || market.competition || {};
+  const review = intelligence.requirement_review || {};
+  const dimensions = Array.isArray(review.dimensions) ? review.dimensions : [];
+  const recommendations = Array.isArray(review.recommendations) ? review.recommendations : [];
+  const actions = Array.isArray(intelligence.recommended_actions) ? intelligence.recommended_actions : [];
+  const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
+  const suppliers = Array.isArray(competition.historical_suppliers)
+    ? competition.historical_suppliers
+    : [];
+  el.opportunityDetailTitle.textContent = item.title || "机会详情";
+  el.opportunityDetailContent.innerHTML = `
+    <div class="opportunity-detail-hero">
+      <div class="opportunity-detail-grade grade-${escapeHtml(String(intelligence.level || "D").toLowerCase())}">
+        <strong>${escapeHtml(intelligence.level || "D")}</strong><span>${escapeHtml(intelligence.score || 0)} 分</span>
+      </div>
+      <div>
+        <strong>${escapeHtml(intelligence.stage || "线索识别")}</strong>
+        <span>${escapeHtml(item.purchaser || "采购人待确认")} · ${escapeHtml(item.region || "地区待确认")}</span>
+        <small>${escapeHtml(item.source_site || "未知来源")} · ${escapeHtml(item.publish_time || "时间待确认")}</small>
+      </div>
+    </div>
+    <div class="opportunity-detail-metrics">
+      ${detailMetric("时效", scores.freshness || 0)}
+      ${detailMetric("完整", scores.completeness || 0)}
+      ${detailMetric("可信", scores.credibility || 0)}
+      ${detailMetric("需求覆盖", review.coverage_score || 0)}
+    </div>
+    <section class="opportunity-detail-section">
+      <h3>市场与竞争</h3>
+      ${detailLine("价格位置", benchmark.message || "同品类预算样本不足")}
+      ${detailLine("竞争结论", competition.message || "同品类结果样本不足")}
+      ${suppliers.length ? detailLine("历史竞争者", suppliers.slice(0, 4).map((value) => `${value.name}（${value.count} 次）`).join("、")) : ""}
+      ${competition.evidence_excerpt ? `<blockquote>${escapeHtml(competition.evidence_excerpt)}</blockquote>` : ""}
+    </section>
+    <section class="opportunity-detail-section">
+      <div class="opportunity-detail-section-title"><h3>需求覆盖</h3><span>${escapeHtml(review.covered_count || 0)} / ${escapeHtml(review.total_count || 0)} 项</span></div>
+      <div class="requirement-dimensions">
+        ${dimensions.map((value) => `
+          <div class="requirement-${value.status === "covered" ? "covered" : "verify"}">
+            <span>${value.status === "covered" ? "已覆盖" : "待核对"}</span>
+            <strong>${escapeHtml(value.name || "未命名维度")}</strong>
+          </div>
+        `).join("")}
+      </div>
+      ${recommendations.length ? `<div class="opportunity-detail-advice">${recommendations.map((value) => `<p>${escapeHtml(value)}</p>`).join("")}</div>` : ""}
+      <small class="opportunity-detail-basis">${escapeHtml(review.basis || "")}</small>
+    </section>
+    <section class="opportunity-detail-section">
+      <h3>目标与行动</h3>
+      ${detailLine("项目目标", intelligence.project_target || "待确认")}
+      ${detailLine("建议策略", intelligence.strategy || "待确认")}
+      <div class="opportunity-detail-actions-list">
+        ${actions.map((value) => `<p><span>${escapeHtml(value.role || "负责人")}</span><strong>${escapeHtml(value.action || "")}</strong></p>`).join("")}
+      </div>
+      ${risks.length ? `<div class="opportunity-detail-risks">${risks.map((value) => `<p>${escapeHtml(value)}</p>`).join("")}</div>` : ""}
+    </section>
+    <div class="opportunity-detail-footer">
+      <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">发送飞书</button>
+      ${item.source_url ? `<a class="ghost-button" href="${escapeHtml(item.source_url)}" target="_blank" rel="noreferrer">查看原文</a>` : ""}
+    </div>
+  `;
+  el.opportunityDetailDialog.showModal();
+}
+
+function detailMetric(label, value) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function detailLine(label, value) {
+  return `<div class="opportunity-detail-line"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
 
 function marketInsight(label, value, detail) {
@@ -2462,6 +2544,16 @@ function bindEvents() {
       );
       return;
     }
+    const viewOpportunityTarget = event.target.closest("[data-view-opportunity]");
+    if (viewOpportunityTarget) {
+      openOpportunityDetail(viewOpportunityTarget.dataset.viewOpportunity);
+      return;
+    }
+    const closeOpportunityTarget = event.target.closest("[data-close-opportunity-detail]");
+    if (closeOpportunityTarget) {
+      el.opportunityDetailDialog?.close();
+      return;
+    }
     const deleteRunTarget = event.target.closest("[data-delete-run-id]");
     if (deleteRunTarget) {
       deleteRun(deleteRunTarget.dataset.deleteRunId).catch(toastError("删除运行记录失败"));
@@ -2489,6 +2581,9 @@ function bindEvents() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closePopovers();
+  });
+  el.opportunityDetailDialog?.addEventListener("click", (event) => {
+    if (event.target === el.opportunityDetailDialog) el.opportunityDetailDialog.close();
   });
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);

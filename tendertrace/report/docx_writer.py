@@ -14,6 +14,7 @@ from docx.shared import Inches, Pt, RGBColor
 from tendertrace.adapters.ccgp import Notice
 from tendertrace.opportunity import (
     build_market_context,
+    competition_context_for_notice,
     intelligence_for_notice,
     market_benchmark_for_notice,
 )
@@ -222,6 +223,33 @@ def _add_opportunity_detail(
     _add_label_value(doc, "建议策略", str(intelligence.get("strategy") or "待确认"))
     benchmark = market_benchmark_for_notice(notice, market)
     _add_label_value(doc, "市场价格位置", str(benchmark.get("message") or "样本不足"))
+    competition = competition_context_for_notice(notice, market)
+    _add_label_value(doc, "竞争情报", str(competition.get("message") or "样本不足"))
+    evidence_excerpt = str(competition.get("evidence_excerpt") or "").strip()
+    if evidence_excerpt:
+        _add_label_value(doc, "竞争证据", evidence_excerpt)
+    requirement_review = intelligence.get("requirement_review")
+    if isinstance(requirement_review, dict):
+        _add_label_value(
+            doc,
+            "需求覆盖",
+            f"当前采集文本覆盖 {requirement_review.get('covered_count', 0)}/"
+            f"{requirement_review.get('total_count', 0)} 项（"
+            f"{requirement_review.get('coverage_score', 0)} 分）",
+        )
+        missing = requirement_review.get("missing")
+        if isinstance(missing, list) and missing:
+            _add_label_value(doc, "需求待核对", "、".join(str(item) for item in missing))
+        recommendations = requirement_review.get("recommendations")
+        if isinstance(recommendations, list) and recommendations:
+            heading = doc.add_paragraph("需求优化建议：")
+            heading.paragraph_format.keep_with_next = True
+            for index, value in enumerate(recommendations):
+                paragraph = doc.add_paragraph(style="List Bullet")
+                paragraph.paragraph_format.keep_together = True
+                paragraph.paragraph_format.keep_with_next = index < len(recommendations) - 1
+                _set_run_font(paragraph.add_run(str(value)))
+        _add_label_value(doc, "需求研判边界", str(requirement_review.get("basis") or ""))
     risks = intelligence.get("risks")
     if isinstance(risks, list) and risks:
         _add_label_value(doc, "风险提示", "；".join(str(item) for item in risks))
@@ -538,6 +566,7 @@ def write_report(
     _add_opportunity_summary(doc, normalized)
     _add_market_context(doc, market)
 
+    doc.add_page_break()
     doc.add_heading("结果总览", level=1)
     table = doc.add_table(rows=1, cols=6)
     table.style = "Table Grid"

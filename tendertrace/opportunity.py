@@ -22,6 +22,49 @@ LEVELS = (
     (0, "D", "低优先级"),
 )
 
+REQUIREMENT_DIMENSIONS = (
+    (
+        "技术规格",
+        r"技术参数|技术规格|规格型号|性能指标|技术要求",
+        "核对附件中的规格、性能、数量和技术边界。",
+    ),
+    (
+        "兼容集成",
+        r"兼容|接口|集成|对接|适配",
+        "确认既有系统、接口协议、数据迁移和兼容要求。",
+    ),
+    (
+        "交付实施",
+        r"交付|实施|工期|项目周期|供货期",
+        "补齐供货、实施里程碑、地点和责任边界。",
+    ),
+    (
+        "验收标准",
+        r"验收|测试方案|验收标准|验收条件",
+        "明确测试方法、验收指标和不通过处置方式。",
+    ),
+    (
+        "服务保障",
+        r"质保|售后|运维|服务期限|响应时间",
+        "核对质保期限、服务响应、备件和运维范围。",
+    ),
+    (
+        "资质合规",
+        r"资质|认证|证书|业绩要求|资格要求",
+        "核对资格、认证、案例和联合体限制。",
+    ),
+    (
+        "评分规则",
+        r"评分|评标办法|综合评分|评分标准",
+        "获取评分办法并量化技术、商务和价格得分空间。",
+    ),
+    (
+        "安全要求",
+        r"安全|保密|等保|密码|数据保护",
+        "确认安全、保密、等保和数据处理责任。",
+    ),
+)
+
 
 @dataclass(frozen=True)
 class OpportunityResult:
@@ -42,10 +85,7 @@ def enrich_opportunity_intelligence(
         intelligence = notice.fields.get("opportunity_intelligence")
         if not isinstance(intelligence, dict):
             continue
-        intelligence["market_context"] = {
-            "benchmark": market_benchmark_for_notice(notice, market),
-            "signals": list(market.get("signals") or [])[:3],
-        }
+        _attach_market_context(intelligence, _notice_payload(notice), market)
         level = str(intelligence.get("level") or "D")
         levels[level] = levels.get(level, 0) + 1
         scores.append(int(intelligence.get("score") or 0))
@@ -114,14 +154,7 @@ def analyze_opportunity_with_market_context(
     notices = [notice for _notice_id, notice in _recent_notices(settings, limit=500)]
     market = build_market_context(notices, as_of=as_of)
     normalized = _normalized_payload(payload)
-    intelligence["market_context"] = {
-        "benchmark": _market_benchmark(normalized, market),
-        "signals": list(market.get("signals") or [])[:3],
-        "sample_scope": {
-            "notice_count": market.get("notice_count", 0),
-            "budget_sample_count": market.get("budget_sample_count", 0),
-        },
-    }
+    _attach_market_context(intelligence, normalized, market)
     return intelligence
 
 
@@ -150,6 +183,13 @@ def build_market_context(
     regions = Counter(str(item["region"]) for item in entries if item["region"])
     stages = Counter(str(item["stage"]) for item in entries if item["stage"])
     category_counts = Counter(str(item["category"]) for item in entries if item["category"])
+    suppliers = Counter(str(item["supplier"]) for item in entries if item["supplier"])
+    category_suppliers: dict[str, Counter[str]] = {}
+    for item in entries:
+        category = str(item["category"] or "")
+        supplier = str(item["supplier"] or "")
+        if category and supplier:
+            category_suppliers.setdefault(category, Counter())[supplier] += 1
     high_credibility = sum(1 for item in entries if int(item["credibility"] or 0) >= 80)
     budget_coverage = round(len(budgets) / len(entries) * 100, 1) if entries else 0.0
     signals: list[str] = []
@@ -168,6 +208,9 @@ def build_market_context(
     if stages:
         stage, count = stages.most_common(1)[0]
         signals.append(f"采购阶段：{stage} 占 {count}/{len(entries)} 条")
+    if suppliers:
+        supplier, count = suppliers.most_common(1)[0]
+        signals.append(f"竞争样本：{supplier} 在本地结果公告中出现 {count} 次")
     if entries and budget_coverage < 30:
         signals.append("数据提示：预算覆盖率低于 30%，价格判断仅作线索参考")
     return {
@@ -177,11 +220,17 @@ def build_market_context(
         "budget": overall,
         "category_benchmarks": category_benchmarks,
         "category_distribution": _counter_items(category_counts, limit=20),
+        "competition_sample_count": sum(suppliers.values()),
+        "top_suppliers": _counter_items(suppliers),
+        "category_competitors": {
+            category: _counter_items(counter, limit=8)
+            for category, counter in category_suppliers.items()
+        },
         "top_purchasers": _counter_items(purchasers),
         "top_regions": _counter_items(regions),
         "stage_distribution": _counter_items(stages, limit=8),
         "high_credibility_count": high_credibility,
-        "signals": signals[:4],
+        "signals": signals[:5],
     }
 
 
@@ -190,6 +239,13 @@ def market_benchmark_for_notice(
     market: dict[str, object],
 ) -> dict[str, object]:
     return _market_benchmark(_notice_payload(notice), market)
+
+
+def competition_context_for_notice(
+    notice: Notice,
+    market: dict[str, object],
+) -> dict[str, object]:
+    return _competition_context(_notice_payload(notice), market)
 
 
 def list_opportunities(
@@ -222,10 +278,7 @@ def list_opportunities(
         intelligence = _analyze(payload, as_of=None)
         if level and str(intelligence.get("level") or "").upper() != level.upper():
             continue
-        intelligence["market_context"] = {
-            "benchmark": _market_benchmark(_notice_payload(notice), market),
-            "signals": list(market.get("signals") or [])[:3],
-        }
+        _attach_market_context(intelligence, payload, market)
         structured = _mapping(payload.get("structured_fields"))
         items.append(
             {
@@ -285,10 +338,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     market = build_market_context(
         [item for _notice_id, item in _recent_notices(settings, limit=500)]
     )
-    intelligence["market_context"] = {
-        "benchmark": _market_benchmark(_notice_payload(notice), market),
-        "signals": list(market.get("signals") or [])[:3],
-    }
+    _attach_market_context(intelligence, payload, market)
     return {
         "notice_id": str(row["id"]),
         "title": notice.title,
@@ -399,6 +449,7 @@ def _market_entry(payload: dict[str, Any], *, as_of: datetime | date | None) -> 
     structured = _mapping(payload.get("structured_fields"))
     evidence = _mapping(payload.get("evidence"))
     credibility, _basis = _credibility_score(payload, evidence)
+    competition = _competition_signal(payload)
     return {
         "category": _primary_category(payload),
         "budget_cny": parse_budget_cny(structured.get("budget")),
@@ -406,6 +457,8 @@ def _market_entry(payload: dict[str, Any], *, as_of: datetime | date | None) -> 
         "region": str(payload.get("region") or "").strip(),
         "stage": _stage(structured, _as_date(as_of)),
         "credibility": credibility,
+        "supplier": str(competition.get("supplier") or ""),
+        "award_amount_cny": competition.get("award_amount_cny"),
     }
 
 
@@ -485,6 +538,157 @@ def _market_benchmark(payload: dict[str, Any], market: dict[str, object]) -> dic
             f"{position_label}"
         ),
     }
+
+
+def _attach_market_context(
+    intelligence: dict[str, object],
+    payload: dict[str, Any],
+    market: dict[str, object],
+) -> None:
+    competition = _competition_context(payload, market)
+    intelligence["competition"] = competition
+    intelligence["market_context"] = {
+        "benchmark": _market_benchmark(payload, market),
+        "competition": competition,
+        "signals": list(market.get("signals") or [])[:4],
+        "sample_scope": {
+            "notice_count": market.get("notice_count", 0),
+            "budget_sample_count": market.get("budget_sample_count", 0),
+            "competition_sample_count": market.get("competition_sample_count", 0),
+        },
+    }
+
+
+def _competition_context(
+    payload: dict[str, Any],
+    market: dict[str, object],
+) -> dict[str, object]:
+    current = _competition_signal(payload)
+    category = _primary_category(payload)
+    category_map = _mapping(market.get("category_competitors"))
+    raw_suppliers = category_map.get(category) if category else []
+    historical_suppliers = [
+        {"name": str(item.get("name") or ""), "count": int(item.get("count") or 0)}
+        for item in raw_suppliers
+        if isinstance(item, dict) and item.get("name")
+    ] if isinstance(raw_suppliers, list) else []
+    sample_count = sum(int(item["count"]) for item in historical_suppliers)
+    supplier = str(current.get("supplier") or "")
+    if supplier:
+        amount = current.get("award_amount") or "金额待确认"
+        message = f"当前公告披露成交方 {supplier}，成交金额 {amount}"
+    elif historical_suppliers:
+        leaders = "、".join(
+            f"{item['name']}（{item['count']} 次）" for item in historical_suppliers[:3]
+        )
+        message = f"同品类本地结果样本 {sample_count} 条，活跃供应商：{leaders}"
+    elif current.get("status") == "result_unparsed":
+        message = "当前公告属于结果/合同阶段，但未可靠识别成交供应商"
+    else:
+        message = "同品类结果样本不足，暂不生成竞争者排名"
+    return {
+        **current,
+        "category": category,
+        "historical_suppliers": historical_suppliers,
+        "sample_count": sample_count,
+        "message": message,
+    }
+
+
+def _competition_signal(payload: dict[str, Any]) -> dict[str, object]:
+    text = _document_text(payload)
+    supplier = _award_supplier(text)
+    amount = _award_amount(text)
+    result_stage = bool(
+        supplier
+        or re.search(r"中标公告|成交公告|结果公告|合同公告|框架协议合同|中标[（(]?成交", text)
+    )
+    anchor = supplier or ("合同金额" if "合同金额" in text else "中标")
+    return {
+        "status": "result" if supplier else "result_unparsed" if result_stage else "pre_award",
+        "supplier": supplier,
+        "award_amount_cny": amount,
+        "award_amount": _format_cny(amount) if amount else "",
+        "evidence_excerpt": _evidence_excerpt(text, anchor) if result_stage else "",
+    }
+
+
+def _award_supplier(text: str) -> str:
+    supplier = (
+        r"([\u4e00-\u9fffA-Za-z0-9（）()·&\-]{2,80}?"
+        r"(?:股份有限公司|有限责任公司|有限公司|公司|合作社|研究院|研究所|中心|厂))"
+    )
+    table_patterns = (
+        rf"供应商名称\s+供应商地址\s+中标[（(]?成交[）)]?金额"
+        rf"(?:\s+评审总得分)?\s+{supplier}",
+        rf"供应商名称\s+中标供应商地址\s+\d+\s+[^。；;]{{0,140}}?\s+{supplier}",
+    )
+    direct_pattern = (
+        rf"(?:中标[（(]?成交[）)]?供应商名称|中标供应商名称|成交供应商名称|供应商名称)"
+        rf"\s*[:：]?\s*{supplier}"
+    )
+    for pattern in (*table_patterns, direct_pattern):
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def _award_amount(text: str) -> float | None:
+    pattern = (
+        r"(?:合同金额|中标[（(]?成交[）)]?金额|中标金额|成交金额|中标价|成交价|投标报价|总价)"
+        r"\s*[:：]?\s*([0-9][0-9,，]*(?:\.[0-9]+)?)\s*[（(]?(亿元|万元|元)?[）)]?"
+    )
+    match = re.search(pattern, text)
+    if not match:
+        return None
+    return parse_budget_cny(f"{match.group(1)}{match.group(2) or '元'}")
+
+
+def _requirement_review(payload: dict[str, Any]) -> dict[str, object]:
+    text = _document_text(payload)
+    dimensions: list[dict[str, object]] = []
+    recommendations: list[str] = []
+    for name, pattern, recommendation in REQUIREMENT_DIMENSIONS:
+        match = re.search(pattern, text, re.IGNORECASE)
+        covered = match is not None
+        dimensions.append(
+            {
+                "name": name,
+                "status": "covered" if covered else "to_verify",
+                "evidence": _evidence_excerpt(text, match.group(0)) if match else "",
+            }
+        )
+        if not covered:
+            recommendations.append(recommendation)
+    covered_count = sum(1 for item in dimensions if item["status"] == "covered")
+    total_count = len(dimensions)
+    return {
+        "coverage_score": round(covered_count / total_count * 100) if total_count else 0,
+        "covered_count": covered_count,
+        "total_count": total_count,
+        "dimensions": dimensions,
+        "missing": [str(item["name"]) for item in dimensions if item["status"] == "to_verify"],
+        "recommendations": recommendations[:4],
+        "basis": "仅基于当前已采集正文和核心内容；未检出项需回看原文及附件，不代表原始文件缺失。",
+    }
+
+
+def _document_text(payload: dict[str, Any]) -> str:
+    return " ".join(
+        str(payload.get(key) or "") for key in ("title", "core_content", "content_text")
+    )
+
+
+def _evidence_excerpt(text: str, anchor: str, *, radius: int = 80) -> str:
+    if not anchor:
+        return ""
+    index = text.find(anchor)
+    if index < 0:
+        return ""
+    start = max(0, index - radius)
+    end = min(len(text), index + len(anchor) + radius)
+    return re.sub(r"\s+", " ", text[start:end]).strip()[:220]
 
 
 def _counter_items(counter: Counter[str], *, limit: int = 5) -> list[dict[str, object]]:
@@ -584,6 +788,8 @@ def _analyze(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[
     )
     actions = _actions(level, structured, missing_fields, risks)
     target = _target(level, structured, payload)
+    competition = _competition_signal(payload)
+    requirement_review = _requirement_review(payload)
     return {
         "score": score,
         "level": level,
@@ -601,6 +807,8 @@ def _analyze(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[
         "recommended_actions": actions,
         "project_target": target,
         "strategy": _strategy(level, payload, structured, credibility_basis),
+        "competition": competition,
+        "requirement_review": requirement_review,
         "market_signals": _market_signals(payload, structured),
         "basis": {
             "credibility": credibility_basis,
@@ -609,7 +817,7 @@ def _analyze(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[
             "source_url": str(payload.get("source_url") or ""),
         },
         "evaluated_at": reference_date.isoformat(),
-        "engine": "tendertrace_opportunity_rules_v2",
+        "engine": "tendertrace_opportunity_rules_v3",
     }
 
 

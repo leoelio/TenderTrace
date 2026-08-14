@@ -100,6 +100,70 @@ class OpportunityIntelligenceTests(unittest.TestCase):
         self.assertNotIn("预算", intelligence["missing_fields"])
         self.assertNotIn("采购人", intelligence["missing_fields"])
 
+    def test_competition_intelligence_uses_result_evidence_and_category_history(self) -> None:
+        first = replace(
+            _notice(),
+            id="award-1",
+            title="关于服务器的框架协议合同",
+            content_text=(
+                "中标（成交）供应商名称 上海经意实业有限公司 "
+                "合同金额 77,800元 人民币 合同签署时间 2026-08-10"
+            ),
+            core_content="服务器框架协议合同",
+        )
+        second = replace(
+            first,
+            id="award-2",
+            content_text=(
+                "供应商名称 中颂建筑智能化工程（上海）有限公司 "
+                "合同金额 25,000元 人民币"
+            ),
+        )
+
+        result = enrich_opportunity_intelligence(
+            [first, second],
+            as_of=datetime(2026, 8, 15, 10, 0),
+        )
+        competition = result.notices[0].fields["opportunity_intelligence"]["competition"]
+
+        self.assertEqual(competition["status"], "result")
+        self.assertEqual(competition["supplier"], "上海经意实业有限公司")
+        self.assertEqual(competition["award_amount_cny"], 77_800)
+        self.assertEqual(competition["sample_count"], 2)
+        self.assertEqual(
+            {item["name"] for item in competition["historical_suppliers"]},
+            {"上海经意实业有限公司", "中颂建筑智能化工程（上海）有限公司"},
+        )
+        self.assertIn("上海经意实业有限公司", competition["evidence_excerpt"])
+
+    def test_requirement_review_marks_only_evidence_found_in_collected_text(self) -> None:
+        notice = replace(
+            _notice(),
+            content_text=(
+                "技术参数详见采购需求，需兼容现有接口。供货期为30日，"
+                "项目按验收标准完成测试。"
+            ),
+            core_content="服务器采购项目",
+        )
+
+        intelligence = analyze_opportunity_payload(
+            {
+                "title": notice.title,
+                "content_text": notice.content_text,
+                "core_content": notice.core_content,
+            },
+            as_of=datetime(2026, 8, 15, 10, 0),
+        )
+        review = intelligence["requirement_review"]
+
+        self.assertEqual(review["covered_count"], 4)
+        self.assertEqual(review["coverage_score"], 50)
+        self.assertEqual(
+            set(review["missing"]),
+            {"服务保障", "资质合规", "评分规则", "安全要求"},
+        )
+        self.assertIn("不代表原始文件缺失", review["basis"])
+
     def test_missing_evidence_is_exposed_instead_of_hidden(self) -> None:
         intelligence = analyze_opportunity_payload(
             {"标题": "服务器采购公告", "发布时间": "2026-08-14"},

@@ -42,6 +42,12 @@ REQUIRED_FIELDS = (
     "风险提示",
     "市场价格位置",
     "市场样本数",
+    "竞争情报",
+    "竞争证据",
+    "历史竞争者",
+    "需求覆盖率",
+    "需求待核对",
+    "需求优化建议",
 )
 
 
@@ -428,6 +434,16 @@ def _record_fields(
         if isinstance(market_context.get("benchmark"), dict)
         else {}
     )
+    competition = (
+        intelligence.get("competition")
+        if isinstance(intelligence.get("competition"), dict)
+        else {}
+    )
+    requirement_review = (
+        intelligence.get("requirement_review")
+        if isinstance(intelligence.get("requirement_review"), dict)
+        else {}
+    )
     cluster_key = _cluster_key(notice)
     topic = bidql.get("topic") if isinstance(bidql.get("topic"), dict) else {}
     keywords = topic.get("core") if isinstance(topic.get("core"), list) else []
@@ -461,6 +477,20 @@ def _record_fields(
         "风险提示": "\n".join(str(item) for item in intelligence.get("risks") or []),
         "市场价格位置": str(benchmark.get("message") or "样本不足"),
         "市场样本数": str(benchmark.get("sample_count") or 0),
+        "竞争情报": str(competition.get("message") or "样本不足"),
+        "竞争证据": str(competition.get("evidence_excerpt") or ""),
+        "历史竞争者": _competitor_text(competition),
+        "需求覆盖率": (
+            f"{requirement_review.get('coverage_score', 0)}/100 · "
+            f"{requirement_review.get('covered_count', 0)}/"
+            f"{requirement_review.get('total_count', 0)} 项"
+        ),
+        "需求待核对": "、".join(
+            str(item) for item in requirement_review.get("missing") or []
+        ),
+        "需求优化建议": "\n".join(
+            str(item) for item in requirement_review.get("recommendations") or []
+        ),
     }
 
 
@@ -481,6 +511,12 @@ def _update_fields(row: dict[str, object]) -> dict[str, object]:
         "风险提示": row["风险提示"],
         "市场价格位置": row["市场价格位置"],
         "市场样本数": row["市场样本数"],
+        "竞争情报": row["竞争情报"],
+        "竞争证据": row["竞争证据"],
+        "历史竞争者": row["历史竞争者"],
+        "需求覆盖率": row["需求覆盖率"],
+        "需求待核对": row["需求待核对"],
+        "需求优化建议": row["需求优化建议"],
     }
 
 
@@ -493,6 +529,17 @@ def _action_texts(intelligence: dict[str, Any]) -> list[str]:
         for item in actions
         if isinstance(item, dict) and item.get("action")
     ]
+
+
+def _competitor_text(competition: dict[str, Any]) -> str:
+    suppliers = competition.get("historical_suppliers")
+    if not isinstance(suppliers, list):
+        return ""
+    return "、".join(
+        f"{item.get('name')}（{item.get('count', 0)} 次）"
+        for item in suppliers
+        if isinstance(item, dict) and item.get("name")
+    )
 
 
 def _attachment_urls(notice: dict[str, Any]) -> list[str]:

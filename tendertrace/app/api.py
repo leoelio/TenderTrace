@@ -1074,6 +1074,16 @@ def _opportunity_message(opportunity: dict[str, object]) -> str:
         if isinstance(market_context.get("benchmark"), dict)
         else {}
     )
+    competition = (
+        intelligence.get("competition")
+        if isinstance(intelligence.get("competition"), dict)
+        else {}
+    )
+    requirement_review = (
+        intelligence.get("requirement_review")
+        if isinstance(intelligence.get("requirement_review"), dict)
+        else {}
+    )
     actions = intelligence.get("recommended_actions")
     action_lines = []
     if isinstance(actions, list):
@@ -1096,6 +1106,14 @@ def _opportunity_message(opportunity: dict[str, object]) -> str:
     ]
     if benchmark.get("message"):
         lines.append(f"市场：{benchmark['message']}")
+    if competition.get("message"):
+        lines.append(f"竞情：{competition['message']}")
+    if requirement_review:
+        lines.append(
+            f"需求：当前文本覆盖 {requirement_review.get('covered_count', 0)}/"
+            f"{requirement_review.get('total_count', 0)} 项；"
+            f"待核对 {'、'.join(str(item) for item in requirement_review.get('missing', [])[:4]) or '无'}"
+        )
     if action_lines:
         lines.extend(["", "下一步", *action_lines])
     source_url = str(opportunity.get("source_url") or "").strip()

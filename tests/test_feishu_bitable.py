@@ -210,10 +210,18 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertIn("/api/outbox/report.docx", created["Word 报告"])
         self.assertEqual(created["市场价格位置"], "高于同品类历史中位数")
         self.assertEqual(created["市场样本数"], "8")
+        self.assertIn("上海样例科技有限公司", created["竞争情报"])
+        self.assertIn("结果公告原文", created["竞争证据"])
+        self.assertEqual(created["历史竞争者"], "上海样例科技有限公司（2 次）")
+        self.assertEqual(created["需求覆盖率"], "63/100 · 5/8 项")
+        self.assertEqual(created["需求待核对"], "评分规则、安全要求")
+        self.assertIn("获取评分办法", created["需求优化建议"])
         updated = FakeFeishuClient.updated_records[0][1]
         self.assertIn("Word 报告", updated)
         self.assertIn("机会评分", updated)
         self.assertIn("建议策略", updated)
+        self.assertIn("竞争情报", updated)
+        self.assertIn("需求覆盖率", updated)
 
 
 def _settings(root: Path) -> Settings:
@@ -271,6 +279,20 @@ def _notice(notice_id: str, *, cluster_key: str) -> dict:
                         "message": "高于同品类历史中位数",
                         "sample_count": 8,
                     }
+                },
+                "competition": {
+                    "message": "当前公告披露成交方 上海样例科技有限公司，成交金额 120 万元",
+                    "evidence_excerpt": "结果公告原文披露上海样例科技有限公司",
+                    "historical_suppliers": [
+                        {"name": "上海样例科技有限公司", "count": 2}
+                    ],
+                },
+                "requirement_review": {
+                    "coverage_score": 63,
+                    "covered_count": 5,
+                    "total_count": 8,
+                    "missing": ["评分规则", "安全要求"],
+                    "recommendations": ["获取评分办法并量化得分空间。"],
                 },
             },
         },
