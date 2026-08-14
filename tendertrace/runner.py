@@ -19,6 +19,7 @@ from tendertrace.delivery.feishu_report import deliver_report_to_feishu
 from tendertrace.intent import compile_intent
 from tendertrace.llm.enhancer import enhance_bidql_with_model
 from tendertrace.llm.gateway import ModelGateway
+from tendertrace.opportunity import enrich_opportunity_intelligence
 from tendertrace.pipeline.attachments import Downloader, enrich_attachment_snapshots
 from tendertrace.pipeline.dedup import clean_and_cluster_notices
 from tendertrace.pipeline.evidence import attach_evidence
@@ -216,9 +217,12 @@ def run_once(
         context.emit_tool_call("pipeline.structured_fields", structured_result.stats)
         evidence_result = attach_evidence(notices)
         notices = evidence_result.notices
+        opportunity_result = enrich_opportunity_intelligence(notices, as_of=run_at)
+        notices = opportunity_result.notices
         deduped_count = len(notices)
         _persist_notices_and_clusters(settings, notices)
         context.emit_tool_call("pipeline.evidence_validate", evidence_result.stats)
+        context.emit_tool_call("pipeline.opportunity_intelligence", opportunity_result.stats)
         if subscription_id and incremental:
             cluster_keys = [_cluster_key(notice.to_dict()) for notice in notices]
             with connection(settings) as conn:
@@ -246,11 +250,13 @@ def run_once(
                 **attachment_result.stats,
                 **structured_result.stats,
                 **evidence_result.stats,
+                **opportunity_result.stats,
             },
             quality={
                 "attachments": attachment_result.stats,
                 "structured_fields": structured_result.stats,
                 "evidence": evidence_result.stats,
+                "opportunity": opportunity_result.stats,
             },
         )
 

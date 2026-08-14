@@ -5,13 +5,14 @@ from pathlib import Path
 from typing import Any
 
 from docx import Document
-from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from tendertrace.adapters.ccgp import Notice
+from tendertrace.opportunity import intelligence_for_notice
 from tendertrace.report.naming import safe_report_filename
 
 
@@ -39,14 +40,50 @@ def _style_doc(doc: Document) -> None:
     style._element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), "Microsoft YaHei")
     style.font.size = Pt(11)
     style.paragraph_format.space_after = Pt(6)
-    style.paragraph_format.line_spacing = 1.15
-    for name, size, color in (("Heading 1", 16, "2E74B5"), ("Heading 2", 13, "2E74B5")):
+    style.paragraph_format.line_spacing = 1.1
+    for name, size, color, before, after in (
+        ("Heading 1", 16, "2E74B5", 16, 8),
+        ("Heading 2", 13, "2E74B5", 12, 6),
+    ):
         heading = doc.styles[name]
         heading.font.name = "Calibri"
         heading._element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), "Microsoft YaHei")
         heading.font.size = Pt(size)
         heading.font.bold = True
         heading.font.color.rgb = RGBColor.from_string(color)
+        heading.paragraph_format.space_before = Pt(before)
+        heading.paragraph_format.space_after = Pt(after)
+
+
+def _set_table_geometry(table, widths: list[int]) -> None:
+    if sum(widths) != 9360:
+        raise ValueError("table widths must total 9360 DXA")
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT
+    table.autofit = False
+    table_pr = table._tbl.tblPr
+    for tag, attributes in (
+        ("w:tblW", {"w:w": "9360", "w:type": "dxa"}),
+        ("w:tblInd", {"w:w": "120", "w:type": "dxa"}),
+        ("w:tblLayout", {"w:type": "fixed"}),
+    ):
+        node = table_pr.first_child_found_in(tag)
+        if node is None:
+            node = OxmlElement(tag)
+            table_pr.append(node)
+        for key, value in attributes.items():
+            node.set(qn(key), value)
+    grid = table._tbl.tblGrid
+    for child in list(grid):
+        grid.remove(child)
+    for width in widths:
+        column = OxmlElement("w:gridCol")
+        column.set(qn("w:w"), str(width))
+        grid.append(column)
+    for row in table.rows:
+        for cell, width in zip(row.cells, widths, strict=True):
+            tc_w = cell._tc.get_or_add_tcPr().get_or_add_tcW()
+            tc_w.set(qn("w:w"), str(width))
+            tc_w.set(qn("w:type"), "dxa")
 
 
 def _set_cell_text(cell, text: str, *, bold: bool = False) -> None:
@@ -65,12 +102,128 @@ def _shade(cell, fill: str) -> None:
     tc_pr.append(shd)
 
 
+def _set_cell_border(cell, *, color: str = "D8E0EA", size: str = "6") -> None:
+    tc_pr = cell._tc.get_or_add_tcPr()
+    borders = tc_pr.first_child_found_in("w:tcBorders")
+    if borders is None:
+        borders = OxmlElement("w:tcBorders")
+        tc_pr.append(borders)
+    for edge in ("top", "left", "bottom", "right"):
+        tag = f"w:{edge}"
+        element = borders.find(qn(tag))
+        if element is None:
+            element = OxmlElement(tag)
+            borders.append(element)
+        element.set(qn("w:val"), "single")
+        element.set(qn("w:sz"), size)
+        element.set(qn("w:color"), color)
+
+
 def _add_label_value(doc: Document, label: str, value: str) -> None:
     paragraph = doc.add_paragraph()
     label_run = paragraph.add_run(f"{label}：")
     _set_run_font(label_run, bold=True)
     value_run = paragraph.add_run(value or "无")
     _set_run_font(value_run)
+
+
+def _intelligence(notice: Notice) -> dict[str, Any]:
+    return intelligence_for_notice(notice)
+
+
+def _score_value(intelligence: dict[str, Any], key: str) -> int:
+    scores = intelligence.get("scores")
+    if not isinstance(scores, dict):
+        return 0
+    try:
+        return int(scores.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _add_opportunity_summary(doc: Document, notices: list[Notice]) -> None:
+    rows = [(notice, _intelligence(notice)) for notice in notices]
+    high_priority = sum(1 for _notice, item in rows if item.get("level") == "A")
+    average = round(
+        sum(int(item.get("score") or 0) for _notice, item in rows) / len(rows),
+        1,
+    )
+    kpis = doc.add_table(rows=1, cols=4)
+    kpis.autofit = True
+    for cell, (label, value) in zip(
+        kpis.rows[0].cells,
+        (
+            ("公告数量", str(len(rows))),
+            ("A 级机会", str(high_priority)),
+            ("平均评分", str(average)),
+            ("多源佐证", str(sum(1 for notice, _item in rows if int(notice.fields.get("duplicate_count") or 1) > 1))),
+        ),
+        strict=True,
+    ):
+        cell.text = ""
+        _shade(cell, "F3F7FB")
+        _set_cell_border(cell)
+        paragraph = cell.paragraphs[0]
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        value_run = paragraph.add_run(f"{value}\n")
+        _set_run_font(value_run, size=16, bold=True, color="174EA6")
+        label_run = paragraph.add_run(label)
+        _set_run_font(label_run, size=9, color="5B677A")
+    _set_table_geometry(kpis, [2340, 2340, 2340, 2340])
+
+    doc.add_heading("机会优先级", level=1)
+    table = doc.add_table(rows=1, cols=7)
+    table.style = "Table Grid"
+    headers = ["等级", "综合", "时效", "完整", "可信", "阶段", "项目"]
+    for cell, header in zip(table.rows[0].cells, headers, strict=True):
+        _set_cell_text(cell, header, bold=True)
+        _shade(cell, "E8EEF5")
+    for notice, item in sorted(rows, key=lambda value: int(value[1].get("score") or 0), reverse=True):
+        row = table.add_row().cells
+        values = [
+            f"{item.get('level', 'D')} · {item.get('level_label', '待研判')}",
+            str(item.get("score") or 0),
+            str(_score_value(item, "freshness")),
+            str(_score_value(item, "completeness")),
+            str(_score_value(item, "credibility")),
+            str(item.get("stage") or "线索识别"),
+            notice.title,
+        ]
+        for cell, value in zip(row, values, strict=True):
+            _set_cell_text(cell, value)
+    _set_table_geometry(table, [700, 750, 750, 800, 800, 1000, 4560])
+
+
+def _add_opportunity_detail(doc: Document, notice: Notice) -> None:
+    intelligence = _intelligence(notice)
+    _add_label_value(
+        doc,
+        "机会研判",
+        f"{intelligence.get('level', 'D')} 级 / {intelligence.get('level_label', '待研判')} / "
+        f"综合 {intelligence.get('score', 0)} 分 / {intelligence.get('stage', '线索识别')}",
+    )
+    _add_label_value(
+        doc,
+        "质量分项",
+        f"时效 {_score_value(intelligence, 'freshness')} · "
+        f"完整 {_score_value(intelligence, 'completeness')} · "
+        f"可信 {_score_value(intelligence, 'credibility')} · "
+        f"可行动 {_score_value(intelligence, 'readiness')}",
+    )
+    _add_label_value(doc, "项目目标", str(intelligence.get("project_target") or "待确认"))
+    _add_label_value(doc, "建议策略", str(intelligence.get("strategy") or "待确认"))
+    risks = intelligence.get("risks")
+    if isinstance(risks, list) and risks:
+        _add_label_value(doc, "风险提示", "；".join(str(item) for item in risks))
+    actions = intelligence.get("recommended_actions")
+    if isinstance(actions, list) and actions:
+        doc.add_paragraph("角色行动：")
+        for item in actions:
+            if not isinstance(item, dict):
+                continue
+            paragraph = doc.add_paragraph(style="List Bullet")
+            run = paragraph.add_run(f"{item.get('role', '负责人')}：{item.get('action', '')}")
+            _set_run_font(run)
 
 
 def _notice_from_dict(value: dict[str, Any]) -> Notice:
@@ -255,6 +408,7 @@ def _add_source_coverage_table(doc: Document, source_stats: list[dict[str, Any]]
         ]
         for cell, value in zip(row, values, strict=True):
             _set_cell_text(cell, value)
+    _set_table_geometry(table, [1100, 900, 650, 700, 700, 700, 700, 3910])
 
 
 def _source_stats(run_stats: dict[str, Any]) -> list[dict[str, Any]]:
@@ -354,6 +508,8 @@ def write_report(
         doc.save(path)
         return path
 
+    _add_opportunity_summary(doc, normalized)
+
     doc.add_heading("结果总览", level=1)
     table = doc.add_table(rows=1, cols=6)
     table.style = "Table Grid"
@@ -373,6 +529,7 @@ def write_report(
         ]
         for cell, value in zip(row, values, strict=True):
             _set_cell_text(cell, value)
+    _set_table_geometry(table, [600, 3900, 1200, 1100, 1200, 1360])
 
     doc.add_heading("逐条详情", level=1)
     for index, notice in enumerate(normalized, start=1):
@@ -382,6 +539,7 @@ def write_report(
         _add_label_value(doc, "来源链接", notice.source_url)
         _add_label_value(doc, "采购人", notice.purchaser)
         _add_label_value(doc, "核心内容", notice.core_content)
+        _add_opportunity_detail(doc, notice)
         _add_structured_fields(doc, notice)
         evidence = _evidence(notice)
         if evidence:

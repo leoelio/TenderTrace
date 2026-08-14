@@ -35,6 +35,8 @@ _incoming_superfusion*/
 
 # Frontend dependencies
 web/node_modules/
+node_modules/
+integrations/**/dist/
 
 # Documents and office temporary files
 ~$*.docx

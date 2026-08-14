@@ -78,6 +78,7 @@ def build_weekly_report(
     events = _load_events(settings, user_id, start_date, end_date)
     runs = _load_runs(settings, start_date, end_date)
     subscriptions = _load_subscription_count(settings, start_date, end_date)
+    opportunity_summary = _load_opportunity_summary(settings, start_date, end_date)
 
     event_counts = Counter(event["event_type"] for event in events)
     daily = _daily_rows(start_date, end_date, events, runs)
@@ -105,6 +106,7 @@ def build_weekly_report(
         failed_runs,
         knowledge_profile,
         risk_signals,
+        opportunity_summary,
     )
     return {
         "user_id": user_id,
@@ -121,10 +123,22 @@ def build_weekly_report(
         "downloads": _compact_events(downloads, limit=10),
         "recent_events": _compact_events(list(reversed(events)), limit=12),
         "knowledge_profile": knowledge_profile,
+        "opportunity_summary": opportunity_summary,
         "risk_signals": risk_signals,
         "recommendation_plan": recommendation_plan,
-        "generated_advice": _generated_advice(summary, knowledge_profile, recommendation_plan),
-        "analysis": _analysis(summary, top_queries, knowledge_profile, risk_signals),
+        "generated_advice": _generated_advice(
+            summary,
+            knowledge_profile,
+            recommendation_plan,
+            opportunity_summary,
+        ),
+        "analysis": _analysis(
+            summary,
+            top_queries,
+            knowledge_profile,
+            risk_signals,
+            opportunity_summary,
+        ),
         "suggestions": _suggestions(recommendation_plan),
     }
 
@@ -255,6 +269,58 @@ def _load_subscription_count(settings: Settings, start_date: date, end_date: dat
             (start_date.isoformat(), end_date.isoformat()),
         ).fetchone()
     return int(row["count"] if row else 0)
+
+
+def _load_opportunity_summary(
+    settings: Settings,
+    start_date: date,
+    end_date: date,
+) -> dict[str, object]:
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT fields_json
+            FROM notices
+            WHERE date(created_at) >= ? AND date(created_at) <= ?
+            """,
+            (start_date.isoformat(), end_date.isoformat()),
+        ).fetchall()
+    levels: Counter[str] = Counter()
+    missing_fields: Counter[str] = Counter()
+    scores: list[int] = []
+    credibility_scores: list[int] = []
+    risk_count = 0
+    for row in rows:
+        fields = _loads_json(row["fields_json"], {})
+        if not isinstance(fields, dict):
+            continue
+        intelligence = fields.get("opportunity_intelligence")
+        if not isinstance(intelligence, dict):
+            continue
+        levels[str(intelligence.get("level") or "D")] += 1
+        scores.append(_coerce_int(intelligence.get("score")))
+        score_parts = intelligence.get("scores")
+        if isinstance(score_parts, dict):
+            credibility_scores.append(_coerce_int(score_parts.get("credibility")))
+        for field in intelligence.get("missing_fields") or []:
+            if str(field).strip():
+                missing_fields[str(field).strip()] += 1
+        risks = intelligence.get("risks")
+        if isinstance(risks, list):
+            risk_count += len(risks)
+    total = sum(levels.values())
+    return {
+        "total": total,
+        "levels": {level: levels.get(level, 0) for level in ("A", "B", "C", "D")},
+        "average_score": round(sum(scores) / len(scores), 1) if scores else 0.0,
+        "average_credibility": (
+            round(sum(credibility_scores) / len(credibility_scores), 1)
+            if credibility_scores
+            else 0.0
+        ),
+        "risk_count": risk_count,
+        "missing_fields": _counter_rows(missing_fields, limit=5),
+    }
 
 
 def _daily_rows(
@@ -454,6 +520,7 @@ def _recommendation_plan(
     failed_runs: list[dict[str, Any]],
     profile: dict[str, object],
     risk_signals: list[dict[str, object]],
+    opportunity_summary: dict[str, object],
 ) -> list[dict[str, object]]:
     behavior = profile.get("behavior") if isinstance(profile.get("behavior"), dict) else {}
     topics = profile.get("topics") if isinstance(profile.get("topics"), list) else []
@@ -462,6 +529,38 @@ def _recommendation_plan(
     top_topic = str(topics[0]["name"]) if topics else ""
     top_region = str(regions[0]["name"]) if regions else ""
     plan: list[dict[str, object]] = []
+    opportunity_levels = (
+        opportunity_summary.get("levels")
+        if isinstance(opportunity_summary.get("levels"), dict)
+        else {}
+    )
+    priority_count = _coerce_int(opportunity_levels.get("A"))
+    watch_count = _coerce_int(opportunity_levels.get("B"))
+
+    if priority_count:
+        plan.append(
+            _recommendation(
+                "high",
+                "opportunity_followup",
+                f"分派并复核 {priority_count} 个 A 级机会",
+                "这些线索在时效、完整度、可信度和可行动性上达到优先跟进阈值。",
+                "在机会情报页确认负责人和下一步动作，并将摘要发送到飞书协同群。",
+                level="A",
+                count=priority_count,
+            )
+        )
+    elif watch_count:
+        plan.append(
+            _recommendation(
+                "high",
+                "opportunity_qualification",
+                f"推动 {watch_count} 个 B 级线索完成机会确认",
+                "当前线索具备业务相关性，但仍有关键事实或跨来源佐证待补齐。",
+                "优先补充预算、采购人和投标截止时间，满足条件后升级为 A 级。",
+                level="B",
+                count=watch_count,
+            )
+        )
 
     if summary["downloads"] == 0 and summary["runs_finished"] == 0:
         plan.append(
@@ -534,12 +633,30 @@ def _generated_advice(
     summary: dict[str, int],
     profile: dict[str, object],
     plan: list[dict[str, object]],
+    opportunity_summary: dict[str, object],
 ) -> dict[str, object]:
     topics = profile.get("topics") if isinstance(profile.get("topics"), list) else []
     regions = profile.get("regions") if isinstance(profile.get("regions"), list) else []
     top_topic = str(topics[0]["name"]) if topics else "暂无稳定主题"
     top_region = str(regions[0]["name"]) if regions else "暂无稳定区域"
-    if summary["total_events"] == 0 and summary["runs_finished"] == 0:
+    opportunity_levels = (
+        opportunity_summary.get("levels")
+        if isinstance(opportunity_summary.get("levels"), dict)
+        else {}
+    )
+    priority_count = _coerce_int(opportunity_levels.get("A"))
+    watch_count = _coerce_int(opportunity_levels.get("B"))
+    if priority_count:
+        headline = f"本周有 {priority_count} 个 A 级机会需要优先分派"
+        summary_text = (
+            f"机会库共沉淀 {opportunity_summary.get('total', 0)} 条线索，"
+            f"平均可信度 {opportunity_summary.get('average_credibility', 0)} 分；"
+            "建议先关闭 A 级机会的风险项，再进入项目定级与策略制定。"
+        )
+    elif watch_count:
+        headline = f"本周重点是推动 {watch_count} 个 B 级线索完成确认"
+        summary_text = "先补齐预算、采购人、投标截止与跨来源证据，再决定销售资源投入。"
+    elif summary["total_events"] == 0 and summary["runs_finished"] == 0:
         headline = "记忆库正在等待第一批有效样本"
         summary_text = "完成真实查询、下载 Word、创建订阅后，系统会自动沉淀主题和区域偏好。"
     else:
@@ -557,6 +674,9 @@ def _generated_advice(
             "top_region": top_region,
             "runs_finished": summary["runs_finished"],
             "downloads": summary["downloads"],
+            "opportunities": opportunity_summary.get("total", 0),
+            "priority_opportunities": priority_count,
+            "average_credibility": opportunity_summary.get("average_credibility", 0),
         },
         "engine": "local_profile_generator",
     }
@@ -567,6 +687,7 @@ def _analysis(
     top_queries: list[dict[str, object]],
     profile: dict[str, object],
     risk_signals: list[dict[str, object]],
+    opportunity_summary: dict[str, object],
 ) -> list[str]:
     if summary["total_events"] == 0 and summary["runs_finished"] == 0:
         return ["本周期内还没有可分析的使用记录。"]
@@ -587,6 +708,18 @@ def _analysis(
         rows.append(f"报告下载转化率为 {float(behavior.get('download_rate') or 0):.0%}。")
     if risk_signals:
         rows.append(f"检测到 {len(risk_signals)} 个需要关注的风险信号。")
+    if _coerce_int(opportunity_summary.get("total")):
+        levels = (
+            opportunity_summary.get("levels")
+            if isinstance(opportunity_summary.get("levels"), dict)
+            else {}
+        )
+        rows.append(
+            "机会库新增 "
+            f"{opportunity_summary['total']} 条：A {levels.get('A', 0)} / "
+            f"B {levels.get('B', 0)} / C {levels.get('C', 0)} / D {levels.get('D', 0)}，"
+            f"平均可信度 {opportunity_summary.get('average_credibility', 0)} 分。"
+        )
     return rows
 
 
@@ -622,6 +755,7 @@ def _profile_snapshot(report: dict[str, object]) -> dict[str, object]:
         "user_id": report.get("user_id") or DEFAULT_USER_ID,
         "period": report.get("period") or {},
         "knowledge_profile": report.get("knowledge_profile") or {},
+        "opportunity_summary": report.get("opportunity_summary") or {},
         "risk_signals": report.get("risk_signals") or [],
         "recommendation_plan": report.get("recommendation_plan") or [],
         "generated_advice": report.get("generated_advice") or {},

@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, database_health, init_db
+from tendertrace.delivery.feishu_bitable import check_feishu_bitable
 from tendertrace.delivery.feishu_report import deliver_report_to_feishu
 from tendertrace.delivery.ledger import list_delivery_attempts, record_delivery_attempt
 from tendertrace.delivery.preferences import (
@@ -34,6 +35,7 @@ from tendertrace.memory import (
     persist_weekly_report,
     record_activity,
 )
+from tendertrace.opportunity import analyze_opportunity_payload, get_opportunity, list_opportunities
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import run_once
 from tendertrace.sanitize import sanitize_for_output, sanitize_stats
@@ -62,6 +64,7 @@ from tendertrace.source_map import build_source_map
 def create_app():
     try:
         from fastapi import Body, FastAPI, HTTPException, Request
+        from fastapi.middleware.cors import CORSMiddleware
         from fastapi.responses import FileResponse, JSONResponse
     except ImportError as exc:
         raise RuntimeError(
@@ -85,6 +88,16 @@ def create_app():
 
     app = FastAPI(title="TenderTrace", version="0.1.0", lifespan=lifespan)
     app.state.scheduler = None
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=(
+            r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?|"
+            r"https://(?:[A-Za-z0-9-]+\.)*(?:feishu\.cn|larksuite\.com)"
+        ),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-TenderTrace-Token"],
+    )
 
     @app.middleware("http")
     async def api_token_middleware(request: Request, call_next):
@@ -180,6 +193,14 @@ def create_app():
             ],
         }
 
+    @app.get("/api/integrations/feishu/bitable/check")
+    def feishu_bitable_check() -> dict[str, object]:
+        return check_feishu_bitable(settings).to_dict()
+
+    @app.post("/api/integrations/feishu/bitable/ensure-fields")
+    def feishu_bitable_ensure_fields() -> dict[str, object]:
+        return check_feishu_bitable(settings, ensure_fields=True).to_dict()
+
     @app.get("/api/integrations/feishu/chats")
     def feishu_chats(page_size: int = 20, page_token: str | None = None) -> dict[str, object]:
         try:
@@ -226,6 +247,64 @@ def create_app():
         now_raw = request.get("now")
         now = datetime.fromisoformat(str(now_raw)) if now_raw else None
         return compile_intent(query, now=now)
+
+    @app.get("/api/opportunities")
+    def opportunities(limit: int = 50, level: str | None = None) -> dict[str, object]:
+        normalized_level = level.upper() if level else None
+        if normalized_level and normalized_level not in {"A", "B", "C", "D"}:
+            raise HTTPException(status_code=400, detail="level must be one of: A, B, C, D")
+        return list_opportunities(settings, limit=limit, level=normalized_level)
+
+    @app.post("/api/opportunities/analyze")
+    def analyze_opportunity(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        return analyze_opportunity_payload(request)
+
+    @app.post("/api/opportunities/send-feishu")
+    def send_opportunity_feishu(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        notice_id = str(request.get("notice_id") or "").strip()
+        if not notice_id:
+            raise HTTPException(status_code=400, detail="notice_id is required")
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        receive_id, receive_id_type = resolve_feishu_receiver(
+            settings,
+            receive_id=_optional_string(request.get("receive_id")),
+            receive_id_type=_optional_string(request.get("receive_id_type")),
+        )
+        try:
+            response = FeishuClient(settings).send_text(
+                _opportunity_message(opportunity),
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+            )
+            data = response.get("data") if isinstance(response.get("data"), dict) else {}
+            message_id = str(data.get("message_id") or "")
+            attempt = record_delivery_attempt(
+                settings,
+                channel="feishu",
+                artifact_type="opportunity",
+                artifact_key=notice_id,
+                status="sent",
+                external_id=message_id or None,
+            )
+        except FeishuError as exc:
+            attempt = record_delivery_attempt(
+                settings,
+                channel="feishu",
+                artifact_type="opportunity",
+                artifact_key=notice_id,
+                status="failed",
+                error=str(exc),
+            )
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="feishu_opportunity_send",
+            target=notice_id,
+            label=str(opportunity.get("title") or ""),
+        )
+        return {"status": "sent", "attempt_id": attempt.id, "message_id": message_id or None}
 
     @app.post("/api/runs")
     def create_run(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -958,6 +1037,41 @@ def _weekly_report_text(report: dict[str, object]) -> str:
             title = str(item.get("title") or item.get("action") or "").strip()
             if title:
                 lines.append(f"• {title}")
+    return "\n".join(lines)
+
+
+def _opportunity_message(opportunity: dict[str, object]) -> str:
+    intelligence = (
+        opportunity.get("intelligence")
+        if isinstance(opportunity.get("intelligence"), dict)
+        else {}
+    )
+    scores = intelligence.get("scores") if isinstance(intelligence.get("scores"), dict) else {}
+    actions = intelligence.get("recommended_actions")
+    action_lines = []
+    if isinstance(actions, list):
+        for item in actions[:3]:
+            if isinstance(item, dict) and item.get("action"):
+                action_lines.append(f"• {item.get('role', '负责人')}：{item['action']}")
+    lines = [
+        f"TenderTrace 机会情报｜{intelligence.get('level', 'D')} 级 · {intelligence.get('score', 0)} 分",
+        str(opportunity.get("title") or "未命名机会"),
+        (
+            f"地区：{opportunity.get('region') or '-'}｜客户：{opportunity.get('purchaser') or '-'}｜"
+            f"预算：{opportunity.get('budget') or '-'}"
+        ),
+        (
+            f"时效 {scores.get('freshness', 0)}｜完整 {scores.get('completeness', 0)}｜"
+            f"可信 {scores.get('credibility', 0)}｜阶段 {intelligence.get('stage', '线索识别')}"
+        ),
+        f"目标：{intelligence.get('project_target') or '待确认'}",
+        f"策略：{intelligence.get('strategy') or '待确认'}",
+    ]
+    if action_lines:
+        lines.extend(["", "下一步", *action_lines])
+    source_url = str(opportunity.get("source_url") or "").strip()
+    if source_url:
+        lines.extend(["", f"原文：{source_url}"])
     return "\n".join(lines)
 
 

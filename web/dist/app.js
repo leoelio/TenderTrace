@@ -10,6 +10,8 @@ const state = {
   evaluation: null,
   memory: null,
   feishu: null,
+  opportunities: [],
+  opportunityVisible: 20,
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
@@ -25,7 +27,7 @@ const depthProfiles = {
 const pipelineStages = [
   { key: "intent", label: "意图解析", detail: "时间、区域、主题" },
   { key: "collect", label: "数据采集", detail: "公开源、登录源、扩展检索" },
-  { key: "evidence", label: "去重清洗", detail: "清洗、去重、证据校验" },
+  { key: "evidence", label: "证据研判", detail: "清洗、去重、证据与机会评分" },
   { key: "report", label: "生成报告", detail: "Word 与 outbox" },
 ];
 
@@ -88,6 +90,13 @@ const el = {
   refreshSourcesButton: document.querySelector("#refreshSourcesButton"),
   refreshRunsButton: document.querySelector("#refreshRunsButton"),
   refreshEvaluationButton: document.querySelector("#refreshEvaluationButton"),
+  refreshOpportunitiesButton: document.querySelector("#refreshOpportunitiesButton"),
+  opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
+  opportunitySummary: document.querySelector("#opportunitySummary"),
+  opportunityList: document.querySelector("#opportunityList"),
+  opportunityFooter: document.querySelector("#opportunityFooter"),
+  opportunityListHint: document.querySelector("#opportunityListHint"),
+  loadMoreOpportunitiesButton: document.querySelector("#loadMoreOpportunitiesButton"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
   runSearchInput: document.querySelector("#runSearchInput"),
@@ -359,6 +368,7 @@ function showView(viewId) {
     tab.classList.toggle("active", tab.dataset.view === viewId);
   });
   if (viewId === "historyView") refreshRuns().catch(toastError("历史运行加载失败"));
+  if (viewId === "opportunityView") refreshOpportunities().catch(toastError("机会情报加载失败"));
   if (viewId === "subscriptionsView") refreshSubscriptions().catch(toastError("订阅加载失败"));
   if (viewId === "sourcesView") refreshSourcesPanel().catch(toastError("数据源加载失败"));
   if (viewId === "evaluationView") refreshEvaluation().catch(toastError("评测加载失败"));
@@ -1174,6 +1184,82 @@ function renderEvaluation(report) {
   }
 }
 
+function renderOpportunities(payload) {
+  const items = payload?.items || [];
+  const summary = payload?.summary || {};
+  state.opportunities = items;
+  const visibleItems = items.slice(0, state.opportunityVisible);
+  if (el.opportunitySummary) {
+    const levels = summary.levels || {};
+    el.opportunitySummary.className = "opportunity-summary";
+    el.opportunitySummary.innerHTML = [
+      summaryTile("当前线索", summary.total ?? items.length),
+      summaryTile("A 级机会", levels.A ?? 0),
+      summaryTile("B 级机会", levels.B ?? 0),
+      summaryTile("平均评分", summary.average_score ?? 0),
+    ].join("");
+  }
+  if (!el.opportunityList) return;
+  el.opportunityList.className = items.length
+    ? "opportunity-ledger-body"
+    : "opportunity-ledger-body empty-state";
+  el.opportunityList.innerHTML = items.length
+    ? visibleItems
+        .map((item) => {
+          const intelligence = item.intelligence || {};
+          const scores = intelligence.scores || {};
+          const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
+          return `
+            <article class="opportunity-row" role="row">
+              <div class="opportunity-grade grade-${escapeHtml(String(intelligence.level || "D").toLowerCase())}">
+                <strong>${escapeHtml(intelligence.level || "D")}</strong>
+                <span>${escapeHtml(intelligence.score ?? 0)} 分</span>
+              </div>
+              <div class="opportunity-project">
+                <strong title="${escapeHtml(item.title || "")}">${escapeHtml(item.title || "未命名机会")}</strong>
+                <span>${escapeHtml(item.source_site || "未知来源")} · ${escapeHtml(item.publish_time || "时间待确认")}</span>
+              </div>
+              <div class="opportunity-customer">
+                <strong>${escapeHtml(item.purchaser || "采购人待确认")}</strong>
+                <span>${escapeHtml(item.region || "地区待确认")} · ${escapeHtml(item.budget || "预算待确认")}</span>
+              </div>
+              <div class="opportunity-quality">
+                ${qualityBar("时效", scores.freshness || 0)}
+                ${qualityBar("完整", scores.completeness || 0)}
+                ${qualityBar("可信", scores.credibility || 0)}
+              </div>
+              <div class="opportunity-strategy">
+                <strong>${escapeHtml(intelligence.stage || "线索识别")}</strong>
+                <span>${escapeHtml(intelligence.project_target || "目标待确认")}</span>
+                ${risks.length ? `<small>${escapeHtml(risks[0])}</small>` : ""}
+              </div>
+              <div class="opportunity-actions">
+                <button class="ghost-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">发送飞书</button>
+                <a class="text-link" href="${escapeHtml(item.source_url || "#")}" target="_blank" rel="noreferrer">查看原文</a>
+              </div>
+            </article>
+          `;
+        })
+        .join("")
+    : "本地知识库暂无可研判公告，请先运行检索或启用后台采集。";
+  if (el.opportunityFooter && el.opportunityListHint && el.loadMoreOpportunitiesButton) {
+    el.opportunityFooter.hidden = !items.length;
+    el.opportunityListHint.textContent = `已展示 ${visibleItems.length} / ${items.length} 条机会`;
+    el.loadMoreOpportunitiesButton.hidden = visibleItems.length >= items.length;
+  }
+}
+
+function qualityBar(label, value) {
+  const score = Math.max(0, Math.min(Number(value) || 0, 100));
+  return `
+    <div class="quality-line">
+      <span>${escapeHtml(label)}</span>
+      <i><b style="width:${score}%"></b></i>
+      <strong>${score}</strong>
+    </div>
+  `;
+}
+
 function renderMemory(report) {
   if (!report) return;
   const summary = report.summary || {};
@@ -1184,6 +1270,8 @@ function renderMemory(report) {
   const recommendationPlan = report.recommendation_plan || [];
   const generatedAdvice = report.generated_advice || {};
   const riskSignals = report.risk_signals || [];
+  const opportunities = report.opportunity_summary || {};
+  const opportunityLevels = opportunities.levels || {};
   renderMemoryDigest(report);
   if (el.memorySummary) {
     el.memorySummary.className = "eval-summary";
@@ -1192,7 +1280,7 @@ function renderMemory(report) {
       summaryTile("核心主题", firstCounterName(profile.topics, "暂无")),
       summaryTile("核心区域", firstCounterName(profile.regions, "暂无")),
       summaryTile("下载转化", percent(behavior.download_rate || 0)),
-      summaryTile("建议数", recommendationPlan.length),
+      summaryTile("A / B 机会", `${opportunityLevels.A || 0} / ${opportunityLevels.B || 0}`),
     ].join("");
   }
   renderMetricCard(el.memoryUsageMetrics, "使用行为", [
@@ -1213,8 +1301,13 @@ function renderMemory(report) {
     ["定时意图", queryPatterns.scheduled_intent_count ?? 0],
     ["澄清风险", queryPatterns.clarify_risk_count ?? 0],
   ]);
-  renderMetricCard(el.memoryDailyMetrics, "每日节奏", memoryDailyRows(report.daily || []));
-  renderMemoryProfile(profile);
+  renderMetricCard(el.memoryDailyMetrics, "机会质量", [
+    ["本周线索", opportunities.total ?? 0],
+    ["平均评分", opportunities.average_score ?? 0],
+    ["平均可信", opportunities.average_credibility ?? 0],
+    ["风险项", opportunities.risk_count ?? 0],
+  ]);
+  renderMemoryProfile(profile, opportunities);
   renderGeneratedAdvice(generatedAdvice, recommendationPlan);
   renderMemoryList(
     el.memoryQueries,
@@ -1306,13 +1399,14 @@ function memoryDailyRows(daily) {
   ];
 }
 
-function renderMemoryProfile(profile = {}) {
+function renderMemoryProfile(profile = {}, opportunities = {}) {
   if (!el.memoryProfile) return;
   const rows = [
     ["主题偏好", counterSummary(profile.topics, "暂无主题偏好")],
     ["区域偏好", counterSummary(profile.regions, "暂无区域偏好")],
     ["定时模式", counterSummary(profile.schedules, "暂无定时偏好")],
     ["来源命中", counterSummary(profile.sources, "暂无来源样本")],
+    ["信息缺口", counterSummary(opportunities.missing_fields, "关键字段较完整")],
   ];
   el.memoryProfile.className = "case-list profile-list";
   el.memoryProfile.innerHTML = rows
@@ -1430,7 +1524,7 @@ function renderFeishuOverview(payload) {
   const features = payload.features || {};
   const rows = [
     ["报告与周报", features.report_delivery, "Word 文件和使用周报"],
-    ["多维表格", features.bitable_sync, "公告明细同步"],
+    ["多维表格", features.bitable_sync, features.bitable_sync?.detail || "公告明细同步"],
     ["智能体服务", features.agent_service, "独立智能体应用"],
   ];
   el.feishuFeatureList.className = "integration-list";
@@ -1611,13 +1705,36 @@ async function refreshEvaluation() {
   renderNotifications();
 }
 
+async function refreshOpportunities() {
+  const level = el.opportunityLevelFilter?.value || "";
+  const query = new URLSearchParams({ limit: "80" });
+  if (level) query.set("level", level);
+  const payload = await api(`/api/opportunities?${query.toString()}`);
+  state.opportunityVisible = 20;
+  renderOpportunities(payload);
+  return payload;
+}
+
 async function refreshMemoryWeekly() {
   state.memory = await api("/api/memory/weekly");
   renderMemory(state.memory);
 }
 
 async function refreshFeishu() {
-  const payload = await api("/api/integrations/feishu/overview");
+  const [payload, bitableCheck] = await Promise.all([
+    api("/api/integrations/feishu/overview"),
+    api("/api/integrations/feishu/bitable/check").catch((error) => ({
+      status: "failed",
+      message: error.message,
+    })),
+  ]);
+  payload.bitable_check = bitableCheck;
+  if (payload.features?.bitable_sync) {
+    payload.features.bitable_sync.ready = bitableCheck.status === "pass";
+    payload.features.bitable_sync.detail = bitableCheck.table_name
+      ? `${bitableCheck.table_name} · ${bitableCheck.field_count || 0} 个字段`
+      : bitableCheck.message;
+  }
   renderFeishuOverview(payload);
   return payload;
 }
@@ -1674,6 +1791,15 @@ async function sendMemoryWeeklyToFeishu() {
   });
   await refreshFeishu();
   showToast(result.status === "sent" ? "本周使用周报已发送到飞书" : "周报发送未完成");
+}
+
+async function sendOpportunityToFeishu(noticeId) {
+  const result = await api("/api/opportunities/send-feishu", {
+    method: "POST",
+    body: JSON.stringify({ notice_id: noticeId }),
+  });
+  await refreshFeishu();
+  showToast(result.status === "sent" ? "机会情报已发送到飞书" : "机会情报发送未完成");
 }
 
 async function saveMemoryWeekly() {
@@ -2201,6 +2327,7 @@ async function refreshAll() {
     refreshSourcesPanel(),
     refreshRuns(),
     refreshEvaluation(),
+    refreshOpportunities(),
     refreshMemoryWeekly(),
     refreshFeishu(),
   ]);
@@ -2279,6 +2406,13 @@ function bindEvents() {
       ).catch(toastError("飞书发送失败"));
       return;
     }
+    const sendOpportunityTarget = event.target.closest("[data-send-opportunity-feishu]");
+    if (sendOpportunityTarget) {
+      sendOpportunityToFeishu(sendOpportunityTarget.dataset.sendOpportunityFeishu).catch(
+        toastError("机会情报发送失败"),
+      );
+      return;
+    }
     const deleteRunTarget = event.target.closest("[data-delete-run-id]");
     if (deleteRunTarget) {
       deleteRun(deleteRunTarget.dataset.deleteRunId).catch(toastError("删除运行记录失败"));
@@ -2334,6 +2468,36 @@ function bindEvents() {
   el.refreshEvaluationButton?.addEventListener("click", () =>
     refreshEvaluation().catch(toastError("评测刷新失败")),
   );
+  el.refreshOpportunitiesButton?.addEventListener("click", () =>
+    refreshOpportunities().catch(toastError("机会情报刷新失败")),
+  );
+  el.opportunityLevelFilter?.addEventListener("change", () =>
+    refreshOpportunities().catch(toastError("机会情报筛选失败")),
+  );
+  el.loadMoreOpportunitiesButton?.addEventListener("click", () => {
+    state.opportunityVisible += 20;
+    renderOpportunities({
+      items: state.opportunities,
+      summary: {
+        total: state.opportunities.length,
+        levels: state.opportunities.reduce((counts, item) => {
+          const level = item.intelligence?.level || "D";
+          counts[level] = (counts[level] || 0) + 1;
+          return counts;
+        }, { A: 0, B: 0, C: 0, D: 0 }),
+        average_score: state.opportunities.length
+          ? Math.round(
+              (state.opportunities.reduce(
+                (total, item) => total + Number(item.intelligence?.score || 0),
+                0,
+              ) /
+                state.opportunities.length) *
+                10,
+            ) / 10
+          : 0,
+      },
+    });
+  });
   el.refreshMemoryButton?.addEventListener("click", () =>
     refreshMemoryWeekly().catch(toastError("用户记忆刷新失败")),
   );

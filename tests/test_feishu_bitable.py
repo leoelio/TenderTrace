@@ -202,9 +202,15 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(created["关键词"], "服务器")
         self.assertEqual(created["状态"], "新增")
         self.assertEqual(created["项目指纹"], "ccgp:new")
+        self.assertEqual(created["公告ID"], "new")
+        self.assertEqual(created["机会等级"], "B · 重点观察")
+        self.assertEqual(created["机会评分"], "72")
+        self.assertIn("机会点负责人", created["跟进建议"])
         self.assertIn("/api/outbox/report.docx", created["Word 报告"])
         updated = FakeFeishuClient.updated_records[0][1]
-        self.assertEqual(sorted(updated), ["Word 报告", "最近同步时间", "运行ID"])
+        self.assertIn("Word 报告", updated)
+        self.assertIn("机会评分", updated)
+        self.assertIn("建议策略", updated)
 
 
 def _settings(root: Path) -> Settings:
@@ -239,6 +245,24 @@ def _notice(notice_id: str, *, cluster_key: str) -> dict:
                 "publish_time": "2026-08-06",
                 "bid_deadline": "2026-08-20 09:00",
                 "budget": "120万元",
+            },
+            "opportunity_intelligence": {
+                "score": 72,
+                "level": "B",
+                "level_label": "重点观察",
+                "stage": "机会确认",
+                "scores": {
+                    "freshness": 90,
+                    "completeness": 82,
+                    "credibility": 76,
+                    "readiness": 70,
+                },
+                "project_target": "完成客户需求确认",
+                "strategy": "核实预算和技术边界",
+                "recommended_actions": [
+                    {"role": "机会点负责人", "action": "确认客户关系和投标窗口。"}
+                ],
+                "risks": ["需补充跨来源佐证"],
             },
         },
     }

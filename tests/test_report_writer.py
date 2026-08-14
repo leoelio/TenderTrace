@@ -114,6 +114,7 @@ class ReportWriterTests(unittest.TestCase):
         )
         self.assertIn("多源覆盖：本轮尝试 2 个来源，1 个来源命中，0 个来源异常。", text)
         self.assertIn("来源覆盖与抓取健康", text)
+        self.assertIn("机会优先级", text)
         self.assertIn("ccgp", table_text)
         self.assertIn("城市无结果，已放宽到省级", table_text)
         self.assertIn("标题：上海某单位服务器采购公开招标公告", text)
@@ -130,6 +131,9 @@ class ReportWriterTests(unittest.TestCase):
         )
         self.assertIn("附件解析：已下载 1/1，已抽取正文 1，失败 0，跳过 0", text)
         self.assertIn("附件正文：服务器配置要求和交付周期。", text)
+        self.assertIn("机会研判：", text)
+        self.assertIn("质量分项：", text)
+        self.assertIn("项目目标：", text)
         self.assertIn("附件：采购需求 - https://www.ccgp.gov.cn/cggg/dfgg/files/spec.docx", text)
 
 

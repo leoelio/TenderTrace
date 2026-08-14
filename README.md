@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P28</strong> · Compact Workbench · Feishu Report Delivery · Delivery Audit
+  <strong>Current stage: P29</strong> · Opportunity Intelligence · Feishu Record View · Evidence-led Decisions
 </p>
 
 ---
@@ -35,6 +35,8 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书协同：Word 报告、定时订阅和用户周报可发送到默认会话，发送结果写入本地交付账本。
+- 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
+- 飞书记录视图：指定的记录视图插件可在多维表格内读取当前线索、调用统一研判 API 并回写评分与策略。
 - 清洗去重：正文噪声清理、URL 规范化、项目编号提取、SimHash 聚类。
 - 附件抽取：支持受限下载并抽取 PDF、DOCX、XLSX 正文片段。
 - 证据链：保存来源链接、正文摘录、附件快照、字段级证据和事实校验结果。
@@ -77,12 +79,14 @@ tendertrace/
   fetching.py            # 托管 HTTP 抓取、重试、阻断识别和批量详情抓取
   linking.py             # URL Map / LinkExtractor 发现规则
   memory.py              # 用户记忆库、知识画像和生成式建议
+  opportunity.py         # 机会质量评分、定级、风险和角色行动
   retrieval.py           # FTS5 / LIKE / 向量融合检索
   runner.py              # 一次完整运行流程
   source_map.py          # 数据源地图和来源健康统计
   gold.py                # 金标 Recall@K 评测
   vector.py              # 可选向量构建与覆盖率
 web/dist/                # Web 工作台静态文件
+integrations/feishu-record-view/ # 飞书多维表格记录视图插件
 tests/                   # 单元测试
 docs/                    # 设计、操作、教学和评测文档
 ```
@@ -295,7 +299,16 @@ python -m tendertrace embed-notices
 - `POST /api/outbox/{filename}/send-feishu`：上传并发送指定 Word 报告。
 - `POST /api/memory/weekly/send-feishu`：发送最近一周的使用摘要与建议。
 
-设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232034`，需要先在飞书开放平台发布应用并确认当前租户已经安装。
+设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232025`，需要先在应用后台启用机器人能力并发布新版本；若返回 `232034`，需要确认当前租户已经安装已发布应用。
+
+多维表格服务端同步还需要具体 Base 文档的 `app_token` 与数据表的 `table_id`。二者可以从实际多维表格 URL 获取，不能使用应用 App ID 或记录视图的 `blk_...` BlockTypeID 替代：
+
+```env
+TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
+TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
+```
+
+记录视图插件位于 `integrations/feishu-record-view/`，已配置 App ID 与 BlockTypeID，未包含任何密钥。安装官方 CLI 后先执行 `opdev login`，再进入 `opportunity-view` 执行 `npm install` 和 `npm run start`。本地调试必须在 `block.json` 增加实际 Base 文档 URL；生产构建可直接执行 `npm run build`。插件调用 TenderTrace `/api/opportunities/analyze`，并可把研判结果回写当前记录或发送到默认飞书会话。
 
 ## Web 工作台
 
@@ -372,8 +385,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P27
-- 143 unit tests pass.
+- Current stage: P29
+- 157 unit tests pass, including 421 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -415,6 +428,8 @@ The current architecture is local-first: background ingestion continuously store
 - Incremental scheduled delivery with `sent_history` deduplication.
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
+- Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
+- A Feishu record-view extension that uses the same TenderTrace analysis API and writes decisions back to the current record.
 - Text cleaning, URL canonicalization, project-number extraction, SimHash clustering.
 - Bounded attachment download and extraction for PDF, DOCX, and XLSX.
 - Evidence chain with source links, excerpts, attachment snapshots, and fact checks.
@@ -637,7 +652,11 @@ Available Web APIs:
 - `POST /api/outbox/{filename}/send-feishu`: upload and send a Word report.
 - `POST /api/memory/weekly/send-feishu`: send the weekly usage digest and recommendations.
 
-The Feishu connection center can select a default chat from the bot's visible chats. Queries and subscriptions can opt into automatic Word delivery, while every success or failure is written to the local delivery ledger. Error `232034` means the app must be published and installed in the current tenant first.
+The Feishu connection center can select a default chat from the bot's visible chats. Queries and subscriptions can opt into automatic Word delivery, while every success or failure is written to the local delivery ledger. Error `232025` means bot capability must be enabled and a new app version published; error `232034` means the published app is not installed in the current tenant.
+
+Server-side Bitable sync also requires the target Base document's `app_token` and table `table_id`. Extract both from the actual Base URL; neither the application App ID nor the record-view `blk_...` BlockTypeID can replace them.
+
+The record-view extension lives in `integrations/feishu-record-view/`. Its App ID and BlockTypeID are committed, while credentials are not. Run `opdev login`, then `npm install` and `npm run start` under `opportunity-view`. Local debugging requires an actual Base document URL in `block.json`; production assets build with `npm run build`. The extension calls `/api/opportunities/analyze`, writes scores and strategy back to the current row, and can send the opportunity digest to the configured Feishu chat.
 
 ## Web Workbench
 
@@ -714,8 +733,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P27
-- 143 unit tests pass.
+- Current stage: P29
+- 157 unit tests pass, including 421 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

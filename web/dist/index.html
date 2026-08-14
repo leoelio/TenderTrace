@@ -31,6 +31,7 @@
 
         <nav id="topNavigation" class="topnav" aria-label="主导航">
           <button class="nav-tab active" type="button" data-view="workbenchView">工作台</button>
+          <button class="nav-tab" type="button" data-view="opportunityView">机会情报</button>
           <button class="nav-tab" type="button" data-view="historyView">历史运行</button>
           <button class="nav-tab" type="button" data-view="subscriptionsView">订阅管理</button>
           <button class="nav-tab" type="button" data-view="sourcesView">数据源</button>
@@ -280,8 +281,8 @@
                   <li id="stepEvidence">
                     <span class="step-dot"></span>
                     <div>
-                      <strong>去重清洗</strong>
-                      <span>内容抽取与证据校验</span>
+                      <strong>证据研判</strong>
+                      <span>清洗去重、事实校验与机会评分</span>
                     </div>
                   </li>
                   <li id="stepReport">
@@ -316,6 +317,38 @@
 
             </aside>
           </div>
+        </section>
+
+        <section id="opportunityView" class="view">
+          <section class="panel page-panel opportunity-panel">
+            <div class="panel-heading">
+              <div>
+                <h1>机会情报</h1>
+                <span class="panel-meta">按时效、完整度、可信度与可行动性统一研判</span>
+              </div>
+              <div class="action-group">
+                <select id="opportunityLevelFilter" aria-label="筛选机会等级">
+                  <option value="">全部等级</option>
+                  <option value="A">A · 优先跟进</option>
+                  <option value="B">B · 重点观察</option>
+                  <option value="C">C · 信息补全</option>
+                  <option value="D">D · 低优先级</option>
+                </select>
+                <button id="refreshOpportunitiesButton" class="primary-lite-button" type="button">刷新</button>
+              </div>
+            </div>
+            <div id="opportunitySummary" class="opportunity-summary empty-state">等待机会数据</div>
+            <div class="opportunity-ledger" role="table" aria-label="机会情报台账">
+              <div class="opportunity-ledger-head" role="row">
+                <span>等级</span><span>项目</span><span>客户与区域</span><span>质量</span><span>目标与策略</span><span>操作</span>
+              </div>
+              <div id="opportunityList" class="opportunity-ledger-body empty-state">加载中</div>
+            </div>
+            <div id="opportunityFooter" class="opportunity-footer" hidden>
+              <span id="opportunityListHint"></span>
+              <button id="loadMoreOpportunitiesButton" class="ghost-button" type="button">加载更多</button>
+            </div>
+          </section>
         </section>
 
         <section id="historyView" class="view">

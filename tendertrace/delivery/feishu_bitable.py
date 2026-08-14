@@ -14,6 +14,7 @@ from tendertrace.config import Settings
 FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
 REQUIRED_FIELDS = (
     "标题",
+    "公告ID",
     "地区",
     "关键词",
     "发布时间",
@@ -29,6 +30,16 @@ REQUIRED_FIELDS = (
     "附件链接",
     "首次发现时间",
     "最近同步时间",
+    "机会等级",
+    "机会评分",
+    "信息完整度",
+    "信息可信度",
+    "时效评分",
+    "销售阶段",
+    "项目目标",
+    "建议策略",
+    "跟进建议",
+    "风险提示",
 )
 
 
@@ -370,11 +381,18 @@ def _record_fields(
     structured = (
         fields.get("structured_fields") if isinstance(fields.get("structured_fields"), dict) else {}
     )
+    intelligence = (
+        fields.get("opportunity_intelligence")
+        if isinstance(fields.get("opportunity_intelligence"), dict)
+        else {}
+    )
+    scores = intelligence.get("scores") if isinstance(intelligence.get("scores"), dict) else {}
     cluster_key = _cluster_key(notice)
     topic = bidql.get("topic") if isinstance(bidql.get("topic"), dict) else {}
     keywords = topic.get("core") if isinstance(topic.get("core"), list) else []
     return {
         "标题": str(notice.get("title") or ""),
+        "公告ID": str(notice.get("id") or ""),
         "地区": str(structured.get("region") or notice.get("region") or ""),
         "关键词": "、".join(str(item) for item in keywords) or query,
         "发布时间": str(structured.get("publish_time") or notice.get("publish_time") or ""),
@@ -390,6 +408,16 @@ def _record_fields(
         "附件链接": "\n".join(_attachment_urls(notice)),
         "首次发现时间": synced_at.isoformat(timespec="seconds"),
         "最近同步时间": synced_at.isoformat(timespec="seconds"),
+        "机会等级": f"{intelligence.get('level', 'D')} · {intelligence.get('level_label', '待研判')}",
+        "机会评分": str(intelligence.get("score") or 0),
+        "信息完整度": str(scores.get("completeness") or 0),
+        "信息可信度": str(scores.get("credibility") or 0),
+        "时效评分": str(scores.get("freshness") or 0),
+        "销售阶段": str(intelligence.get("stage") or "线索识别"),
+        "项目目标": str(intelligence.get("project_target") or ""),
+        "建议策略": str(intelligence.get("strategy") or ""),
+        "跟进建议": "\n".join(_action_texts(intelligence)),
+        "风险提示": "\n".join(str(item) for item in intelligence.get("risks") or []),
     }
 
 
@@ -398,7 +426,28 @@ def _update_fields(row: dict[str, object]) -> dict[str, object]:
         "Word 报告": row["Word 报告"],
         "运行ID": row["运行ID"],
         "最近同步时间": row["最近同步时间"],
+        "机会等级": row["机会等级"],
+        "机会评分": row["机会评分"],
+        "信息完整度": row["信息完整度"],
+        "信息可信度": row["信息可信度"],
+        "时效评分": row["时效评分"],
+        "销售阶段": row["销售阶段"],
+        "项目目标": row["项目目标"],
+        "建议策略": row["建议策略"],
+        "跟进建议": row["跟进建议"],
+        "风险提示": row["风险提示"],
     }
+
+
+def _action_texts(intelligence: dict[str, Any]) -> list[str]:
+    actions = intelligence.get("recommended_actions")
+    if not isinstance(actions, list):
+        return []
+    return [
+        f"{item.get('role', '负责人')}：{item.get('action', '')}"
+        for item in actions
+        if isinstance(item, dict) and item.get("action")
+    ]
 
 
 def _attachment_urls(notice: dict[str, Any]) -> list[str]:
