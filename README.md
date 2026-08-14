@@ -387,7 +387,7 @@ docs/evaluation/gold_benchmark.json
 当前验证基线：
 
 - Current stage: P29
-- 159 unit tests pass, including 421 subtests.
+- 160 unit tests pass, including 421 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -736,7 +736,7 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 Current verified baseline:
 
 - Current stage: P29
-- 159 unit tests pass, including 421 subtests.
+- 160 unit tests pass, including 421 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

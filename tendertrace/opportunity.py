@@ -77,7 +77,7 @@ def _normalized_payload(payload: dict[str, Any]) -> dict[str, Any]:
     nested_evidence = _mapping(fields.get("evidence"))
     structured = {**nested_structured, **structured}
     evidence = {**nested_evidence, **evidence}
-    return {
+    normalized = {
         "title": _first(payload, "title", "标题"),
         "publish_time": _first(payload, "publish_time", "发布时间"),
         "region": _first(payload, "region", "地区"),
@@ -101,6 +101,7 @@ def _normalized_payload(payload: dict[str, Any]) -> dict[str, Any]:
         or payload.get("关联来源数")
         or 1,
     }
+    return _infer_payload_fields(normalized)
 
 
 def analyze_opportunity_with_market_context(
@@ -202,21 +203,22 @@ def list_opportunities(
     market = build_market_context(market_notices)
     items: list[dict[str, object]] = []
     for notice_id, notice in rows:
-        intelligence = intelligence_for_notice(notice)
+        payload = _notice_payload(notice)
+        intelligence = _analyze(payload, as_of=None)
         if level and str(intelligence.get("level") or "").upper() != level.upper():
             continue
         intelligence["market_context"] = {
             "benchmark": _market_benchmark(_notice_payload(notice), market),
             "signals": list(market.get("signals") or [])[:3],
         }
-        structured = _mapping(notice.fields.get("structured_fields"))
+        structured = _mapping(payload.get("structured_fields"))
         items.append(
             {
                 "notice_id": notice_id,
                 "title": notice.title,
                 "publish_time": notice.publish_time,
                 "region": notice.region,
-                "purchaser": notice.purchaser,
+                "purchaser": str(payload.get("purchaser") or ""),
                 "source_site": notice.source_site,
                 "source_url": notice.source_url,
                 "budget": str(structured.get("budget") or ""),
@@ -262,8 +264,9 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     if row is None:
         return None
     notice = _notice_from_row(row)
-    structured = _mapping(notice.fields.get("structured_fields"))
-    intelligence = intelligence_for_notice(notice)
+    payload = _notice_payload(notice)
+    structured = _mapping(payload.get("structured_fields"))
+    intelligence = _analyze(payload, as_of=None)
     market = build_market_context(
         [item for _notice_id, item in _recent_notices(settings, limit=500)]
     )
@@ -276,7 +279,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "title": notice.title,
         "publish_time": notice.publish_time,
         "region": notice.region,
-        "purchaser": notice.purchaser,
+        "purchaser": str(payload.get("purchaser") or ""),
         "source_site": notice.source_site,
         "source_url": notice.source_url,
         "budget": str(structured.get("budget") or ""),
@@ -296,6 +299,71 @@ def parse_budget_cny(value: object) -> float | None:
     return amount * multiplier if amount > 0 else None
 
 
+def _infer_payload_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    inferred = dict(payload)
+    structured = dict(_mapping(payload.get("structured_fields")))
+    purchaser = _extract_purchaser(inferred)
+    if purchaser:
+        inferred["purchaser"] = purchaser
+        structured.setdefault("purchaser", purchaser)
+    amount, budget_source = _extract_budget_cny(inferred)
+    if amount and not _present(structured.get("budget")):
+        structured["budget"] = _format_cny(amount)
+        structured["budget_source"] = budget_source
+    inferred["structured_fields"] = structured
+    return inferred
+
+
+def _extract_budget_cny(payload: dict[str, Any]) -> tuple[float | None, str]:
+    structured = _mapping(payload.get("structured_fields"))
+    amount = parse_budget_cny(structured.get("budget"))
+    if amount:
+        return amount, "structured_fields"
+    text = " ".join(
+        str(payload.get(key) or "") for key in ("title", "core_content", "content_text")
+    )
+    patterns = (
+        (
+            "正文预算",
+            r"(?:预算总金额|项目预算金额|采购包预算金额|分包预算金额|采购预算金额|采购预算|预算金额|预算)"
+            r"\s*[（(]?\s*(亿元|万元|元)?\s*[）)]?\s*[:：]?\s*(?:人民币)?\s*"
+            r"([0-9][0-9,，\s]*(?:\.\s*[0-9]+)?)\s*(亿元|万元|元)?",
+        ),
+        (
+            "正文最高限价",
+            r"(?:最高限价总计|最高限价)\s*[（(]?\s*(亿元|万元|元)?\s*[）)]?\s*[:：]?\s*"
+            r"(?:人民币)?\s*([0-9][0-9,，\s]*(?:\.\s*[0-9]+)?)\s*(亿元|万元|元)?",
+        ),
+    )
+    for source, pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            number = re.sub(r"[,，\s]", "", match.group(2))
+            unit = match.group(3) or match.group(1) or "元"
+            amount = parse_budget_cny(f"{number}{unit}")
+            if amount:
+                return amount, source
+    return None, ""
+
+
+def _extract_purchaser(payload: dict[str, Any]) -> str:
+    structured = _mapping(payload.get("structured_fields"))
+    existing = str(structured.get("purchaser") or payload.get("purchaser") or "").strip()
+    if existing:
+        return existing
+    text = " ".join(
+        str(payload.get(key) or "") for key in ("core_content", "content_text")
+    )
+    patterns = (
+        r"采购人信息\s*(?:名\s*称|采购人)\s*[:：]\s*(.{2,80}?)(?=\s+(?:地\s*址|联系方式|采购经办人|采购人电话|采购人地址|2[、.]))",
+        r"(?:采购人名称|采购单位)\s*[:：]\s*(.{2,80}?)(?=\s+(?:地\s*址|地址|联系方式|联系人|电话|2[、.]))",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1).strip(" ，,；;。")
+    return ""
+
+
 def _recent_notices(settings: Settings, *, limit: int) -> list[tuple[str, Notice]]:
     with connection(settings) as conn:
         rows = conn.execute(
@@ -312,13 +380,14 @@ def _recent_notices(settings: Settings, *, limit: int) -> list[tuple[str, Notice
 
 
 def _market_entry(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[str, object]:
+    payload = _infer_payload_fields(payload)
     structured = _mapping(payload.get("structured_fields"))
     evidence = _mapping(payload.get("evidence"))
     credibility, _basis = _credibility_score(payload, evidence)
     return {
         "category": _primary_category(payload),
         "budget_cny": parse_budget_cny(structured.get("budget")),
-        "purchaser": str(structured.get("purchaser") or payload.get("purchaser") or "").strip(),
+        "purchaser": _extract_purchaser(payload),
         "region": str(payload.get("region") or "").strip(),
         "stage": _stage(structured, _as_date(as_of)),
         "credibility": credibility,
@@ -353,6 +422,7 @@ def _budget_stats(values: list[float]) -> dict[str, object]:
 
 
 def _market_benchmark(payload: dict[str, Any], market: dict[str, object]) -> dict[str, object]:
+    payload = _infer_payload_fields(payload)
     category = _primary_category(payload)
     structured = _mapping(payload.get("structured_fields"))
     amount = parse_budget_cny(structured.get("budget"))
@@ -437,7 +507,7 @@ def _with_intelligence(notice: Notice, *, as_of: datetime | date | None) -> Noti
 
 def _notice_payload(notice: Notice) -> dict[str, Any]:
     fields = notice.fields
-    return {
+    payload = {
         "title": notice.title,
         "publish_time": notice.publish_time,
         "region": notice.region,
@@ -451,6 +521,7 @@ def _notice_payload(notice: Notice) -> dict[str, Any]:
         "evidence": _mapping(fields.get("evidence")),
         "duplicate_count": fields.get("duplicate_count") or 1,
     }
+    return _infer_payload_fields(payload)
 
 
 def _notice_from_row(row: Any) -> Notice:

@@ -57,6 +57,49 @@ class OpportunityIntelligenceTests(unittest.TestCase):
         self.assertEqual(benchmark["position"], "above")
         self.assertIn("可比样本 3 条", benchmark["message"])
 
+    def test_market_context_recovers_budget_and_purchaser_from_notice_text(self) -> None:
+        first = replace(
+            _notice(),
+            id="text-1",
+            purchaser="",
+            core_content="",
+            content_text=(
+                "项目名称：服务器采购。预算金额：0.000000 万元（人民币） "
+                "最高限价：160.000000 万元（人民币）。"
+                "采购人信息 名 称：华东数据中心 地址：上海市。"
+            ),
+            fields={"structured_fields": {}, "evidence": {"quality_score": 0.9}},
+        )
+        second = replace(
+            _notice(),
+            id="text-2",
+            purchaser="",
+            core_content="",
+            content_text=(
+                "项目名称：服务器扩容。预算总金额（元）： 1,200,000.00。"
+                "采购人信息 采购人：华东数据中心 采购经办人：李老师。"
+            ),
+            fields={"structured_fields": {}, "evidence": {"quality_score": 0.9}},
+        )
+
+        market = build_market_context([first, second], as_of=datetime(2026, 8, 15, 10, 0))
+        intelligence = analyze_opportunity_payload(
+            {
+                "title": first.title,
+                "content_text": first.content_text,
+                "structured_fields": {},
+            },
+            as_of=datetime(2026, 8, 15, 10, 0),
+        )
+
+        self.assertEqual(market["budget_sample_count"], 2)
+        self.assertEqual(market["budget"]["median_cny"], 1_400_000)
+        self.assertEqual(
+            market["top_purchasers"][0], {"name": "华东数据中心", "count": 2}
+        )
+        self.assertNotIn("预算", intelligence["missing_fields"])
+        self.assertNotIn("采购人", intelligence["missing_fields"])
+
     def test_missing_evidence_is_exposed_instead_of_hidden(self) -> None:
         intelligence = analyze_opportunity_payload(
             {"标题": "服务器采购公告", "发布时间": "2026-08-14"},
