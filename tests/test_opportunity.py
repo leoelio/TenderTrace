@@ -11,9 +11,9 @@ from tendertrace.opportunity import (
     analyze_opportunity_payload,
     build_market_context,
     enrich_opportunity_intelligence,
+    list_opportunities,
     market_benchmark_for_notice,
     parse_budget_cny,
-    list_opportunities,
 )
 
 
@@ -246,7 +246,10 @@ class OpportunityIntelligenceTests(unittest.TestCase):
         self.assertEqual(filtered["summary"]["total"], 1)
         self.assertEqual(filtered["summary"]["market"]["notice_count"], 1)
         self.assertEqual(filtered["summary"]["market"]["selected_category"], "服务器")
+        self.assertEqual(filtered["summary"]["sort"], "priority")
+        self.assertEqual(filtered["summary"]["action_queue"]["unowned_priority"], 1)
         self.assertEqual(filtered["items"][0]["notice_id"], "ccgp:n1")
+        self.assertTrue(filtered["items"][0]["action_state"]["owner_required"])
         self.assertTrue(filtered["items"][0]["intelligence"]["project_target"])
 
 

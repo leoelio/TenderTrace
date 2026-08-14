@@ -42,6 +42,7 @@ from tendertrace.scheduling.ingest_subscriptions import (
     list_ingest_subscriptions,
     run_ingest_subscription,
 )
+from tendertrace.source_map import build_source_map
 from tendertrace.submission import create_submission_package
 from tendertrace.vault.qianlima import QianlimaSessionVault
 from tendertrace.vector import build_notice_embeddings
@@ -459,26 +460,8 @@ def cmd_feishu_bitable_check(args: argparse.Namespace) -> int:
 
 def cmd_source_status(_: argparse.Namespace) -> int:
     settings = _settings()
-    qianlima = QianlimaSessionVault(settings)
-    print(
-        json.dumps(
-            {
-                "sources": [
-                    {"site": "ccgp", "engine": "http", "status": "configured"},
-                    {"site": "ggzy", "engine": "http", "status": "configured"},
-                    {
-                        **qianlima.status().to_dict(),
-                        "engine": "playwright",
-                        "status": "configured"
-                        if qianlima.has_storage_state()
-                        else "login_required",
-                    },
-                ]
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    source_map = build_source_map(settings)
+    print(json.dumps({"sources": source_map["items"]}, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -37,6 +37,8 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作回写本地状态流、多维表格与审计事件。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
+- 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
+- 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
 - 竞争情报：从结果/合同公告提取成交供应商、成交金额和证据摘录，聚合同品类历史供应商；无法可靠提取时明确标记样本不足。
 - 需求审阅：按技术规格、兼容集成、交付实施、验收、服务、资质、评分和安全 8 个维度检查当前采集文本，并给出待核对项与优化建议。
@@ -46,7 +48,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 证据链：保存来源链接、正文摘录、附件快照、字段级证据和事实校验结果。
 - Word 报告：输出标题、发布时间、来源链接、核心内容、附件链接、多源覆盖和抓取健康。
 - 模型增强：支持规则模式、本地 Ollama 模式、OpenAI 兼容云端模式。
-- Agent 评测：覆盖 RAG、Agent、Harness、Recall Proxy、金标 Recall@K。
+- Agent 评测：覆盖 RAG、Agent、Harness、Recall Proxy、金标 Recall@K；人工金标未完成时固定标记“未就绪”，代理分不替代严格召回验收。
 - 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议。
 - 可选向量检索：安装 `.[vector]` 后可用 BGE 类模型生成本地向量，与 FTS 做 RRF 融合。
 
@@ -333,10 +335,10 @@ Web UI 覆盖以下视图：
 - 工作台：输入自然语言问题，选择立即运行或订阅以及 Web/飞书交付；模型策略和搜索深度收纳在高级设置中。
 - 历史运行：查看 run 记录、trace、checkpoint 和报告路径。
 - 订阅管理：管理用户定时报告订阅，查看新增/跳过历史、下次触发时间和最近 Word。
-- 数据源：查看公开源、千里马登录态、入口路由、发现规则和来源健康。
-- Agent 评测：查看 RAG、Agent、Harness、Recall、金标评测和向量覆盖率。
+- 数据源：查看公开源、千里马登录态、入口路由、发现规则，以及命中率、延迟和可靠性等来源健康指标。
+- Agent 评测：分开展示人工金标用例与意图 Harness；金标完整后才给出严格 Recall 验收状态。
 - 用户记忆：查看使用画像、知识偏好、风险信号和生成式行动建议。
-- 机会情报：按采购品类和机会等级筛选，查看市场基准，并在详情弹窗中研判竞争者、需求覆盖、证据边界、风险与角色行动。
+- 机会情报：按行动优先、截止时间或发布时间排序，查看待认领/临期队列和市场基准，并在详情弹窗中研判竞争者、需求覆盖、证据边界、风险与角色行动。
 - 设置：查看运行配置，以及飞书报告、台账、机会卡片、任务、截止日程、状态回调和智能体能力矩阵。
 
 ## 本地库检索流程
@@ -448,6 +450,8 @@ The current architecture is local-first: background ingestion continuously store
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, callback-driven sales stages, and an auditable local event stream.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
+- Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
+- Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
 - Competition intelligence extracted from result and contract notices, including awarded suppliers, amounts, evidence excerpts, and comparable-category supplier history.
 - An eight-dimension requirement review covering specifications, integration, delivery, acceptance, service, qualifications, scoring, and security; missing evidence is explicitly labeled for verification.
@@ -457,7 +461,7 @@ The current architecture is local-first: background ingestion continuously store
 - Evidence chain with source links, excerpts, attachment snapshots, and fact checks.
 - Word report generation with title, publish time, source link, core content, and attachment links.
 - Rule-only, local Ollama, and OpenAI-compatible cloud model enhancement modes.
-- Agent evaluation covering RAG, agent execution, intent harness, recall proxy, and gold Recall@K.
+- Agent evaluation covering RAG, agent execution, intent harness, recall proxy, and gold Recall@K; evaluation stays incomplete until the manual gold set is fully annotated.
 - User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then generates preference profiles, risk signals, and actionable advice.
 - Optional vector retrieval via `sentence-transformers`, fused with FTS by RRF.
 

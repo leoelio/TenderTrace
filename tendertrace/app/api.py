@@ -276,16 +276,24 @@ def create_app():
         limit: int = 50,
         level: str | None = None,
         topic: str | None = None,
+        sort: str = "priority",
     ) -> dict[str, object]:
         normalized_level = level.upper() if level else None
         if normalized_level and normalized_level not in {"A", "B", "C", "D"}:
             raise HTTPException(status_code=400, detail="level must be one of: A, B, C, D")
         normalized_topic = str(topic or "").strip()[:40] or None
+        normalized_sort = str(sort or "priority").strip().lower()
+        if normalized_sort not in {"priority", "recent", "deadline"}:
+            raise HTTPException(
+                status_code=400,
+                detail="sort must be one of: priority, recent, deadline",
+            )
         return list_opportunities(
             settings,
             limit=limit,
             level=normalized_level,
             topic=normalized_topic,
+            sort=normalized_sort,
         )
 
     @app.post("/api/opportunities/analyze")

@@ -255,6 +255,7 @@ def list_opportunities(
     limit: int = 50,
     level: str | None = None,
     topic: str | None = None,
+    sort: str = "priority",
 ) -> dict[str, object]:
     limit = max(1, min(int(limit), 200))
     all_rows = _recent_notices(settings, limit=500)
@@ -268,7 +269,7 @@ def list_opportunities(
         if topic
         else all_rows
     )
-    rows = market_rows[: min(limit * 4, 500)]
+    rows = market_rows[:500]
     market_notices = [notice for _notice_id, notice in market_rows]
     market = build_market_context(market_notices)
     market["available_categories"] = all_market.get("category_distribution", [])
@@ -282,41 +283,49 @@ def list_opportunities(
             continue
         _attach_market_context(intelligence, payload, market)
         structured = _mapping(payload.get("structured_fields"))
-        items.append(
-            {
-                "notice_id": notice_id,
-                "title": notice.title,
-                "publish_time": notice.publish_time,
-                "region": notice.region,
-                "purchaser": str(payload.get("purchaser") or ""),
-                "source_site": notice.source_site,
-                "source_url": notice.source_url,
-                "budget": str(structured.get("budget") or ""),
-                "bid_deadline": str(structured.get("bid_deadline") or ""),
-                "intelligence": intelligence,
-                "workflow": workflows[notice_id].to_dict(),
-            }
-        )
-        if len(items) >= limit:
-            break
+        workflow = workflows[notice_id].to_dict()
+        item: dict[str, object] = {
+            "notice_id": notice_id,
+            "title": notice.title,
+            "publish_time": notice.publish_time,
+            "region": notice.region,
+            "purchaser": str(payload.get("purchaser") or ""),
+            "source_site": notice.source_site,
+            "source_url": notice.source_url,
+            "budget": str(structured.get("budget") or ""),
+            "bid_deadline": str(structured.get("bid_deadline") or ""),
+            "intelligence": intelligence,
+            "workflow": workflow,
+        }
+        item["action_state"] = _opportunity_action_state(item)
+        items.append(item)
+    items = _sort_opportunities(items, sort)
+    all_matching_items = items
+    items = all_matching_items[:limit]
     level_counts = {name: 0 for _threshold, name, _label in LEVELS}
-    for item in items:
+    for item in all_matching_items:
         intelligence = _mapping(item.get("intelligence"))
         name = str(intelligence.get("level") or "D")
         level_counts[name] = level_counts.get(name, 0) + 1
     return {
         "items": items,
         "summary": {
-            "total": len(items),
+            "total": len(all_matching_items),
+            "returned": len(items),
             "levels": level_counts,
             "average_score": round(
-                sum(int(_mapping(item.get("intelligence")).get("score") or 0) for item in items)
-                / len(items),
+                sum(
+                    int(_mapping(item.get("intelligence")).get("score") or 0)
+                    for item in all_matching_items
+                )
+                / len(all_matching_items),
                 1,
             )
-            if items
+            if all_matching_items
             else 0.0,
             "market": market,
+            "action_queue": _action_queue_summary(all_matching_items),
+            "sort": sort,
         },
     }
 
@@ -343,7 +352,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     )
     _attach_market_context(intelligence, payload, market)
     workflow = workflow_snapshots(settings, [notice_id])[notice_id]
-    return {
+    item: dict[str, object] = {
         "notice_id": str(row["id"]),
         "title": notice.title,
         "publish_time": notice.publish_time,
@@ -356,6 +365,120 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "intelligence": intelligence,
         "workflow": workflow.to_dict(),
     }
+    item["action_state"] = _opportunity_action_state(item)
+    return item
+
+
+def _sort_opportunities(
+    items: list[dict[str, object]],
+    sort: str,
+) -> list[dict[str, object]]:
+    if sort == "recent":
+        return sorted(items, key=lambda item: str(item.get("publish_time") or ""), reverse=True)
+    if sort == "deadline":
+        return sorted(
+            items,
+            key=lambda item: (
+                _deadline_date(item) is None,
+                _deadline_date(item) or date.max,
+                -_opportunity_score(item),
+            ),
+        )
+    newest_first = sorted(
+        items,
+        key=lambda item: str(item.get("publish_time") or ""),
+        reverse=True,
+    )
+    return sorted(
+        newest_first,
+        key=lambda item: (
+            -int(_mapping(item.get("action_state")).get("priority") or 0),
+            -_opportunity_score(item),
+        ),
+    )
+
+
+def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
+    intelligence = _mapping(item.get("intelligence"))
+    workflow = _mapping(item.get("workflow"))
+    level = str(intelligence.get("level") or "D")
+    stage = str(workflow.get("stage") or "identified")
+    deadline = _deadline_date(item)
+    today = date.today()
+    days_to_deadline = (deadline - today).days if deadline else None
+    terminal = stage in {"won", "lost", "archived"}
+    overdue = days_to_deadline is not None and days_to_deadline < 0
+    due_soon = days_to_deadline is not None and 0 <= days_to_deadline <= 7
+    owner_required = not str(workflow.get("owner_open_id") or workflow.get("owner_name") or "")
+    actionable = not terminal and not overdue
+    priority = {"A": 40, "B": 30, "C": 20, "D": 10}.get(level, 0)
+    if actionable and owner_required and level in {"A", "B"}:
+        priority += 12
+    if actionable and due_soon:
+        priority += 18
+    if workflow.get("feishu_message_id"):
+        priority += 4
+    if not actionable:
+        priority = 0
+    return {
+        "priority": priority,
+        "actionable": actionable,
+        "owner_required": owner_required,
+        "due_soon": due_soon,
+        "overdue": overdue,
+        "days_to_deadline": days_to_deadline,
+    }
+
+
+def _action_queue_summary(items: list[dict[str, object]]) -> dict[str, object]:
+    stages = {stage: 0 for stage in ("identified", "qualifying", "pursuing", "bidding", "won", "lost", "archived")}
+    unowned_priority = 0
+    due_soon = 0
+    overdue = 0
+    collaboration_started = 0
+    deadlines: list[tuple[date, dict[str, object]]] = []
+    for item in items:
+        workflow = _mapping(item.get("workflow"))
+        intelligence = _mapping(item.get("intelligence"))
+        action = _mapping(item.get("action_state"))
+        stage = str(workflow.get("stage") or "identified")
+        stages[stage] = stages.get(stage, 0) + 1
+        if action.get("owner_required") and intelligence.get("level") in {"A", "B"} and action.get("actionable"):
+            unowned_priority += 1
+        due_soon += int(bool(action.get("due_soon")))
+        overdue += int(bool(action.get("overdue")))
+        if stage != "identified" or workflow.get("feishu_message_id"):
+            collaboration_started += 1
+        deadline = _deadline_date(item)
+        if deadline and deadline >= date.today():
+            deadlines.append((deadline, item))
+    deadlines.sort(key=lambda value: value[0])
+    next_deadline = (
+        {
+            "notice_id": str(deadlines[0][1].get("notice_id") or ""),
+            "title": str(deadlines[0][1].get("title") or ""),
+            "date": deadlines[0][0].isoformat(),
+        }
+        if deadlines
+        else None
+    )
+    return {
+        "unowned_priority": unowned_priority,
+        "due_soon": due_soon,
+        "overdue": overdue,
+        "collaboration_started": collaboration_started,
+        "stage_counts": stages,
+        "next_deadline": next_deadline,
+    }
+
+
+def _deadline_date(item: dict[str, object]) -> date | None:
+    workflow = _mapping(item.get("workflow"))
+    return parse_date(str(workflow.get("due_at") or item.get("bid_deadline") or ""))
+
+
+def _opportunity_score(item: dict[str, object]) -> int:
+    return int(_mapping(item.get("intelligence")).get("score") or 0)
 
 
 def parse_budget_cny(value: object) -> float | None:

@@ -133,7 +133,7 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
     with connection(settings) as conn:
         rows = conn.execute(
             """
-            SELECT stats_json
+            SELECT started_at, stats_json
             FROM runs
             WHERE status != 'deleted'
             ORDER BY started_at DESC
@@ -162,11 +162,21 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
             if not site:
                 continue
             bucket = health.setdefault(site, _empty_health())
+            status = str(item.get("status") or "")
+            if status == "skipped":
+                bucket["skipped_runs"] = int(bucket["skipped_runs"]) + 1
+                continue
             bucket["runs"] = int(bucket["runs"]) + 1
-            if item.get("status") == "failed":
+            if not bucket["last_run_at"]:
+                bucket["last_run_at"] = str(row["started_at"] or "")
+            if status == "failed":
                 bucket["failed_runs"] = int(bucket["failed_runs"]) + 1
             else:
                 bucket["finished_runs"] = int(bucket["finished_runs"]) + 1
+                if not bucket["last_success_at"]:
+                    bucket["last_success_at"] = str(row["started_at"] or "")
+            if int(item.get("count") or 0) > 0:
+                bucket["hit_runs"] = int(bucket["hit_runs"]) + 1
             bucket["notices"] = int(bucket["notices"]) + int(item.get("count") or 0)
             fetch_stats = item.get("fetch_stats")
             if isinstance(fetch_stats, dict):
@@ -181,6 +191,13 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
         bucket["success_rate"] = (
             round(float(bucket["succeeded"]) / requests, 3) if requests else None
         )
+        bucket["hit_rate"] = (
+            round(float(bucket["hit_runs"]) / int(bucket["runs"]), 3)
+            if int(bucket["runs"])
+            else None
+        )
+        bucket["reliability_score"] = _reliability_score(bucket)
+        bucket["health_status"] = _health_status(bucket)
     return health
 
 
@@ -189,6 +206,8 @@ def _empty_health() -> dict[str, object]:
         "runs": 0,
         "finished_runs": 0,
         "failed_runs": 0,
+        "skipped_runs": 0,
+        "hit_runs": 0,
         "notices": 0,
         "requests": 0,
         "succeeded": 0,
@@ -200,7 +219,51 @@ def _empty_health() -> dict[str, object]:
         "avg_elapsed_ms": 0,
         "last_error": "",
         "success_rate": None,
+        "hit_rate": None,
+        "reliability_score": 0.0,
+        "health_status": "unknown",
+        "last_run_at": "",
+        "last_success_at": "",
     }
+
+
+def _reliability_score(bucket: dict[str, object]) -> float:
+    runs = int(bucket["runs"])
+    if not runs:
+        return 0.0
+    requests = int(bucket["requests"])
+    request_success = bucket["success_rate"]
+    run_success = float(bucket["finished_runs"]) / runs
+    success = (
+        0.6 * float(request_success) + 0.4 * run_success
+        if request_success is not None
+        else run_success
+    )
+    hit_rate = float(bucket["hit_rate"] or 0.0)
+    blocked_ratio = float(bucket["blocked"]) / requests if requests else 0.0
+    latency_ms = int(bucket["avg_elapsed_ms"])
+    latency_score = 1.0 if latency_ms <= 1500 else 0.7 if latency_ms <= 4000 else 0.35
+    return round(
+        max(
+            0.0,
+            0.55 * success
+            + 0.20 * hit_rate
+            + 0.15 * (1 - blocked_ratio)
+            + 0.10 * latency_score,
+        ),
+        3,
+    )
+
+
+def _health_status(bucket: dict[str, object]) -> str:
+    if not int(bucket["runs"]):
+        return "unknown"
+    score = float(bucket["reliability_score"])
+    if score >= 0.85:
+        return "healthy"
+    if score >= 0.6:
+        return "degraded"
+    return "unhealthy"
 
 
 def _merge_fetch_stats(bucket: dict[str, object], fetch_stats: dict[str, Any]) -> None:

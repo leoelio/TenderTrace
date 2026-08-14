@@ -338,6 +338,11 @@
                   <option value="C">C · 信息补全</option>
                   <option value="D">D · 低优先级</option>
                 </select>
+                <select id="opportunitySortSelect" aria-label="机会排序">
+                  <option value="priority">行动优先</option>
+                  <option value="deadline">截止时间</option>
+                  <option value="recent">最新发布</option>
+                </select>
                 <button id="refreshOpportunitiesButton" class="primary-lite-button" type="button">刷新</button>
               </div>
             </div>
@@ -500,10 +505,14 @@
               <div id="harnessMetrics" class="eval-card"></div>
               <div id="recallMetrics" class="eval-card"></div>
             </div>
-            <div class="eval-detail-grid">
+            <div class="eval-detail-grid eval-three-grid">
               <div class="eval-card">
-                <h2>Golden Cases</h2>
+                <h2>Gold Recall 用例</h2>
                 <div id="evaluationCases" class="case-list empty-state">暂无用例</div>
+              </div>
+              <div class="eval-card">
+                <h2>Intent Harness</h2>
+                <div id="evaluationHarnessCases" class="case-list empty-state">暂无用例</div>
               </div>
               <div class="eval-card">
                 <h2>评测说明</h2>

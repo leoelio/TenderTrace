@@ -94,6 +94,7 @@ const el = {
   refreshOpportunitiesButton: document.querySelector("#refreshOpportunitiesButton"),
   opportunityTopicFilter: document.querySelector("#opportunityTopicFilter"),
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
+  opportunitySortSelect: document.querySelector("#opportunitySortSelect"),
   opportunitySummary: document.querySelector("#opportunitySummary"),
   opportunityMarket: document.querySelector("#opportunityMarket"),
   openFeishuBitableButton: document.querySelector("#openFeishuBitableButton"),
@@ -120,6 +121,7 @@ const el = {
   harnessMetrics: document.querySelector("#harnessMetrics"),
   recallMetrics: document.querySelector("#recallMetrics"),
   evaluationCases: document.querySelector("#evaluationCases"),
+  evaluationHarnessCases: document.querySelector("#evaluationHarnessCases"),
   evaluationNotes: document.querySelector("#evaluationNotes"),
   refreshMemoryButton: document.querySelector("#refreshMemoryButton"),
   saveMemoryButton: document.querySelector("#saveMemoryButton"),
@@ -254,8 +256,13 @@ function statusLabel(status) {
     configured: "正常",
     login_required: "需登录",
     pass: "通过",
+    incomplete: "未就绪",
     warn: "提醒",
     skipped: "跳过",
+    healthy: "健康",
+    degraded: "降级",
+    unhealthy: "异常",
+    unknown: "暂无样本",
     sent: "已发送",
     click: "点击",
     download: "下载",
@@ -900,22 +907,29 @@ function renderSourceList(target, items) {
         : "未配置路由";
       const successRate =
         health.success_rate === null || health.success_rate === undefined ? "-" : percent(health.success_rate);
+      const hitRate = health.hit_rate === null || health.hit_rate === undefined ? "-" : percent(health.hit_rate);
+      const reliability = health.runs ? percent(health.reliability_score || 0) : "-";
+      const healthStatus = escapeHtml(health.health_status || "unknown");
       return `
         <div class="source-row source-health-card">
           <div class="source-row-head">
             <strong>${site} · ${engine}</strong>
-            <span><span class="badge badge-${status}">${escapeHtml(statusLabel(item.status))}</span></span>
+            <span>
+              <span class="badge badge-${healthStatus}">${escapeHtml(statusLabel(health.health_status))}</span>
+              <span class="badge badge-${status}">${escapeHtml(statusLabel(item.status))}</span>
+            </span>
           </div>
           <div class="source-health-grid">
-            <span><strong>${escapeHtml(health.runs ?? 0)}</strong><small>近次运行</small></span>
+            <span><strong>${escapeHtml(health.runs ?? 0)}</strong><small>真实尝试</small></span>
             <span><strong>${escapeHtml(health.notices ?? 0)}</strong><small>累计命中</small></span>
-            <span><strong>${escapeHtml(successRate)}</strong><small>成功率</small></span>
-            <span><strong>${escapeHtml(health.blocked ?? 0)}</strong><small>阻断</small></span>
-            <span><strong>${escapeHtml(health.retries ?? 0)}</strong><small>重试</small></span>
-            <span><strong>${escapeHtml(health.page_artifacts ?? 0)}</strong><small>页面快照</small></span>
+            <span><strong>${escapeHtml(successRate)}</strong><small>请求成功</small></span>
+            <span><strong>${escapeHtml(hitRate)}</strong><small>运行命中</small></span>
+            <span><strong>${escapeHtml(reliability)}</strong><small>可靠性</small></span>
+            <span><strong>${escapeHtml(health.avg_elapsed_ms ?? 0)} ms</strong><small>平均延迟</small></span>
           </div>
           <span class="source-route-line">入口：${escapeHtml(routeSummary)}</span>
           <span class="source-rule-line">发现规则：allow ${escapeHtml(allowRules || "-")}；deny ${escapeHtml(denyRules || "-")}</span>
+          <span class="source-rule-line">最近成功：${escapeHtml(compactDateTimeText(health.last_success_at) || "暂无")}；正确跳过 ${escapeHtml(health.skipped_runs ?? 0)} 次</span>
           ${validation}
           ${counts}
           ${detail}
@@ -1132,6 +1146,7 @@ function renderEvaluation(report) {
       summaryTile("运行数", report.summary?.runs ?? 0),
       summaryTile("完成运行", report.summary?.finished_runs ?? 0),
       summaryTile("用例数", report.summary?.evaluated_cases ?? 0),
+      summaryTile("金标准备度", percent(report.gold_coverage?.annotation_completion || 0)),
     ].join("");
   }
   renderMetricCard(el.ragMetrics, "RAG 评测", [
@@ -1166,20 +1181,33 @@ function renderEvaluation(report) {
     ["金标用例", `${report.recall?.annotated_gold_case_count ?? 0} / ${report.recall?.gold_case_count ?? 0}`],
   ]);
   if (el.evaluationCases) {
-    const cases = report.harness?.cases || [];
+    const cases = report.gold?.cases || [];
     el.evaluationCases.className = cases.length ? "case-list" : "case-list empty-state";
     el.evaluationCases.innerHTML = cases.length
       ? cases
           .map(
             (item) => `
               <div class="case-row">
-                <strong>${escapeHtml(item.name)} · ${item.passed ? "通过" : "未通过"}</strong>
+                <strong>${escapeHtml(item.id || "-")} · ${escapeHtml(statusLabel(item.status))}</strong>
                 <span>${escapeHtml(item.query)}</span>
-                <span>字段：${escapeHtml(item.field_passed)} / ${escapeHtml(item.field_total)}</span>
+                <span>金标 ${escapeHtml(item.expected_count || 0)} · 召回 ${escapeHtml(item.retrieved_count || 0)} · Recall@10 ${item.status === "evaluated" ? percent(item.recall_at?.["10"] || 0) : "待标注"}</span>
               </div>
             `,
           )
           .join("")
+      : "暂无用例";
+  }
+  if (el.evaluationHarnessCases) {
+    const cases = report.harness?.cases || [];
+    el.evaluationHarnessCases.className = cases.length ? "case-list" : "case-list empty-state";
+    el.evaluationHarnessCases.innerHTML = cases.length
+      ? cases.map((item) => `
+          <div class="case-row">
+            <strong>${escapeHtml(item.name)} · ${item.passed ? "通过" : "未通过"}</strong>
+            <span>${escapeHtml(item.query)}</span>
+            <span>字段：${escapeHtml(item.field_passed)} / ${escapeHtml(item.field_total)}</span>
+          </div>
+        `).join("")
       : "暂无用例";
   }
   if (el.evaluationNotes) {
@@ -1199,11 +1227,14 @@ function renderOpportunities(payload) {
   const visibleItems = items.slice(0, state.opportunityVisible);
   if (el.opportunitySummary) {
     const levels = summary.levels || {};
+    const actionQueue = summary.action_queue || {};
     el.opportunitySummary.className = "opportunity-summary";
     el.opportunitySummary.innerHTML = [
       summaryTile("当前线索", summary.total ?? items.length),
       summaryTile("A 级机会", levels.A ?? 0),
-      summaryTile("B 级机会", levels.B ?? 0),
+      summaryTile("待认领重点", actionQueue.unowned_priority ?? 0),
+      summaryTile("7 日内截止", actionQueue.due_soon ?? 0),
+      summaryTile("已启动协同", actionQueue.collaboration_started ?? 0),
       summaryTile("平均评分", summary.average_score ?? 0),
     ].join("");
   }
@@ -1238,8 +1269,14 @@ function renderOpportunities(payload) {
         .map((item) => {
           const intelligence = item.intelligence || {};
           const workflow = item.workflow || {};
+          const actionState = item.action_state || {};
           const scores = intelligence.scores || {};
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
+          const actionSignal = actionState.due_soon
+            ? `<small class="action-signal">距截止 ${escapeHtml(actionState.days_to_deadline)} 天</small>`
+            : actionState.owner_required && ["A", "B"].includes(intelligence.level)
+              ? '<small class="action-signal">重点机会待认领</small>'
+              : "";
           return `
             <article class="opportunity-row" role="row">
               <div class="opportunity-grade grade-${escapeHtml(String(intelligence.level || "D").toLowerCase())}">
@@ -1262,6 +1299,7 @@ function renderOpportunities(payload) {
               <div class="opportunity-strategy">
                 <strong>${escapeHtml(workflow.stage_label || "线索识别")}</strong>
                 <span>${escapeHtml(intelligence.project_target || "目标待确认")}</span>
+                ${actionSignal}
                 ${workflow.owner_name ? `<small>负责人：${escapeHtml(workflow.owner_name)}</small>` : ""}
                 ${risks.length ? `<small>${escapeHtml(risks[0])}</small>` : ""}
               </div>
@@ -1847,13 +1885,19 @@ async function refreshEvaluation() {
 async function refreshOpportunities() {
   const level = el.opportunityLevelFilter?.value || "";
   const topic = el.opportunityTopicFilter?.value || "";
+  const sort = el.opportunitySortSelect?.value || "priority";
   const query = new URLSearchParams({ limit: "80" });
   if (level) query.set("level", level);
   if (topic) query.set("topic", topic);
+  query.set("sort", sort);
   const payload = await api(`/api/opportunities?${query.toString()}`);
-  state.opportunityVisible = 20;
+  state.opportunityVisible = opportunityPageSize();
   renderOpportunities(payload);
   return payload;
+}
+
+function opportunityPageSize() {
+  return window.innerWidth <= 700 ? 6 : 20;
 }
 
 async function refreshMemoryWeekly() {
@@ -2644,8 +2688,11 @@ function bindEvents() {
   el.opportunityTopicFilter?.addEventListener("change", () =>
     refreshOpportunities().catch(toastError("机会品类筛选失败")),
   );
+  el.opportunitySortSelect?.addEventListener("change", () =>
+    refreshOpportunities().catch(toastError("机会情报排序失败")),
+  );
   el.loadMoreOpportunitiesButton?.addEventListener("click", () => {
-    state.opportunityVisible += 20;
+    state.opportunityVisible += opportunityPageSize();
     renderOpportunities({
       items: state.opportunities,
       summary: state.opportunitySummaryData,

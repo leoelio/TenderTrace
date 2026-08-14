@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
-from tendertrace.gold import evaluate_gold_recall
+from tendertrace.gold import build_gold_coverage, evaluate_gold_recall
 from tendertrace.intent import compile_intent
 from tendertrace.vector import vector_coverage
 
@@ -20,6 +20,7 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
     rag = _rag_metrics(stats)
     agent = _agent_metrics(stats)
     gold = evaluate_gold_recall(settings)
+    gold_coverage = build_gold_coverage(settings)
     vector = vector_coverage(settings)
     recall = _recall_metrics(stats, gold.to_dict(), vector)
     recall_score = (
@@ -34,8 +35,14 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
         + 0.25 * float(recall_score),
         3,
     )
+    evaluation_ready = gold_coverage.complete
     return {
-        "status": "pass" if overall_score >= 0.75 else "warn",
+        "status": (
+            "incomplete"
+            if not evaluation_ready
+            else "pass" if overall_score >= 0.75 else "warn"
+        ),
+        "evaluation_ready": evaluation_ready,
         "overall_score": overall_score,
         "generated_at": datetime.now(ZoneInfo("Asia/Shanghai")).replace(microsecond=0).isoformat(),
         "summary": {
@@ -52,8 +59,10 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
         "harness": harness,
         "recall": recall,
         "gold": gold.to_dict(),
+        "gold_coverage": gold_coverage.to_dict(),
         "notes": [
-            "有人工标注金标集时，严格召回率使用 Recall@K；金标为空时仅展示 recall_proxy。",
+            "严格 Recall@K 仅使用人工核验金标；金标未完整时，评测状态固定为未就绪。",
+            "recall_proxy 只用于运行观测，不参与替代严格召回验收。",
             "harness 字段准确率来自固定自然语言样例的 BidQL 编译检查。",
             "RAG 指标来自 evidence_validate、附件抽取和报告必要字段检查。",
         ],
@@ -158,7 +167,7 @@ def _recall_metrics(
         item
         for run in runs
         for item in run["stats"].get("source_stats", [])
-        if isinstance(item, dict)
+        if isinstance(item, dict) and item.get("status") != "skipped"
     ]
     active_source_hits = sum(1 for item in source_stats if _int(item.get("count")) > 0)
     source_attempts = len(source_stats)
@@ -237,7 +246,7 @@ def _intent_harness() -> dict[str, Any]:
         {
             "name": "absolute_month",
             "query": "2026年4月份北京充电桩相关的招标信息都有哪些",
-            "expect": {"province": "北京", "topic": "充电桩", "time_kind": "absolute_month"},
+            "expect": {"province": "北京", "topic": "充电桩", "time_kind": "absolute"},
         },
     ]
     results = [_score_intent_case(case, now) for case in cases]

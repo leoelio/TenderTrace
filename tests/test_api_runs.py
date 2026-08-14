@@ -442,7 +442,11 @@ class RunsApiTests(unittest.TestCase):
         self.assertIn("harness", payload)
         self.assertIn("recall", payload)
         self.assertIn("gold", payload)
+        self.assertEqual(payload["status"], "incomplete")
+        self.assertFalse(payload["evaluation_ready"])
+        self.assertIn("gold_coverage", payload)
         self.assertEqual(payload["harness"]["case_count"], 4)
+        self.assertEqual(payload["harness"]["passed_cases"], 4)
         self.assertIn("strict_recall_at_10", payload["recall"])
         self.assertIn("vector_coverage_rate", payload["recall"])
 
