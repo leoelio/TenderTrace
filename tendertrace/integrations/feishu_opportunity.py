@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 import hashlib
 from typing import Any
@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from tendertrace.config import Settings
 from tendertrace.delivery.feishu_bitable import update_opportunity_workflow_in_bitable
 from tendertrace.integrations.feishu import FeishuClient
+from tendertrace.qualification import assess_qualification
 from tendertrace.workflow import OpportunityWorkflow, get_workflow, update_workflow
 
 
@@ -52,6 +53,14 @@ def start_opportunity_collaboration(
     due_at = _deadline(opportunity, settings.timezone)
     task_guid = workflow.feishu_task_guid
     event_id = workflow.feishu_event_id
+    card_workflow = replace(
+        workflow,
+        owner_open_id=owner_open_id or workflow.owner_open_id,
+        owner_name=owner_name or workflow.owner_name,
+        next_action=next_action,
+        due_at=due_at.isoformat(timespec="minutes") if due_at else "",
+    )
+    qualification = assess_qualification(opportunity, card_workflow.to_dict()).to_dict()
 
     if create_task and not task_guid:
         task = feishu.create_task(
@@ -75,7 +84,12 @@ def start_opportunity_collaboration(
         event_id = _nested_string(event, "data", "event", "event_id")
 
     card_response = feishu.send_card(
-        build_opportunity_card(opportunity, workflow, next_action=next_action),
+        build_opportunity_card(
+            opportunity,
+            card_workflow,
+            next_action=next_action,
+            qualification=qualification,
+        ),
         receive_id=receive_id,
         receive_id_type=receive_id_type,
     )
@@ -90,6 +104,8 @@ def start_opportunity_collaboration(
         feishu_task_guid=task_guid,
         feishu_event_id=event_id,
         feishu_message_id=message_id,
+        qualification_score=int(qualification.get("score") or 0),
+        qualification_status=str(qualification.get("status") or "pending"),
         updated_by=owner_open_id or "system",
     )
     bitable = bitable_updater(
@@ -111,6 +127,7 @@ def build_opportunity_card(
     workflow: OpportunityWorkflow,
     *,
     next_action: str,
+    qualification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     intelligence = _mapping(opportunity.get("intelligence"))
     level = str(intelligence.get("level") or "D")
@@ -121,8 +138,15 @@ def build_opportunity_card(
     owner = workflow.owner_name or "待认领"
     risks = intelligence.get("risks") if isinstance(intelligence.get("risks"), list) else []
     risk_text = "；".join(str(item) for item in risks[:2]) or "暂无高风险信号"
+    qualification = qualification or assess_qualification(
+        opportunity,
+        workflow.to_dict(),
+    ).to_dict()
+    qualification_blockers = _qualification_blockers(qualification)
+    decision = _decision_label(workflow.decision)
+    action_rows = _card_action_rows(opportunity, workflow)
     return {
-        "config": {"wide_screen_mode": True},
+        "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {
             "template": "blue",
             "title": {"tag": "plain_text", "content": _title(opportunity)},
@@ -135,7 +159,9 @@ def build_opportunity_card(
                     "content": (
                         f"**机会等级** {level} · {score} 分   **地区** {region}\n"
                         f"**来源** {source}   **截止时间** {deadline}\n"
-                        f"**负责人** {owner}   **阶段** {workflow.stage_label}"
+                        f"**负责人** {owner}   **阶段** {workflow.stage_label}\n"
+                        f"**资格评估** {qualification.get('score', 0)} 分 · "
+                        f"{_qualification_status(qualification)}   **投标决策** {decision}"
                     ),
                 },
             },
@@ -143,19 +169,15 @@ def build_opportunity_card(
                 "tag": "div",
                 "text": {
                     "tag": "lark_md",
-                    "content": f"**下一步** {next_action}\n**风险** {risk_text}",
+                    "content": (
+                        f"**下一步** {next_action}\n"
+                        f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
+                        f"**风险** {risk_text}"
+                    ),
                 },
             },
             {"tag": "hr"},
-            {
-                "tag": "action",
-                "actions": [
-                    _action_button("认领机会", "claim", opportunity),
-                    _action_button("制定策略", "pursue", opportunity),
-                    _action_button("进入投标", "prepare_bid", opportunity),
-                    _action_button("归档", "archive", opportunity, button_type="default"),
-                ],
-            },
+            *action_rows,
             {
                 "tag": "note",
                 "elements": [
@@ -167,6 +189,45 @@ def build_opportunity_card(
             },
         ],
     }
+
+
+def _card_action_rows(
+    opportunity: dict[str, Any],
+    workflow: OpportunityWorkflow,
+) -> list[dict[str, Any]]:
+    stage = workflow.stage
+    primary: list[dict[str, Any]] = []
+    secondary: list[dict[str, Any]] = []
+    if stage == "identified":
+        primary.append(_action_button("认领机会", "claim", opportunity))
+    elif stage == "qualifying":
+        primary.append(_action_button("完成机会确认", "pursue", opportunity))
+    elif stage == "pursuing":
+        if workflow.decision == "go":
+            primary.append(_action_button("进入投标准备", "prepare_bid", opportunity))
+        else:
+            primary.append(_action_button("Go · 批准投标", "approve_bid", opportunity))
+    elif stage == "bidding":
+        primary.extend(
+            (
+                _action_button("标记中标", "mark_won", opportunity),
+                _action_button("标记未中标", "mark_lost", opportunity, button_type="default"),
+            )
+        )
+    elif stage in {"won", "lost"}:
+        primary.append(_action_button("归档机会", "archive", opportunity))
+    if stage in {"identified", "qualifying", "pursuing", "bidding"}:
+        secondary.extend(
+            (
+                _action_button("暂缓", "hold", opportunity, button_type="default"),
+                _action_button("No-Go", "reject", opportunity, button_type="danger"),
+            )
+        )
+    return [
+        {"tag": "action", "actions": actions}
+        for actions in (primary, secondary)
+        if actions
+    ]
 
 
 def _action_button(
@@ -246,3 +307,25 @@ def _title(opportunity: dict[str, Any]) -> str:
 
 def _mapping(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _qualification_blockers(qualification: dict[str, Any]) -> str:
+    blockers = qualification.get("blockers")
+    if not isinstance(blockers, dict):
+        return "资格评估待运行"
+    values = blockers.get("approve_bid")
+    if not isinstance(values, list):
+        return "资格评估待运行"
+    return "、".join(str(value) for value in values[:4])
+
+
+def _qualification_status(qualification: dict[str, Any]) -> str:
+    return "可决策" if qualification.get("status") == "ready" else "有阻断项"
+
+
+def _decision_label(value: str) -> str:
+    return {
+        "go": "Go",
+        "hold": "Hold",
+        "no_go": "No-Go",
+    }.get(value, "待决策")

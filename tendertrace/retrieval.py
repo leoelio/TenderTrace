@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 import json
 import re
 import sqlite3
@@ -413,10 +413,13 @@ def _dedupe(values: list[str]) -> list[str]:
 
 
 def parse_date(value: str) -> date | None:
-    cleaned = (value or "").strip()[:10]
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+    match = re.search(
+        r"(?<!\d)(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?",
+        value or "",
+    )
+    if match:
         try:
-            return datetime.strptime(cleaned, fmt).date()
+            return date(*(int(part) for part in match.groups()))
         except ValueError:
-            continue
+            return None
     return None

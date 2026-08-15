@@ -12,6 +12,7 @@ from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.intent.topic import extract_topic
+from tendertrace.qualification import assess_qualification
 from tendertrace.retrieval import parse_date
 from tendertrace.workflow import workflow_snapshots
 
@@ -293,10 +294,11 @@ def list_opportunities(
             "source_site": notice.source_site,
             "source_url": notice.source_url,
             "budget": str(structured.get("budget") or ""),
-            "bid_deadline": str(structured.get("bid_deadline") or ""),
+            "bid_deadline": _normalized_date(structured.get("bid_deadline")),
             "intelligence": intelligence,
             "workflow": workflow,
         }
+        item["qualification"] = assess_qualification(item, workflow).to_dict()
         item["action_state"] = _opportunity_action_state(item)
         items.append(item)
     items = _sort_opportunities(items, sort)
@@ -361,10 +363,11 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "source_site": notice.source_site,
         "source_url": notice.source_url,
         "budget": str(structured.get("budget") or ""),
-        "bid_deadline": str(structured.get("bid_deadline") or ""),
+        "bid_deadline": _normalized_date(structured.get("bid_deadline")),
         "intelligence": intelligence,
         "workflow": workflow.to_dict(),
     }
+    item["qualification"] = assess_qualification(item, workflow.to_dict()).to_dict()
     item["action_state"] = _opportunity_action_state(item)
     return item
 
@@ -401,6 +404,7 @@ def _sort_opportunities(
 def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
     intelligence = _mapping(item.get("intelligence"))
     workflow = _mapping(item.get("workflow"))
+    qualification = _mapping(item.get("qualification"))
     level = str(intelligence.get("level") or "D")
     stage = str(workflow.get("stage") or "identified")
     deadline = _deadline_date(item)
@@ -411,6 +415,8 @@ def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
     due_soon = days_to_deadline is not None and 0 <= days_to_deadline <= 7
     owner_required = not str(workflow.get("owner_open_id") or workflow.get("owner_name") or "")
     actionable = not terminal and not overdue
+    qualification_blocked = str(qualification.get("status") or "blocked") != "ready"
+    decision_required = str(workflow.get("decision") or "pending") == "pending"
     priority = {"A": 40, "B": 30, "C": 20, "D": 10}.get(level, 0)
     if actionable and owner_required and level in {"A", "B"}:
         priority += 12
@@ -418,6 +424,8 @@ def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
         priority += 18
     if workflow.get("feishu_message_id"):
         priority += 4
+    if actionable and not qualification_blocked and decision_required:
+        priority += 8
     if not actionable:
         priority = 0
     return {
@@ -427,6 +435,8 @@ def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
         "due_soon": due_soon,
         "overdue": overdue,
         "days_to_deadline": days_to_deadline,
+        "qualification_blocked": qualification_blocked,
+        "decision_required": decision_required,
     }
 
 
@@ -475,6 +485,11 @@ def _action_queue_summary(items: list[dict[str, object]]) -> dict[str, object]:
 def _deadline_date(item: dict[str, object]) -> date | None:
     workflow = _mapping(item.get("workflow"))
     return parse_date(str(workflow.get("due_at") or item.get("bid_deadline") or ""))
+
+
+def _normalized_date(value: object) -> str:
+    parsed = parse_date(str(value or ""))
+    return parsed.isoformat() if parsed else ""
 
 
 def _opportunity_score(item: dict[str, object]) -> int:

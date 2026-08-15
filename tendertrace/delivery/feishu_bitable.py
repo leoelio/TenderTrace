@@ -54,6 +54,12 @@ REQUIRED_FIELDS = (
     "飞书任务ID",
     "飞书日程ID",
     "协同更新时间",
+    "资格评分",
+    "准入状态",
+    "投标决策",
+    "决策依据",
+    "决策人",
+    "决策时间",
     "线索正文",
     "伙伴提交人",
     "来源核验",
@@ -648,6 +654,12 @@ def _record_fields(
         "飞书任务ID": "",
         "飞书日程ID": "",
         "协同更新时间": synced_at.isoformat(timespec="seconds"),
+        "资格评分": str(intelligence.get("score") or 0),
+        "准入状态": "待认领并完成资格门禁",
+        "投标决策": "待决策",
+        "决策依据": "",
+        "决策人": "",
+        "决策时间": "",
     }
 
 
@@ -685,7 +697,24 @@ def _workflow_fields(workflow: dict[str, object]) -> dict[str, object]:
         "飞书任务ID": str(workflow.get("feishu_task_guid") or ""),
         "飞书日程ID": str(workflow.get("feishu_event_id") or ""),
         "协同更新时间": str(workflow.get("updated_at") or ""),
+        "资格评分": str(workflow.get("qualification_score") or 0),
+        "准入状态": _qualification_label(workflow.get("qualification_status")),
+        "投标决策": _decision_label(workflow.get("decision")),
+        "决策依据": str(workflow.get("decision_reason") or ""),
+        "决策人": str(workflow.get("decision_by") or ""),
+        "决策时间": str(workflow.get("decision_at") or ""),
     }
+
+
+def _qualification_label(value: object) -> str:
+    return {"ready": "可决策", "blocked": "有阻断项"}.get(str(value or ""), "待评估")
+
+
+def _decision_label(value: object) -> str:
+    return {"go": "Go", "hold": "Hold", "no_go": "No-Go"}.get(
+        str(value or ""),
+        "待决策",
+    )
 
 
 def _action_texts(intelligence: dict[str, Any]) -> list[str]:

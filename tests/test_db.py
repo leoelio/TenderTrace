@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from tendertrace.config import Settings
-from tendertrace.db import database_health, init_db
+from tendertrace.db import SCHEMA_VERSION, database_health, init_db
 
 
 class DatabaseTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("opportunity_events", health["tables"])
         self.assertIn("feishu_lead_import_runs", health["tables"])
         self.assertIn("feishu_message_events", health["tables"])
-        self.assertIn(16, health["schema_versions"])
+        self.assertIn(SCHEMA_VERSION, health["schema_versions"])
 
 
 if __name__ == "__main__":

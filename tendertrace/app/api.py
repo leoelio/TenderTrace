@@ -30,7 +30,10 @@ from tendertrace.integrations.feishu import (
     feishu_agent_status,
     feishu_status,
 )
-from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
+from tendertrace.integrations.feishu_opportunity import (
+    build_opportunity_card,
+    start_opportunity_collaboration,
+)
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
@@ -79,7 +82,12 @@ from tendertrace.scheduling.subscriptions import (
     run_subscription,
 )
 from tendertrace.source_map import build_source_map
-from tendertrace.workflow import apply_action, get_workflow
+from tendertrace.workflow import (
+    WorkflowGateError,
+    apply_action,
+    get_workflow,
+    update_workflow,
+)
 
 
 def create_app():
@@ -423,6 +431,55 @@ def create_app():
             raise HTTPException(status_code=404, detail="opportunity not found")
         return get_workflow(settings, notice_id).to_dict()
 
+    @app.post("/api/opportunities/{notice_id}/actions")
+    def opportunity_action(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        action = str(request.get("action") or "").strip()
+        if not action:
+            raise HTTPException(status_code=400, detail="action is required")
+        try:
+            workflow = apply_action(
+                settings,
+                notice_id,
+                action,
+                actor_open_id=str(request.get("actor_open_id") or "web:admin").strip(),
+                actor_name=str(request.get("actor_name") or "admin").strip(),
+                qualification=_mapping_value(opportunity.get("qualification")),
+                decision_reason=str(request.get("reason") or "").strip(),
+                payload={"channel": "web"},
+            )
+        except WorkflowGateError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(exc), "action": exc.action, "reasons": exc.reasons},
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        workflow, refreshed = _refresh_qualification(settings, notice_id, workflow)
+        bitable = update_opportunity_workflow_in_bitable(
+            settings,
+            notice_id=notice_id,
+            workflow=workflow.to_dict(),
+        )
+        record_activity(
+            settings,
+            event_type="opportunity_action",
+            target=notice_id,
+            label=workflow.stage_label,
+            metadata={"action": action, "channel": "web"},
+        )
+        return {
+            "status": "updated",
+            "workflow": workflow.to_dict(),
+            "qualification": refreshed,
+            "bitable_status": bitable.status,
+        }
+
     @app.post("/api/integrations/feishu/callback")
     def feishu_card_callback(request: dict[str, object] = Body(...)) -> dict[str, object]:
         expected = settings.feishu_callback_verification_token()
@@ -457,16 +514,33 @@ def create_app():
             else {}
         )
         actor_open_id = str(operator_id.get("open_id") or operator.get("open_id") or "")
+        actor_name = str(operator.get("name") or actor_open_id or "飞书用户")
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
         try:
             workflow = apply_action(
                 settings,
                 notice_id,
                 action,
                 actor_open_id=actor_open_id,
+                actor_name=actor_name,
+                qualification=_mapping_value(opportunity.get("qualification")),
+                decision_reason=str(value.get("reason") or "").strip(),
                 payload={"event_id": _feishu_event_id(request)},
             )
+        except WorkflowGateError as exc:
+            return {
+                "toast": {
+                    "type": "warning",
+                    "content": f"暂不能推进：{'、'.join(exc.reasons)}",
+                },
+                "blocked": True,
+                "reasons": list(exc.reasons),
+            }
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        workflow, refreshed = _refresh_qualification(settings, notice_id, workflow)
         bitable = update_opportunity_workflow_in_bitable(
             settings,
             notice_id=notice_id,
@@ -481,7 +555,14 @@ def create_app():
         )
         return {
             "toast": {"type": "success", "content": f"机会已更新为{workflow.stage_label}"},
+            "card": build_opportunity_card(
+                opportunity,
+                workflow,
+                next_action=workflow.next_action or "根据当前阶段继续推进",
+                qualification=refreshed,
+            ),
             "workflow": workflow.to_dict(),
+            "qualification": refreshed,
             "bitable_status": bitable.status,
         }
 
@@ -1418,6 +1499,24 @@ def _loads_json(value: str) -> dict[str, object]:
     except json.JSONDecodeError:
         return {}
     return loaded if isinstance(loaded, dict) else {}
+
+
+def _mapping_value(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _refresh_qualification(settings: Settings, notice_id: str, workflow):
+    opportunity = get_opportunity(settings, notice_id)
+    if opportunity is None:
+        return workflow, {}
+    qualification = _mapping_value(opportunity.get("qualification"))
+    workflow = update_workflow(
+        settings,
+        notice_id,
+        qualification_score=int(qualification.get("score") or 0),
+        qualification_status=str(qualification.get("status") or "pending"),
+    )
+    return workflow, qualification
 
 
 def _int_stat(stats: dict[str, object], key: str) -> int:

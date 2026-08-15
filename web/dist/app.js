@@ -1273,10 +1273,16 @@ function renderOpportunities(payload) {
           const actionState = item.action_state || {};
           const scores = intelligence.scores || {};
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
+          const qualification = item.qualification || {};
+          const decision = workflow.decision || "pending";
           const actionSignal = actionState.due_soon
             ? `<small class="action-signal">距截止 ${escapeHtml(actionState.days_to_deadline)} 天</small>`
             : actionState.owner_required && ["A", "B"].includes(intelligence.level)
               ? '<small class="action-signal">重点机会待认领</small>'
+              : qualification.status === "ready" && decision === "pending"
+                ? '<small class="action-signal">准入就绪 · 待 Go 决策</small>'
+                : qualification.status === "blocked"
+                  ? `<small class="action-signal action-signal-warning">准入待补 ${qualificationBlockerCount(qualification)} 项</small>`
               : "";
           return `
             <article class="opportunity-row" role="row">
@@ -1325,6 +1331,9 @@ function openOpportunityDetail(noticeId) {
   if (!item || !el.opportunityDetailDialog || !el.opportunityDetailContent) return;
   const intelligence = item.intelligence || {};
   const workflow = item.workflow || {};
+  const qualification = item.qualification || {};
+  const qualificationGates = Array.isArray(qualification.gates) ? qualification.gates : [];
+  const approvalBlockers = qualificationBlockers(qualification, "approve_bid");
   const scores = intelligence.scores || {};
   const market = intelligence.market_context || {};
   const benchmark = market.benchmark || {};
@@ -1384,6 +1393,32 @@ function openOpportunityDetail(noticeId) {
       </div>
       ${risks.length ? `<div class="opportunity-detail-risks">${risks.map((value) => `<p>${escapeHtml(value)}</p>`).join("")}</div>` : ""}
     </section>
+    <section class="opportunity-detail-section qualification-section">
+      <div class="opportunity-detail-section-title">
+        <h3>销售准入与投标决策</h3>
+        <span class="qualification-state qualification-${escapeHtml(qualification.status || "blocked")}">${escapeHtml(qualificationStatusLabel(qualification.status))}</span>
+      </div>
+      <div class="qualification-summary">
+        ${detailMetric("资格评分", qualification.score || 0)}
+        ${detailMetric("系统建议", decisionLabel(qualification.recommended_decision))}
+        ${detailMetric("人工决策", decisionLabel(workflow.decision))}
+      </div>
+      <div class="qualification-gates">
+        ${qualificationGates.map((gate) => `
+          <div class="qualification-gate gate-${gate.status === "passed" ? "passed" : "blocked"}">
+            <span>${gate.status === "passed" ? "通过" : "待补"}</span>
+            <strong>${escapeHtml(gate.label || "未命名门禁")}</strong>
+            <small>${escapeHtml(gate.actual || "未识别")} · ${escapeHtml(gate.requirement || "")}</small>
+          </div>
+        `).join("")}
+      </div>
+      ${approvalBlockers.length ? `<p class="qualification-blockers">Go 决策前需补齐：${escapeHtml(approvalBlockers.join("、"))}</p>` : '<p class="qualification-blockers qualification-ready">资料门禁已满足，可以提交 Go 决策。</p>'}
+      ${workflow.decision_reason ? detailLine("决策依据", workflow.decision_reason) : ""}
+      ${workflow.decision_by ? detailLine("决策记录", `${workflow.decision_by}${workflow.decision_at ? ` · ${workflow.decision_at}` : ""}`) : ""}
+      <div class="qualification-decision-actions">
+        ${opportunityActionButtons(item)}
+      </div>
+    </section>
     <section class="opportunity-detail-section">
       <h3>飞书协同</h3>
       ${detailLine("销售阶段", workflow.stage_label || "线索识别")}
@@ -1397,7 +1432,7 @@ function openOpportunityDetail(noticeId) {
       ${item.source_url ? `<a class="ghost-button" href="${escapeHtml(item.source_url)}" target="_blank" rel="noreferrer">查看原文</a>` : ""}
     </div>
   `;
-  el.opportunityDetailDialog.showModal();
+  if (!el.opportunityDetailDialog.open) el.opportunityDetailDialog.showModal();
 }
 
 function detailMetric(label, value) {
@@ -1406,6 +1441,46 @@ function detailMetric(label, value) {
 
 function detailLine(label, value) {
   return `<div class="opportunity-detail-line"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function qualificationBlockers(qualification, action) {
+  const blockers = qualification?.blockers?.[action];
+  return Array.isArray(blockers) ? blockers : [];
+}
+
+function qualificationBlockerCount(qualification) {
+  return qualificationBlockers(qualification, "approve_bid").length;
+}
+
+function qualificationStatusLabel(status) {
+  return status === "ready" ? "可决策" : "有阻断项";
+}
+
+function decisionLabel(decision) {
+  return { go: "Go", hold: "Hold", no_go: "No-Go", pending: "待决策" }[decision] || "待决策";
+}
+
+function opportunityActionButtons(item) {
+  const workflow = item.workflow || {};
+  const stage = workflow.stage || "identified";
+  const buttons = [];
+  const add = (action, label, className = "ghost-button") => {
+    buttons.push(`<button class="${className}" type="button" data-opportunity-action="${action}" data-opportunity-id="${escapeHtml(item.notice_id)}">${label}</button>`);
+  };
+  if (stage === "identified") add("claim", "认领机会", "primary-lite-button");
+  if (stage === "qualifying") add("pursue", "完成机会确认", "primary-lite-button");
+  if (stage === "pursuing" && workflow.decision !== "go") add("approve_bid", "Go · 批准投标", "primary-lite-button");
+  if (stage === "pursuing" && workflow.decision === "go") add("prepare_bid", "进入投标准备", "primary-lite-button");
+  if (stage === "bidding") {
+    add("mark_won", "标记中标", "primary-lite-button");
+    add("mark_lost", "标记未中标");
+  }
+  if (["won", "lost"].includes(stage)) add("archive", "归档机会");
+  if (["identified", "qualifying", "pursuing", "bidding"].includes(stage)) {
+    add("hold", "暂缓");
+    add("reject", "No-Go", "danger-button");
+  }
+  return buttons.join("");
 }
 
 function marketInsight(label, value, detail) {
@@ -2037,6 +2112,17 @@ async function sendOpportunityToFeishu(noticeId) {
   showToast(result.status === "sent" ? `飞书协同已启动${created ? `，已关联${created}` : ""}` : "飞书协同未完成");
 }
 
+async function applyOpportunityAction(noticeId, action) {
+  const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/actions`, {
+    method: "POST",
+    body: JSON.stringify({ action, actor_name: "admin" }),
+  });
+  await refreshOpportunities();
+  if (el.opportunityDetailDialog?.open) openOpportunityDetail(noticeId);
+  const workflow = result.workflow || {};
+  showToast(`机会已更新：${workflow.stage_label || decisionLabel(workflow.decision)}`);
+}
+
 async function saveMemoryWeekly() {
   state.memory = await api("/api/memory/weekly", {
     method: "POST",
@@ -2646,6 +2732,14 @@ function bindEvents() {
       sendOpportunityToFeishu(sendOpportunityTarget.dataset.sendOpportunityFeishu).catch(
         toastError("机会情报发送失败"),
       );
+      return;
+    }
+    const opportunityActionTarget = event.target.closest("[data-opportunity-action]");
+    if (opportunityActionTarget) {
+      applyOpportunityAction(
+        opportunityActionTarget.dataset.opportunityId,
+        opportunityActionTarget.dataset.opportunityAction,
+      ).catch(toastError("机会状态更新失败"));
       return;
     }
     const viewOpportunityTarget = event.target.closest("[data-view-opportunity]");

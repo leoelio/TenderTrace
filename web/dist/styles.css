@@ -3205,6 +3205,134 @@ body.theme-dark .smart-card strong {
   color: var(--warning);
 }
 
+.qualification-section {
+  background: rgba(247, 250, 253, 0.62);
+}
+
+.qualification-state {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.qualification-state.qualification-ready {
+  border-color: rgba(22, 163, 74, 0.28);
+  color: var(--success);
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.qualification-state.qualification-blocked {
+  border-color: rgba(212, 155, 22, 0.3);
+  color: #946100;
+  background: rgba(212, 155, 22, 0.09);
+}
+
+.qualification-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.qualification-summary > div {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.qualification-summary > div:last-child {
+  border-right: 0;
+}
+
+.qualification-summary span,
+.qualification-gate small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.qualification-summary strong {
+  font-size: 15px;
+}
+
+.qualification-gates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.qualification-gate {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 4px 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line-soft);
+}
+
+.qualification-gate:nth-child(2n) {
+  border-right: 0;
+}
+
+.qualification-gate > span {
+  grid-row: 1 / span 2;
+  align-self: start;
+  width: max-content;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.qualification-gate > strong {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.qualification-gate > small {
+  min-width: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.gate-passed > span {
+  color: var(--success);
+  background: rgba(22, 163, 74, 0.09);
+}
+
+.gate-blocked > span {
+  color: #946100;
+  background: rgba(212, 155, 22, 0.1);
+}
+
+.qualification-blockers {
+  margin: 12px 0 0;
+  color: #946100;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.qualification-blockers.qualification-ready {
+  color: var(--success);
+}
+
+.qualification-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.qualification-decision-actions button {
+  min-height: 32px;
+}
+
 .opportunity-detail-advice,
 .opportunity-detail-actions-list,
 .opportunity-detail-risks {
@@ -3383,7 +3511,8 @@ body.theme-dark .grade-c {
   }
 
   .opportunity-detail-metrics,
-  .requirement-dimensions {
+  .requirement-dimensions,
+  .qualification-gates {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3393,6 +3522,14 @@ body.theme-dark .grade-c {
 
   .opportunity-detail-metrics > div:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line-soft);
+  }
+
+  .qualification-gates {
+    grid-template-columns: 1fr;
+  }
+
+  .qualification-gate {
+    border-right: 0;
   }
 
   .opportunity-detail-line,

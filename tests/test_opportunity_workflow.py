@@ -6,8 +6,11 @@ import unittest
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
-from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
-from tendertrace.workflow import apply_action, get_workflow
+from tendertrace.integrations.feishu_opportunity import (
+    build_opportunity_card,
+    start_opportunity_collaboration,
+)
+from tendertrace.workflow import WorkflowGateError, apply_action, get_workflow
 
 
 class _FakeFeishuClient:
@@ -101,6 +104,89 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertEqual(first.event_id, "event-id")
         self.assertEqual(first.workflow.owner_name, "张三")
         self.assertEqual(second.workflow.feishu_message_id, "message-id")
+
+    def test_go_decision_is_required_before_bid_preparation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            ready = {
+                "score": 82,
+                "status": "ready",
+                "blockers": {"pursue": [], "approve_bid": []},
+            }
+            apply_action(
+                settings,
+                "notice-1",
+                "claim",
+                actor_open_id="ou_owner",
+                actor_name="张三",
+            )
+            pursued = apply_action(settings, "notice-1", "pursue", qualification=ready)
+
+            with self.assertRaises(WorkflowGateError):
+                apply_action(settings, "notice-1", "prepare_bid", qualification=ready)
+
+            approved = apply_action(
+                settings,
+                "notice-1",
+                "approve_bid",
+                actor_name="销售经理",
+                qualification=ready,
+            )
+            bidding = apply_action(settings, "notice-1", "prepare_bid", qualification=ready)
+
+        self.assertEqual(pursued.stage, "pursuing")
+        self.assertEqual(approved.decision, "go")
+        self.assertEqual(approved.decision_by, "销售经理")
+        self.assertEqual(bidding.stage, "bidding")
+
+    def test_stage_and_qualification_gates_reject_invalid_progression(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+
+            with self.assertRaises(WorkflowGateError) as stage_error:
+                apply_action(settings, "notice-1", "approve_bid")
+
+            apply_action(settings, "notice-1", "claim", actor_open_id="ou_owner")
+            with self.assertRaises(WorkflowGateError) as qualification_error:
+                apply_action(
+                    settings,
+                    "notice-1",
+                    "pursue",
+                    qualification={
+                        "blockers": {"pursue": ["采购主体"], "approve_bid": []}
+                    },
+                )
+
+        self.assertIn("当前阶段", stage_error.exception.reasons[0])
+        self.assertEqual(qualification_error.exception.reasons, ("采购主体",))
+
+    def test_feishu_card_only_exposes_actions_valid_for_current_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            workflow = get_workflow(settings, "notice-1")
+            opportunity = {
+                "notice_id": "notice-1",
+                "title": "服务器采购项目",
+                "source_url": "https://example.com/notice-1",
+            }
+
+            card = build_opportunity_card(
+                opportunity,
+                workflow,
+                next_action="认领机会",
+            )
+            actions = [
+                button["value"]["action"]
+                for element in card["elements"]
+                if element.get("tag") == "action"
+                for button in element["actions"]
+            ]
+
+        self.assertTrue(card["config"]["update_multi"])
+        self.assertEqual(actions, ["claim", "hold", "reject"])
 
 
 def _settings(root: Path) -> Settings:

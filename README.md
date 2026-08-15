@@ -39,6 +39,8 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作回写本地状态流、多维表格与审计事件。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
+- 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分和需求覆盖形成可解释门禁；只有阶段与资料条件同时满足，才允许从机会确认推进到策略制定与投标准备。
+- 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；飞书卡片每次操作后按最新阶段原地刷新，只保留当前可执行动作。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
 - 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
@@ -319,6 +321,7 @@ python -m tendertrace embed-notices
 - `POST /api/memory/weekly/send-feishu`：发送最近一周的使用摘要与建议。
 - `POST /api/opportunities/send-feishu`：发送可操作机会卡片，并按需创建幂等任务与截止日程。
 - `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
+- `POST /api/opportunities/{notice_id}/actions`：执行带阶段和资格门禁的认领、确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
 - `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态并同步多维表格。
 - `POST /api/integrations/feishu/events`：接收飞书消息事件，校验令牌、去重后异步执行自然语言查询或创建订阅。
 - `GET /api/integrations/feishu/message-events`：查看飞书会话指令的运行、订阅、失败与恢复审计。
@@ -474,6 +477,8 @@ The current architecture is local-first: background ingestion continuously store
 - Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, callback-driven sales stages, and an auditable local event stream.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
+- Explainable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
+- Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. Card callbacks refresh the original shared card with only the actions valid for its current stage.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
 - Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
@@ -717,6 +722,7 @@ Available Web APIs:
 - `POST /api/memory/weekly/send-feishu`: send the weekly usage digest and recommendations.
 - `POST /api/opportunities/send-feishu`: send an actionable opportunity card and optionally create an idempotent task and deadline event.
 - `GET /api/opportunities/{notice_id}/workflow`: inspect the owner, sales stage, and Feishu artifact state.
+- `POST /api/opportunities/{notice_id}/actions`: execute stage- and qualification-gated claim, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions.
 - `POST /api/integrations/feishu/callback`: verify card callbacks, advance the opportunity stage, and update Bitable.
 - `POST /api/integrations/feishu/events`: verify, deduplicate, and asynchronously execute inbound Feishu text commands.
 - `GET /api/integrations/feishu/message-events`: inspect inbound run, subscription, failure, and recovery audits.

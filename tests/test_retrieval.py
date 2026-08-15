@@ -7,13 +7,18 @@ from zoneinfo import ZoneInfo
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
 from tendertrace.intent import compile_intent
-from tendertrace.retrieval import search_notices, upsert_notice_fts
+from tendertrace.retrieval import parse_date, search_notices, upsert_notice_fts
 
 
 NOW = datetime(2026, 7, 6, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
 
 
 class RetrievalTests(unittest.TestCase):
+    def test_parse_date_extracts_chinese_date_from_deadline_text(self) -> None:
+        parsed = parse_date("提交投标文件截止时间：2026年08月03日 10:00（北京时间）")
+
+        self.assertEqual(parsed.isoformat(), "2026-08-03")
+
     def test_fts_retrieval_matches_synonym_and_reuses_stored_notice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

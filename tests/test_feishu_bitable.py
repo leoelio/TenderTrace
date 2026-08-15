@@ -312,6 +312,12 @@ class FeishuBitableTests(unittest.TestCase):
                     "next_action": "确认预算",
                     "feishu_task_guid": "task-guid",
                     "feishu_event_id": "event-id",
+                    "qualification_score": 82,
+                    "qualification_status": "ready",
+                    "decision": "go",
+                    "decision_reason": "客户预算与交付资源已确认",
+                    "decision_by": "销售经理",
+                    "decision_at": "2026-08-15T09:55:00",
                     "updated_at": "2026-08-15T10:00:00",
                 },
                 http_client_factory=FakeFeishuClient,
@@ -321,6 +327,10 @@ class FeishuBitableTests(unittest.TestCase):
         fields = FakeFeishuClient.updated_records[0][1]
         self.assertEqual(fields["协同状态"], "机会确认")
         self.assertEqual(fields["机会负责人"], "张三")
+        self.assertEqual(fields["资格评分"], "82")
+        self.assertEqual(fields["准入状态"], "可决策")
+        self.assertEqual(fields["投标决策"], "Go")
+        self.assertEqual(fields["决策人"], "销售经理")
         self.assertNotIn("标题", fields)
 
     def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:
