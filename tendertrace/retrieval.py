@@ -15,6 +15,16 @@ from tendertrace.db import FTS_DDL, connection
 from tendertrace.vector import VectorUnavailable, cosine_similarity, embed_query
 
 
+_INTERNATIONAL_SOURCE_SCOPES = {
+    "ted": {"global", "eu"},
+    "ungm": {"global"},
+    "worldbank": {"global", "worldbank"},
+    "idb": {"global", "idb"},
+    "contracts_finder": {"global", "uk"},
+    "find_tender": {"global", "uk"},
+}
+
+
 @dataclass(frozen=True)
 class LocalSearchResult:
     notices: list[Notice]
@@ -286,29 +296,52 @@ def _filters(bidql: dict[str, Any], *, relax_city: bool) -> tuple[str, list[obje
 
     region = bidql.get("region")
     if isinstance(region, dict):
-        if not relax_city and region.get("district_aliases"):
-            clause, values = _alias_filter([str(item) for item in region["district_aliases"]])
-            clauses.append(f"AND ({clause})")
-            params.extend(values)
-        elif not relax_city and region.get("city_aliases"):
-            clause, values = _alias_filter([str(item) for item in region["city_aliases"]])
-            clauses.append(f"AND ({clause})")
-            params.extend(values)
-        elif region.get("aliases"):
-            aliases = [
-                str(item)
-                for item in region["aliases"]
-                if item and item not in set(region.get("city_aliases") or [])
-            ]
-            clause, values = _alias_filter(aliases)
-            clauses.append(f"AND ({clause})")
-            params.extend(values)
+        scope = str(region.get("scope") or "domestic")
+        source_clause, source_params = _source_scope_filter(scope)
+        clauses.append(source_clause)
+        params.extend(source_params)
+        if scope == "domestic":
+            if not relax_city and region.get("district_aliases"):
+                clause, values = _alias_filter(
+                    [str(item) for item in region["district_aliases"]]
+                )
+                clauses.append(f"AND ({clause})")
+                params.extend(values)
+            elif not relax_city and region.get("city_aliases"):
+                clause, values = _alias_filter([str(item) for item in region["city_aliases"]])
+                clauses.append(f"AND ({clause})")
+                params.extend(values)
+            elif region.get("aliases"):
+                aliases = [
+                    str(item)
+                    for item in region["aliases"]
+                    if item and item not in set(region.get("city_aliases") or [])
+                ]
+                clause, values = _alias_filter(aliases)
+                clauses.append(f"AND ({clause})")
+                params.extend(values)
 
     negatives = bidql.get("topic", {}).get("negative", [])
     for term in negatives if isinstance(negatives, list) else []:
         clauses.append("AND n.title NOT LIKE ? AND COALESCE(n.content_text, '') NOT LIKE ?")
         params.extend([f"%{term}%", f"%{term}%"])
     return "\n          ".join(clauses), params
+
+
+def _source_scope_filter(scope: str) -> tuple[str, list[object]]:
+    international = list(_INTERNATIONAL_SOURCE_SCOPES)
+    if scope == "domestic":
+        placeholders = ", ".join("?" for _ in international)
+        return f"AND n.source_site NOT IN ({placeholders})", international
+    allowed = [
+        source_site
+        for source_site, scopes in _INTERNATIONAL_SOURCE_SCOPES.items()
+        if scope in scopes
+    ]
+    if not allowed:
+        return "AND 1 = 0", []
+    placeholders = ", ".join("?" for _ in allowed)
+    return f"AND n.source_site IN ({placeholders})", allowed
 
 
 def _alias_filter(aliases: list[str]) -> tuple[str, list[object]]:
@@ -346,6 +379,7 @@ def _topic_terms(bidql: dict[str, Any]) -> list[str]:
     if not isinstance(topic, dict):
         return []
     terms = [str(item) for item in topic.get("core", []) if item]
+    terms.extend(str(item) for item in topic.get("source_terms", []) if item)
     for item in topic.get("expanded", []):
         if isinstance(item, dict) and item.get("term"):
             terms.append(str(item["term"]))

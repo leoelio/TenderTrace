@@ -8,7 +8,12 @@ from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.idb import IDB_DATASTORE_API
 from tendertrace.adapters.ted import TED_SEARCH_API
-from tendertrace.adapters.uk_ocds import CONTRACTS_FINDER_API, FIND_TENDER_API
+from tendertrace.adapters.uk_ocds import (
+    CONTRACTS_FINDER_API,
+    CONTRACTS_FINDER_SEARCH,
+    FIND_TENDER_API,
+    FIND_TENDER_SEARCH,
+)
 from tendertrace.adapters.ungm import UNGM_SEARCH_URL
 from tendertrace.adapters.worldbank import WORLD_BANK_API
 from tendertrace.config import Settings
@@ -152,13 +157,19 @@ def build_source_map(settings: Settings) -> dict[str, object]:
         ),
         SourceMapItem(
             site="contracts_finder",
-            engine="official-ocds-api",
+            engine="official-search+ocds",
             status="configured",
             requires_login=False,
             routes=[
                 SourceMapRoute(
                     name="uk-contracts-finder-ocds", url=CONTRACTS_FINDER_API, kind="api"
-                )
+                ),
+                SourceMapRoute(
+                    name="uk-contracts-finder-search",
+                    url=CONTRACTS_FINDER_SEARCH,
+                    kind="search",
+                    method="POST",
+                ),
             ],
             health=health.get("contracts_finder", {}),
             discovery_rules={
@@ -170,11 +181,17 @@ def build_source_map(settings: Settings) -> dict[str, object]:
         ),
         SourceMapItem(
             site="find_tender",
-            engine="official-ocds-api",
+            engine="official-search+ocds",
             status="configured",
             requires_login=False,
             routes=[
-                SourceMapRoute(name="uk-find-tender-ocds", url=FIND_TENDER_API, kind="api")
+                SourceMapRoute(name="uk-find-tender-ocds", url=FIND_TENDER_API, kind="api"),
+                SourceMapRoute(
+                    name="uk-find-tender-search",
+                    url=FIND_TENDER_SEARCH,
+                    kind="search",
+                    method="POST",
+                ),
             ],
             health=health.get("find_tender", {}),
             discovery_rules={

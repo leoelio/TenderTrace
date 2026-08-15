@@ -80,6 +80,46 @@ class RetrievalTests(unittest.TestCase):
 
         self.assertEqual([notice.id for notice in result.notices], ["server-hit"])
 
+    def test_international_scope_filters_local_results_by_source_family(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            for source_site in ("ccgp", "worldbank", "find_tender"):
+                _insert_notice(
+                    settings,
+                    notice_id=f"{source_site}:server-hit",
+                    source_site=source_site,
+                    title=f"{source_site} server procurement",
+                    content_text="Supply of server hardware.",
+                )
+
+            base = {
+                "topic": {"core": ["server"], "expanded": [], "negative": []},
+                "time": {"resolved_window": {"from": "2026-06-01", "to": "2026-08-01"}},
+            }
+            uk = search_notices(
+                settings,
+                compile_intent("最近1个月英国服务器采购信息", now=NOW),
+                max_results=10,
+            )
+            global_result = search_notices(
+                settings,
+                {**base, "region": {"scope": "global", "aliases": ["全球"]}},
+                max_results=10,
+            )
+            domestic = search_notices(
+                settings,
+                {**base, "region": {"scope": "domestic", "aliases": []}},
+                max_results=10,
+            )
+
+        self.assertEqual([notice.source_site for notice in uk.notices], ["find_tender"])
+        self.assertEqual(
+            {notice.source_site for notice in global_result.notices},
+            {"worldbank", "find_tender"},
+        )
+        self.assertEqual([notice.source_site for notice in domestic.notices], ["ccgp"])
+
 
 def _insert_notice(
     settings: Settings,
@@ -87,6 +127,7 @@ def _insert_notice(
     notice_id: str,
     title: str,
     content_text: str,
+    source_site: str = "ccgp",
 ) -> None:
     with connection(settings) as conn:
         conn.execute(
@@ -100,7 +141,7 @@ def _insert_notice(
             """,
             (
                 notice_id,
-                "ccgp",
+                source_site,
                 f"https://example.com/{notice_id}.html",
                 f"https://example.com/{notice_id}.html",
                 title,

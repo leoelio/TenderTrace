@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+import re
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunparse
+
+from selectolax.parser import HTMLParser
 
 from tendertrace.adapters.ccgp import Attachment, Notice, _clean_spaces
 from tendertrace.fetching import FetchPolicy, ManagedFetcher
@@ -11,6 +16,20 @@ CONTRACTS_FINDER_API = (
     "https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search"
 )
 FIND_TENDER_API = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages"
+CONTRACTS_FINDER_SEARCH = "https://www.contractsfinder.service.gov.uk/Search"
+FIND_TENDER_SEARCH = "https://www.find-tender.service.gov.uk/Search/Results"
+
+
+@dataclass(frozen=True)
+class SearchCandidate:
+    notice_id: str
+    title: str
+    source_url: str
+    publish_time: str
+    purchaser: str
+    region: str
+    content_text: str
+    fields: dict[str, str]
 
 
 def build_search_url(api_url: str, bidql: dict[str, Any], *, limit: int) -> str:
@@ -100,6 +119,7 @@ def parse_ocds_notices(
 
 class _UkOcdsAdapter:
     api_url = ""
+    search_url = ""
     name = ""
     authority = ""
 
@@ -118,27 +138,35 @@ class _UkOcdsAdapter:
         self, bidql: dict[str, Any], *, max_pages: int = 1, max_results: int = 10
     ) -> list[Notice]:
         terms = _source_terms(bidql)
-        page_size = min(max(max_results * 4, 20), 100)
-        next_url = build_search_url(self.api_url, bidql, limit=page_size)
+        if not terms:
+            return []
         notices: list[Notice] = []
         seen: set[str] = set()
         with ManagedFetcher(self.policy) as fetcher:
             try:
-                for _ in range(max_pages):
-                    response = fetcher.get(next_url)
-                    response.raise_for_status()
-                    payload = response.json()
-                    for notice in parse_ocds_notices(
-                        payload, source_site=self.name, authority=self.authority
-                    ):
-                        if notice.id in seen or (terms and not _matches_terms(notice, terms)):
-                            continue
-                        seen.add(notice.id)
-                        notices.append(notice)
-                        if len(notices) >= max_results:
-                            return notices
-                    next_url = _safe_next_url(payload, self.api_url)
-                    if not next_url:
+                candidates = _discover_candidates(
+                    fetcher,
+                    search_url=self.search_url,
+                    source_site=self.name,
+                    terms=terms,
+                    bidql=bidql,
+                    max_pages=max_pages,
+                    limit=max_results,
+                )
+                parsed = [
+                    _candidate_notice(
+                        item,
+                        source_site=self.name,
+                        authority=self.authority,
+                    )
+                    for item in candidates
+                ]
+                for notice in parsed:
+                    if notice.id in seen or not _in_window(notice.publish_time, bidql):
+                        continue
+                    seen.add(notice.id)
+                    notices.append(notice)
+                    if len(notices) >= max_results:
                         break
             finally:
                 self.last_fetch_stats = fetcher.stats.to_dict()
@@ -147,12 +175,14 @@ class _UkOcdsAdapter:
 
 class ContractsFinderAdapter(_UkOcdsAdapter):
     api_url = CONTRACTS_FINDER_API
+    search_url = CONTRACTS_FINDER_SEARCH
     name = "contracts_finder"
     authority = "UK Cabinet Office - Contracts Finder"
 
 
 class FindTenderAdapter(_UkOcdsAdapter):
     api_url = FIND_TENDER_API
+    search_url = FIND_TENDER_SEARCH
     name = "find_tender"
     authority = "UK Cabinet Office - Find a Tender"
 
@@ -247,6 +277,214 @@ def _matches_terms(notice: Notice, terms: list[str]) -> bool:
         )
     ).casefold()
     return any(term.casefold() in haystack for term in terms)
+
+
+def parse_search_candidates(html: str, *, source_site: str) -> list[SearchCandidate]:
+    parser = HTMLParser(html)
+    candidates: list[SearchCandidate] = []
+    seen: set[str] = set()
+    for row in parser.css(".search-result"):
+        anchor = row.css_first(".search-result-header a[href]")
+        if anchor is None:
+            continue
+        source_url = _canonical_notice_url(anchor.attributes.get("href", ""), source_site)
+        notice_id = _notice_id(source_url, source_site)
+        title = _text(anchor.text(separator=" ", strip=True))
+        if not notice_id or not title or notice_id in seen:
+            continue
+        seen.add(notice_id)
+        fields: dict[str, str] = {}
+        for entry in row.css(".search-result-entry"):
+            label_node = entry.css_first("strong")
+            if label_node is None:
+                continue
+            label = _text(label_node.text(separator=" ", strip=True))
+            full_text = _text(entry.text(separator=" ", strip=True))
+            value = full_text[len(label) :].strip() if full_text.startswith(label) else full_text
+            if label and value:
+                fields[label] = value
+        purchaser_node = row.css_first(".search-result-sub-header")
+        purchaser = (
+            _text(purchaser_node.text(separator=" ", strip=True)) if purchaser_node else ""
+        )
+        content = " | ".join(f"{key}: {value}" for key, value in fields.items())
+        candidates.append(
+            SearchCandidate(
+                notice_id=notice_id,
+                title=title,
+                source_url=source_url,
+                publish_time=_english_date(fields.get("Publication date", "")),
+                purchaser=purchaser,
+                region=fields.get("Contract location", "")
+                or fields.get("Contract locations", "")
+                or "United Kingdom",
+                content_text=content,
+                fields={
+                    "deadline": fields.get("Closing", "")
+                    or fields.get("Closing date", ""),
+                    "estimated_value": fields.get("Contract value", "")
+                    or fields.get("Contract value excluding VAT", "")
+                    or fields.get("Total value excluding VAT", ""),
+                    "notice_status": fields.get("Notice status", ""),
+                    "procurement_stage": fields.get("Procurement stage", "")
+                    or fields.get("Notice type", ""),
+                },
+            )
+        )
+    return candidates
+
+
+def build_search_form(html: str, *, term: str, bidql: dict[str, Any]) -> dict[str, str]:
+    parser = HTMLParser(html)
+    form = parser.css_first("#search_form")
+    if form is None:
+        return {}
+    payload: dict[str, str] = {}
+    available: set[str] = set()
+    for node in form.css("input[name]"):
+        name = _text(node.attributes.get("name"))
+        if not name:
+            continue
+        available.add(name)
+        input_type = _text(node.attributes.get("type")).casefold()
+        if input_type == "hidden" or "checked" in node.attributes:
+            payload[name] = _text(node.attributes.get("value"))
+    payload["keywords"] = term
+    payload["adv_search"] = ""
+    if "open" in available:
+        payload["open"] = "1"
+    window = bidql.get("time", {}).get("resolved_window")
+    if isinstance(window, dict):
+        _set_form_date(payload, available, "published_from", _text(window.get("from")))
+        _set_form_date(payload, available, "published_to", _text(window.get("to")))
+    return payload
+
+
+def _discover_candidates(
+    fetcher: ManagedFetcher,
+    *,
+    search_url: str,
+    source_site: str,
+    terms: list[str],
+    bidql: dict[str, Any],
+    max_pages: int,
+    limit: int,
+) -> list[SearchCandidate]:
+    for term in terms[:2]:
+        first = fetcher.get(search_url)
+        first.raise_for_status()
+        payload = build_search_form(first.text, term=term, bidql=bidql)
+        if not payload.get("keywords") or not payload.get("form_token"):
+            raise RuntimeError(f"{source_site} public search form is unavailable")
+        response = fetcher.post(search_url, data=payload)
+        response.raise_for_status()
+        candidates: list[SearchCandidate] = []
+        seen: set[str] = set()
+        for _ in range(max(1, max_pages)):
+            for candidate in parse_search_candidates(response.text, source_site=source_site):
+                if candidate.notice_id in seen:
+                    continue
+                seen.add(candidate.notice_id)
+                candidates.append(candidate)
+                if len(candidates) >= limit:
+                    return candidates
+            next_url = _next_search_page(response.text, search_url)
+            if not next_url:
+                break
+            response = fetcher.get(next_url)
+            response.raise_for_status()
+        if candidates:
+            return candidates
+    return []
+
+
+def _candidate_notice(
+    candidate: SearchCandidate, *, source_site: str, authority: str
+) -> Notice:
+    fields = dict(candidate.fields)
+    fields.update(
+        {
+            "cluster_key": f"{source_site}:{candidate.notice_id}",
+            "authority": authority,
+        }
+    )
+    return Notice(
+        id=candidate.notice_id,
+        source_site=source_site,
+        title=candidate.title,
+        publish_time=candidate.publish_time,
+        region=candidate.region,
+        purchaser=candidate.purchaser,
+        source_url=candidate.source_url,
+        content_text=candidate.content_text,
+        core_content=(candidate.content_text or candidate.title)[:600],
+        fields=fields,
+    )
+
+
+def _set_form_date(
+    payload: dict[str, str], available: set[str], prefix: str, value: str
+) -> None:
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return
+    values = {"day": str(parsed.day), "month": str(parsed.month), "year": str(parsed.year)}
+    for part, item in values.items():
+        name = f"{prefix}[{part}]"
+        if name in available:
+            payload[name] = item
+
+
+def _canonical_notice_url(value: str, source_site: str) -> str:
+    base = CONTRACTS_FINDER_SEARCH if source_site == "contracts_finder" else FIND_TENDER_SEARCH
+    parsed = urlsplit(urljoin(base, value))
+    expected_host = urlparse(base).netloc.casefold()
+    if parsed.scheme != "https" or parsed.netloc.casefold() != expected_host:
+        return ""
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _notice_id(source_url: str, source_site: str) -> str:
+    path = urlparse(source_url).path.rstrip("/")
+    value = path.rsplit("/", 1)[-1]
+    if source_site == "contracts_finder":
+        parts = value.split("-")
+        return value.casefold() if len(parts) == 5 and len(value) == 36 else ""
+    year_parts = value.split("-")
+    return value if len(year_parts) == 2 and all(part.isdigit() for part in year_parts) else ""
+
+
+def _english_date(value: str) -> str:
+    matched = re.search(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b", value)
+    candidate = matched.group(0) if matched else value.strip()
+    for fmt in ("%d %B %Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(candidate, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return value[:10]
+
+
+def _next_search_page(html: str, search_url: str) -> str:
+    parser = HTMLParser(html)
+    node = parser.css_first("a.standard-paginate-next[href]")
+    if node is None:
+        return ""
+    candidate = urlparse(urljoin(search_url, node.attributes.get("href", "")))
+    expected = urlparse(search_url)
+    if candidate.scheme != "https" or candidate.netloc.casefold() != expected.netloc.casefold():
+        return ""
+    if not candidate.path.casefold().startswith("/search"):
+        return ""
+    return urlunparse(candidate._replace(fragment=""))
+
+
+def _in_window(publish_time: str, bidql: dict[str, Any]) -> bool:
+    window = bidql.get("time", {}).get("resolved_window")
+    if not isinstance(window, dict) or not window.get("from") or not window.get("to"):
+        return True
+    return str(window["from"]) <= publish_time[:10] <= str(window["to"])
 
 
 def _safe_next_url(payload: object, api_url: str) -> str:
