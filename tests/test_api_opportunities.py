@@ -77,17 +77,29 @@ class OpportunityApiTests(unittest.TestCase):
                     return_value=SimpleNamespace(status="sent", message=""),
                 ):
                     client = TestClient(api_module.create_app())
+                    fact_payload = {
+                        "facts": {
+                            "project_no": "SH-2026-001",
+                            "budget": "120 万元",
+                            "bid_deadline": "2026-08-30 17:00",
+                        },
+                        "source_url": "https://example.com/notice-api-1",
+                        "evidence_text": "原始公告已核验",
+                        "actor": "测试分析师",
+                    }
                     facts = client.patch(
                         "/api/opportunities/notice-api-1/facts",
-                        json={
-                            "facts": {
-                                "project_no": "SH-2026-001",
-                                "budget": "120 万元",
-                                "bid_deadline": "2026-08-30 17:00",
-                            },
-                            "source_url": "https://example.com/notice-api-1",
-                            "evidence_text": "原始公告已核验",
-                            "actor": "测试分析师",
+                        json=fact_payload,
+                    )
+                    duplicate_facts = client.patch(
+                        "/api/opportunities/notice-api-1/facts",
+                        json=fact_payload,
+                    )
+                    cors = client.options(
+                        "/api/opportunities/notice-api-1/facts",
+                        headers={
+                            "Origin": "https://open.feishu.cn",
+                            "Access-Control-Request-Method": "PATCH",
                         },
                     )
                     claimed = client.post(
@@ -128,6 +140,11 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(facts.json()["bitable_status"], "sent")
         self.assertEqual(facts.json()["opportunity"]["project_no"], "SH-2026-001")
         self.assertEqual(len(facts.json()["audit"]), 1)
+        self.assertEqual(duplicate_facts.json()["status"], "unchanged")
+        self.assertEqual(duplicate_facts.json()["bitable_status"], "skipped")
+        self.assertEqual(len(duplicate_facts.json()["audit"]), 1)
+        self.assertEqual(cors.status_code, 200)
+        self.assertIn("PATCH", cors.headers["access-control-allow-methods"])
         self.assertEqual(claimed.json()["workflow"]["stage"], "qualifying")
         self.assertEqual(claimed.json()["workflow"]["owner_name"], "测试负责人")
         self.assertEqual(blocked.status_code, 409)

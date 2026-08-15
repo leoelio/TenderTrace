@@ -48,7 +48,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
 - 竞争情报：从结果/合同公告提取成交供应商、成交金额和证据摘录，聚合同品类历史供应商；无法可靠提取时明确标记样本不足。
 - 需求审阅：按技术规格、兼容集成、交付实施、验收、服务、资质、评分和安全 8 个维度检查当前采集文本，并给出待核对项与优化建议。
-- 飞书记录视图：在多维表格切换记录时自动重新研判，可回写评分、策略、竞争情报、证据、需求覆盖与优化建议。
+- 飞书记录视图：在多维表格切换记录时自动重新研判，可回写评分、策略、竞争情报、证据、需求覆盖与优化建议；填写核验证据后可从当前记录直接提交字段核验，服务端幂等写入覆盖层、重算资格并回写同一行。
 - 清洗去重：正文噪声清理、URL 规范化、项目编号提取、SimHash 聚类。
 - 附件抽取：支持受限下载并抽取 PDF、DOCX、XLSX 正文片段。
 - 证据链：保存来源链接、正文摘录、附件快照、字段级证据和事实校验结果。
@@ -362,7 +362,7 @@ TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
 TENDERTRACE_FEISHU_BITABLE_BASE_URL=
 ```
 
-记录视图插件位于 `integrations/feishu-record-view/`，已配置 App ID 与 BlockTypeID，未包含任何密钥。安装官方 CLI 后先执行 `opdev login`，再进入 `opportunity-view` 执行 `npm install` 和 `npm run start`。本地调试必须在 `block.json` 增加实际 Base 文档 URL；生产构建可直接执行 `npm run build`。插件调用 TenderTrace `/api/opportunities/analyze`，在用户切换记录时自动刷新，并可把评分、策略、竞争情报、竞争证据、历史竞争者、需求覆盖率、待核对项和优化建议回写当前记录，或把机会摘要发送到默认飞书会话。
+记录视图插件位于 `integrations/feishu-record-view/`，已配置 App ID 与 BlockTypeID，未包含任何密钥。安装官方 CLI 后先执行 `opdev login`，再进入 `opportunity-view` 执行 `npm install` 和 `npm run start`。本地调试必须在 `block.json` 增加实际 Base 文档 URL；生产构建可直接执行 `npm run build`。插件调用 TenderTrace `/api/opportunities/analyze`，在用户切换记录时自动刷新，并可把评分、策略、竞争情报、竞争证据、历史竞争者、需求覆盖率、待核对项和优化建议回写当前记录，或把机会摘要发送到默认飞书会话。当前行填写“事实核验证据”后，“核验并重算”会通过 `PATCH /api/opportunities/{notice_id}/facts` 提交采购主体、项目编号、预算、截止时间和地区；相同内容重复提交不会产生重复审计。
 
 配置 `TENDERTRACE_FEISHU_BITABLE_BASE_URL` 后，机会情报页和设置页会提供飞书台账直达入口；连接中心展示的线索数仅统计含项目指纹或公告 ID 的 TenderTrace 业务记录，不包含飞书默认空白行。
 
@@ -506,7 +506,7 @@ The current architecture is local-first: background ingestion continuously store
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
 - Competition intelligence extracted from result and contract notices, including awarded suppliers, amounts, evidence excerpts, and comparable-category supplier history.
 - An eight-dimension requirement review covering specifications, integration, delivery, acceptance, service, qualifications, scoring, and security; missing evidence is explicitly labeled for verification.
-- A Feishu record-view extension that automatically reloads when the selected row changes and writes scores, decisions, competition evidence, and requirement recommendations back to the current record.
+- A Feishu record-view extension that automatically reloads when the selected row changes, writes intelligence back to the current record, and submits evidence-backed facts through the same auditable, idempotent qualification workflow used by the Web UI.
 - Text cleaning, URL canonicalization, project-number extraction, SimHash clustering.
 - Bounded attachment download and extraction for PDF, DOCX, and XLSX.
 - Evidence chain with source links, excerpts, attachment snapshots, and fact checks.
@@ -777,7 +777,7 @@ For unencrypted production HTTP event delivery, configure `FEISHU_CALLBACK_VERIF
 
 Server-side Bitable sync also requires the target Base document's `app_token` and table `table_id`. Extract both from the actual Base URL; neither the application App ID nor the record-view `blk_...` BlockTypeID can replace them.
 
-The record-view extension lives in `integrations/feishu-record-view/`. Its App ID and BlockTypeID are committed, while credentials are not. Run `opdev login`, then `npm install` and `npm run start` under `opportunity-view`. Local debugging requires an actual Base document URL in `block.json`; production assets build with `npm run build`. The extension calls `/api/opportunities/analyze`, refreshes on row selection changes, writes scores, strategy, competition evidence, requirement coverage, and recommendations back to the current row, and can send the opportunity digest to the configured Feishu chat.
+The record-view extension lives in `integrations/feishu-record-view/`. Its App ID and BlockTypeID are committed, while credentials are not. Run `opdev login`, then `npm install` and `npm run start` under `opportunity-view`. Local debugging requires an actual Base document URL in `block.json`; production assets build with `npm run build`. The extension calls `/api/opportunities/analyze`, refreshes on row selection changes, writes scores, strategy, competition evidence, requirement coverage, and recommendations back to the current row, and can send the opportunity digest to the configured Feishu chat. After `事实核验证据` is populated, `核验并重算` submits the current business fields to the auditable facts API; identical submissions are ignored instead of producing duplicate events.
 
 When `TENDERTRACE_FEISHU_BITABLE_BASE_URL` is configured, the Opportunity Intelligence and Settings views expose a direct Base link. The synced lead count excludes Feishu's default blank rows and counts only TenderTrace records with a project fingerprint or notice ID.
 

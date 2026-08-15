@@ -86,6 +86,28 @@ class OpportunityFactTests(unittest.TestCase):
         self.assertEqual(audit[0]["actor"], "分析师乙")
         self.assertIn("correction", audit[0]["payload"]["source_url"])
 
+    def test_identical_fact_submission_does_not_duplicate_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_notice(settings)
+            request = {
+                "settings": settings,
+                "notice_id": "notice-facts-1",
+                "facts": {"budget": "120 万元"},
+                "source_url": "https://example.com/notice-facts-1",
+                "evidence_text": "预算事实摘录",
+                "actor": "飞书分析师",
+                "channel": "feishu_record_view",
+            }
+
+            upsert_verified_facts(**request)
+            upsert_verified_facts(**request)
+            audit = load_fact_audit(settings, "notice-facts-1")
+
+        self.assertEqual(len(audit), 1)
+        self.assertEqual(audit[0]["payload"]["channel"], "feishu_record_view")
+
     def test_fact_source_requires_absolute_http_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

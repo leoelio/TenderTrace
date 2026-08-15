@@ -377,6 +377,9 @@ class FeishuBitableTests(unittest.TestCase):
         fields = FakeFeishuClient.updated_records[0][1]
         self.assertEqual(fields["项目编号"], "SH-2026-0816")
         self.assertEqual(fields["事实核验状态"], "已核验 1 项")
+        self.assertEqual(fields["事实核验证据"], "")
+        self.assertEqual(fields["事实核验备注"], "")
+        self.assertEqual(fields["事实核验人"], "")
         self.assertEqual(fields["事实核验摘要"], "预算：320 万元")
         self.assertEqual(fields["机会等级"], "A · 优先推进")
         self.assertEqual(fields["准入状态"], "可决策")

@@ -1976,6 +1976,7 @@ function renderFeishuOverview(payload) {
     ["报告与周报", features.report_delivery, "Word 文件和使用周报"],
     ["多维表格", features.bitable_sync, features.bitable_sync?.detail || "公告明细同步"],
     ["伙伴线索入口", partnerLeadImport, partnerLeadDetail],
+    ["事实核验闭环", features.fact_verification, "记录视图提交 · 本地重算 · 审计回写"],
     ["会话自然语言指令", conversationCommands, conversationDetail],
     ["机会卡片", features.opportunity_cards, "可操作机会卡片与原文入口"],
     [

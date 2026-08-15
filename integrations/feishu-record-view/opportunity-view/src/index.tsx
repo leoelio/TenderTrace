@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ExternalLink, RefreshCw, Send, Settings, UploadCloud, X } from "lucide-react";
+import { BadgeCheck, ExternalLink, RefreshCw, Send, Settings, UploadCloud, X } from "lucide-react";
 import { bitable } from "@lark-opdev/block-bitable-api";
 import "./styles.css";
 
@@ -47,6 +47,7 @@ const fieldLabels: Record<string, string> = {
   publish_time: "发布时间",
   region: "地区",
   purchaser: "采购人",
+  project_no: "项目编号",
   source_url: "来源链接",
   source_site: "来源",
   core_content: "核心内容",
@@ -128,6 +129,7 @@ function App() {
   const [context, setContext] = useState<RecordContext | null>(null);
   const [intelligence, setIntelligence] = useState<Intelligence | null>(null);
   const [loading, setLoading] = useState(true);
+  const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiBase, setApiBase] = useState(apiConfig().base);
@@ -159,6 +161,10 @@ function App() {
   const title = context?.values["标题"] || "当前机会";
   const sourceUrl = context?.values["来源链接"] || "";
   const noticeId = context?.values["公告ID"] || "";
+  const factFieldCount = ["采购人", "项目编号", "预算", "投标截止", "地区"]
+    .filter((name) => Boolean(context?.values[name]?.trim())).length;
+  const factStatus = context?.values["事实核验状态"] || "待核验";
+  const factEvidenceReady = Boolean(context?.values["事实核验证据"]?.trim());
   const quality = intelligence?.scores || {};
   const marketBenchmark = intelligence?.market_context?.benchmark;
   const marketContextSignals = intelligence?.market_context?.signals || [];
@@ -233,6 +239,63 @@ function App() {
     }
   }
 
+  async function verifyFacts() {
+    setVerifying(true);
+    try {
+      const current = await currentRecord();
+      const currentNoticeId = current.values["公告ID"]?.trim() || "";
+      const facts = Object.fromEntries(
+        [
+          ["purchaser", current.values["采购人"]],
+          ["project_no", current.values["项目编号"]],
+          ["budget", current.values["预算"]],
+          ["bid_deadline", current.values["投标截止"]],
+          ["region", current.values["地区"]],
+        ].filter((item): item is [string, string] => Boolean(item[1]?.trim())),
+      );
+      const sourceUrl = current.values["来源链接"]?.trim() || "";
+      const evidenceText = current.values["事实核验证据"]?.trim() || "";
+      if (!currentNoticeId) {
+        setMessage("当前记录缺少公告ID，请先从 TenderTrace 同步该记录");
+        return;
+      }
+      if (!sourceUrl) {
+        setMessage("当前记录缺少来源链接");
+        return;
+      }
+      if (!evidenceText) {
+        setMessage("请先填写“事实核验证据”字段");
+        return;
+      }
+      if (!Object.keys(facts).length) {
+        setMessage("当前记录没有可核验的事实字段");
+        return;
+      }
+      const result = await request(`/api/opportunities/${encodeURIComponent(currentNoticeId)}/facts`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          facts,
+          source_url: sourceUrl,
+          evidence_text: evidenceText,
+          note: current.values["事实核验备注"] || "",
+          actor: current.values["事实核验人"] || "飞书记录视图",
+          channel: "feishu_record_view",
+        }),
+      });
+      if (result?.opportunity?.intelligence) setIntelligence(result.opportunity.intelligence);
+      await load();
+      setMessage(
+        result.status === "unchanged"
+          ? "事实未变化，无需重复写入"
+          : "事实已核验，机会等级与销售准入已重新计算",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "事实核验失败");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
   return (
     <main>
       <header>
@@ -271,6 +334,17 @@ function App() {
           <section className="decision-section">
             <div><span>项目目标</span><strong>{intelligence.project_target}</strong></div>
             <div><span>建议策略</span><strong>{intelligence.strategy}</strong></div>
+          </section>
+
+          <section className="fact-verification">
+            <div className="section-title"><strong>事实核验</strong><span>{factStatus}</span></div>
+            <div className="verification-grid">
+              <div><span>业务字段</span><strong>{factFieldCount} / 5</strong></div>
+              <div><span>证据摘录</span><strong>{factEvidenceReady ? "已填写" : "待补充"}</strong></div>
+            </div>
+            <button className="verify-button" disabled={verifying} onClick={verifyFacts}>
+              <BadgeCheck size={16} />{verifying ? "核验中" : "核验并重算"}
+            </button>
           </section>
 
           <section>

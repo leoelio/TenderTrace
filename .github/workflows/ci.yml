@@ -20,3 +20,11 @@ jobs:
       - run: python -m ruff check .
       - run: python -m pytest
       - run: node --check web/dist/app.js
+      - run: npm ci
+        working-directory: integrations/feishu-record-view/opportunity-view
+      - run: npm audit --omit=dev
+        working-directory: integrations/feishu-record-view/opportunity-view
+      - run: npm run typecheck
+        working-directory: integrations/feishu-record-view/opportunity-view
+      - run: npm run build
+        working-directory: integrations/feishu-record-view/opportunity-view

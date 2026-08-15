@@ -48,6 +48,7 @@ button, footer a {
 .toolbar button { width: 34px; padding: 7px; }
 button:hover, footer a:hover { border-color: #1463ff; color: #0b55e5; }
 button.primary { color: #fff; border-color: #1463ff; background: #1463ff; }
+button:disabled { cursor: wait; opacity: .58; }
 
 section { padding: 16px 0; border-bottom: 1px solid #e8edf4; }
 .record-head { justify-content: flex-start; align-items: stretch; }
@@ -81,6 +82,14 @@ section { padding: 16px 0; border-bottom: 1px solid #e8edf4; }
 .decision-section span, .section-title > span { color: #69758a; font-size: 11px; }
 .decision-section strong { font-size: 13px; line-height: 1.55; }
 .section-title { margin-bottom: 9px; }
+
+.fact-verification { display: grid; gap: 11px; }
+.verification-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #e5eaf1; }
+.verification-grid > div { display: grid; gap: 3px; padding: 9px 10px; }
+.verification-grid > div + div { border-left: 1px solid #e5eaf1; }
+.verification-grid span { color: #69758a; font-size: 10px; }
+.verification-grid strong { font-size: 13px; }
+.verify-button { justify-self: start; color: #087443; border-color: #bcdcca; background: #f0faf4; }
 
 .market-section { gap: 9px; }
 .market-section > div { padding: 8px 0; border-top: 1px solid #eef2f6; }

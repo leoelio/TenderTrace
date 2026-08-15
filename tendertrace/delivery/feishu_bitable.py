@@ -71,6 +71,9 @@ REQUIRED_FIELDS = (
     "核验时间",
     "核验摘要",
     "事实核验状态",
+    "事实核验证据",
+    "事实核验备注",
+    "事实核验人",
     "事实核验摘要",
     "事实核验时间",
 )
@@ -727,6 +730,9 @@ def _record_fields(
         "决策等待小时": "0",
         "决策截止时间": "",
         "事实核验状态": "待核验",
+        "事实核验证据": "",
+        "事实核验备注": "",
+        "事实核验人": "",
         "事实核验摘要": "",
         "事实核验时间": "",
     }
@@ -775,6 +781,7 @@ def _opportunity_fact_fields(opportunity: dict[str, object]) -> dict[str, object
     )
     overrides = opportunity.get("fact_overrides")
     facts = [item for item in overrides if isinstance(item, dict)] if isinstance(overrides, list) else []
+    latest_fact = max(facts, key=lambda item: str(item.get("updated_at") or ""), default={})
     summary = "；".join(
         f"{item.get('field_label') or item.get('field_name')}：{item.get('field_value')}"
         for item in facts
@@ -796,6 +803,9 @@ def _opportunity_fact_fields(opportunity: dict[str, object]) -> dict[str, object
         "资格评分": str(qualification.get("score") or 0),
         "准入状态": _qualification_label(qualification.get("status")),
         "事实核验状态": f"已核验 {len(facts)} 项" if facts else "待核验",
+        "事实核验证据": str(latest_fact.get("evidence_text") or ""),
+        "事实核验备注": str(latest_fact.get("note") or ""),
+        "事实核验人": str(latest_fact.get("actor") or ""),
         "事实核验摘要": summary,
         "事实核验时间": verified_at,
     }

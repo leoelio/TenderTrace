@@ -146,7 +146,7 @@ def create_app():
             r"https://(?:[A-Za-z0-9-]+\.)*(?:feishu\.cn|larksuite\.com)"
         ),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-TenderTrace-Token"],
     )
 
@@ -252,6 +252,10 @@ def create_app():
                     "automation_enabled": settings.feishu_lead_import_enabled,
                     "cron": settings.feishu_lead_import_cron,
                     "last_run": latest_lead_import,
+                },
+                "fact_verification": {
+                    "ready": bitable_ready,
+                    "url": settings.feishu_bitable_base_url,
                 },
                 "conversation_commands": {
                     "ready": bool(
@@ -512,6 +516,7 @@ def create_app():
         facts = request.get("facts")
         if not isinstance(facts, dict):
             raise HTTPException(status_code=400, detail="facts must be an object")
+        audit_before = load_fact_audit(settings, notice_id, limit=1)
         try:
             overrides = upsert_verified_facts(
                 settings,
@@ -530,35 +535,46 @@ def create_app():
         refreshed = get_opportunity(settings, notice_id)
         if refreshed is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
-        qualification = _mapping_value(refreshed.get("qualification"))
-        workflow = update_workflow(
-            settings,
-            notice_id,
-            qualification_score=int(qualification.get("score") or 0),
-            qualification_status=str(qualification.get("status") or "blocked"),
-            updated_by=str(request.get("actor") or "admin"),
-        )
-        refreshed = get_opportunity(settings, notice_id) or refreshed
-        bitable = update_opportunity_facts_in_bitable(
-            settings,
-            notice_id=notice_id,
-            opportunity=refreshed,
-        )
-        record_activity(
-            settings,
-            event_type="opportunity_facts_verified",
-            target=notice_id,
-            label=f"核验 {len(overrides)} 项事实",
-            metadata={"fields": sorted(facts), "bitable_status": bitable.status},
-        )
+        audit = load_fact_audit(settings, notice_id)
+        before_id = str(audit_before[0].get("id") or "") if audit_before else ""
+        after_id = str(audit[0].get("id") or "") if audit else ""
+        changed = bool(after_id and after_id != before_id)
+        if changed:
+            qualification = _mapping_value(refreshed.get("qualification"))
+            workflow = update_workflow(
+                settings,
+                notice_id,
+                qualification_score=int(qualification.get("score") or 0),
+                qualification_status=str(qualification.get("status") or "blocked"),
+                updated_by=str(request.get("actor") or "admin"),
+            )
+            refreshed = get_opportunity(settings, notice_id) or refreshed
+            bitable = update_opportunity_facts_in_bitable(
+                settings,
+                notice_id=notice_id,
+                opportunity=refreshed,
+            )
+            bitable_status = bitable.status
+            bitable_message = bitable.message
+            record_activity(
+                settings,
+                event_type="opportunity_facts_verified",
+                target=notice_id,
+                label=f"核验 {len(overrides)} 项事实",
+                metadata={"fields": sorted(facts), "bitable_status": bitable.status},
+            )
+        else:
+            workflow = get_workflow(settings, notice_id)
+            bitable_status = "skipped"
+            bitable_message = "verified facts are unchanged"
         return {
-            "status": "updated",
+            "status": "updated" if changed else "unchanged",
             "opportunity": refreshed,
             "workflow": workflow.to_dict(),
             "overrides": overrides,
-            "audit": load_fact_audit(settings, notice_id),
-            "bitable_status": bitable.status,
-            "bitable_message": bitable.message,
+            "audit": audit,
+            "bitable_status": bitable_status,
+            "bitable_message": bitable_message,
         }
 
     @app.post("/api/opportunities/{notice_id}/actions")

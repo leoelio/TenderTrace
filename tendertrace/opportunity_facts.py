@@ -58,13 +58,28 @@ def upsert_verified_facts(
             raise LookupError("opportunity not found")
         existing_rows = conn.execute(
             """
-            SELECT field_name, field_value
+            SELECT id, notice_id, field_name, field_value, source_url, evidence_text,
+                   note, actor, channel, created_at, updated_at
             FROM opportunity_fact_overrides
             WHERE notice_id = ?
+            ORDER BY updated_at DESC, field_name ASC
             """,
             (notice_id,),
         ).fetchall()
         before = {str(row["field_name"]): str(row["field_value"]) for row in existing_rows}
+        existing = {str(row["field_name"]): row for row in existing_rows}
+        unchanged = all(
+            field in existing
+            and str(existing[field]["field_value"]) == value
+            and str(existing[field]["source_url"]) == source_url
+            and str(existing[field]["evidence_text"] or "") == evidence_text
+            and str(existing[field]["note"] or "") == note
+            and str(existing[field]["actor"] or "") == actor
+            and str(existing[field]["channel"] or "") == channel
+            for field, value in normalized.items()
+        )
+        if unchanged:
+            return [_row_payload(row) for row in existing_rows]
         for field, value in normalized.items():
             override_id = str(
                 uuid5(NAMESPACE_URL, f"tendertrace:opportunity-fact:{notice_id}:{field}")
@@ -168,7 +183,7 @@ def load_fact_audit(
     with connection(settings) as conn:
         rows = conn.execute(
             """
-            SELECT actor_open_id, payload_json, created_at
+            SELECT id, actor_open_id, payload_json, created_at
             FROM opportunity_events
             WHERE notice_id = ? AND action = 'facts_verified'
             ORDER BY created_at DESC, rowid DESC
@@ -178,6 +193,7 @@ def load_fact_audit(
         ).fetchall()
     return [
         {
+            "id": str(row["id"]),
             "actor": str(row["actor_open_id"] or ""),
             "payload": _json_object(row["payload_json"]),
             "created_at": str(row["created_at"] or ""),
