@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from typing import Any
 from uuid import uuid4
@@ -74,6 +74,7 @@ class OpportunityWorkflow:
     decision_reason: str
     decision_by: str
     decision_at: str
+    stage_changed_at: str
     updated_by: str
     updated_at: str
 
@@ -173,6 +174,11 @@ def update_workflow(
         ),
         "decision_by": current.decision_by if decision_by is None else decision_by,
         "decision_at": current.decision_at if decision_at is None else decision_at,
+        "stage_changed_at": (
+            current.stage_changed_at
+            if target_stage == current.stage
+            else datetime.now(timezone.utc).isoformat(timespec="seconds")
+        ),
         "updated_by": current.updated_by if updated_by is None else updated_by,
     }
     with connection(settings) as conn:
@@ -183,7 +189,7 @@ def update_workflow(
                 feishu_task_guid = ?, feishu_event_id = ?, feishu_message_id = ?,
                 qualification_score = ?, qualification_status = ?, decision = ?,
                 decision_reason = ?, decision_by = ?, decision_at = ?,
-                updated_by = ?, updated_at = datetime('now')
+                stage_changed_at = ?, updated_by = ?, updated_at = datetime('now')
             WHERE notice_id = ?
             """,
             (*values.values(), notice_id),
@@ -286,6 +292,7 @@ def _from_row(row: Any) -> OpportunityWorkflow:
         decision_reason=str(row["decision_reason"] or ""),
         decision_by=str(row["decision_by"] or ""),
         decision_at=str(row["decision_at"] or ""),
+        stage_changed_at=str(row["stage_changed_at"] or ""),
         updated_by=str(row["updated_by"] or ""),
         updated_at=str(row["updated_at"] or datetime.now().isoformat(timespec="seconds")),
     )
@@ -309,6 +316,7 @@ def _default_workflow(notice_id: str) -> OpportunityWorkflow:
         decision_reason="",
         decision_by="",
         decision_at="",
+        stage_changed_at="",
         updated_by="",
         updated_at="",
     )

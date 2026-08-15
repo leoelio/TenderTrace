@@ -60,6 +60,10 @@ REQUIRED_FIELDS = (
     "决策依据",
     "决策人",
     "决策时间",
+    "决策SLA状态",
+    "决策SLA时限",
+    "决策等待小时",
+    "决策截止时间",
     "线索正文",
     "伙伴提交人",
     "来源核验",
@@ -660,6 +664,10 @@ def _record_fields(
         "决策依据": "",
         "决策人": "",
         "决策时间": "",
+        "决策SLA状态": "当前阶段不计时",
+        "决策SLA时限": "",
+        "决策等待小时": "0",
+        "决策截止时间": "",
     }
 
 
@@ -703,6 +711,14 @@ def _workflow_fields(workflow: dict[str, object]) -> dict[str, object]:
         "决策依据": str(workflow.get("decision_reason") or ""),
         "决策人": str(workflow.get("decision_by") or ""),
         "决策时间": str(workflow.get("decision_at") or ""),
+        "决策SLA状态": _decision_sla_label(workflow.get("decision_sla_status")),
+        "决策SLA时限": (
+            f"{workflow.get('decision_sla_hours')} 小时"
+            if workflow.get("decision_sla_hours")
+            else ""
+        ),
+        "决策等待小时": str(workflow.get("decision_wait_hours") or 0),
+        "决策截止时间": str(workflow.get("decision_due_at") or ""),
     }
 
 
@@ -715,6 +731,16 @@ def _decision_label(value: object) -> str:
         str(value or ""),
         "待决策",
     )
+
+
+def _decision_sla_label(value: object) -> str:
+    return {
+        "on_track": "计时中",
+        "due_soon": "即将超时",
+        "overdue": "已超时升级",
+        "unknown": "计时起点待确认",
+        "not_applicable": "当前阶段不计时",
+    }.get(str(value or ""), "当前阶段不计时")
 
 
 def _action_texts(intelligence: dict[str, Any]) -> list[str]:

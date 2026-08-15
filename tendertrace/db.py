@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 
 DDL = (
@@ -315,6 +315,7 @@ DDL = (
         decision_reason TEXT,
         decision_by TEXT,
         decision_at TEXT,
+        stage_changed_at TEXT NOT NULL DEFAULT '',
         updated_by TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -433,6 +434,7 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "decision_reason TEXT",
         "decision_by TEXT",
         "decision_at TEXT",
+        "stage_changed_at TEXT NOT NULL DEFAULT ''",
     ),
 }
 

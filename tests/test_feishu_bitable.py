@@ -318,6 +318,10 @@ class FeishuBitableTests(unittest.TestCase):
                     "decision_reason": "客户预算与交付资源已确认",
                     "decision_by": "销售经理",
                     "decision_at": "2026-08-15T09:55:00",
+                    "decision_sla_status": "overdue",
+                    "decision_sla_hours": 24,
+                    "decision_wait_hours": 31.5,
+                    "decision_due_at": "2026-08-15T09:00:00+00:00",
                     "updated_at": "2026-08-15T10:00:00",
                 },
                 http_client_factory=FakeFeishuClient,
@@ -331,6 +335,9 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["准入状态"], "可决策")
         self.assertEqual(fields["投标决策"], "Go")
         self.assertEqual(fields["决策人"], "销售经理")
+        self.assertEqual(fields["决策SLA状态"], "已超时升级")
+        self.assertEqual(fields["决策SLA时限"], "24 小时")
+        self.assertEqual(fields["决策等待小时"], "31.5")
         self.assertNotIn("标题", fields)
 
     def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:

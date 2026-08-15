@@ -9,6 +9,10 @@ from typing import Any, Callable
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
 from tendertrace.integrations.feishu import FeishuClient, FeishuError, feishu_status
+from tendertrace.integrations.feishu_card_actions import (
+    callback_response_payload,
+    process_opportunity_card_action,
+)
 from tendertrace.intent import compile_intent
 from tendertrace.runner import RunOnceResult, run_once
 from tendertrace.scheduling.scheduler import schedule_subscription, start_subscription_scheduler
@@ -248,12 +252,31 @@ def start_feishu_bot_listener(settings: Settings) -> None:
                 scheduler=owned_scheduler,
             )
 
+    def on_card_action(data):
+        from lark_oapi.event.callback.model.p2_card_action_trigger import (
+            P2CardActionTriggerResponse,
+        )
+
+        payload = json.loads(lark.JSON.marshal(data) or "{}")
+        try:
+            result = process_opportunity_card_action(settings, payload)
+            response = callback_response_payload(result)
+        except (FeishuError, ValueError) as exc:
+            response = {
+                "toast": {
+                    "type": "error",
+                    "content": f"机会更新失败：{exc}",
+                }
+            }
+        return P2CardActionTriggerResponse(response)
+
     handler = (
         lark.EventDispatcherHandler.builder(
             "",
             settings.feishu_callback_verification_token(),
         )
         .register_p2_im_message_receive_v1(on_message)
+        .register_p2_card_action_trigger(on_card_action)
         .build()
     )
     client = lark.ws.Client(

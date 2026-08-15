@@ -30,13 +30,17 @@ from tendertrace.integrations.feishu import (
     feishu_agent_status,
     feishu_status,
 )
-from tendertrace.integrations.feishu_opportunity import (
-    build_opportunity_card,
-    start_opportunity_collaboration,
+from tendertrace.integrations.feishu_card_actions import (
+    OpportunityNotFoundError,
+    process_opportunity_card_action,
 )
+from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
+)
+from tendertrace.integrations.feishu_escalation import (
+    send_opportunity_escalation_summary,
 )
 from tendertrace.integrations.feishu_bot import (
     accept_feishu_message_event,
@@ -255,6 +259,11 @@ def create_app():
                 },
                 "agent_service": {"ready": bool(agent["configured"])},
                 "opportunity_cards": {"ready": bool(message["configured"])},
+                "decision_escalation": {
+                    "ready": report_ready,
+                    "automation_enabled": settings.opportunity_escalation_enabled,
+                    "cron": settings.opportunity_escalation_cron,
+                },
                 "task_sync": {"ready": bool(message["configured"])},
                 "deadline_calendar": {
                     "ready": bool(message["configured"] and settings.feishu_calendar_id),
@@ -375,6 +384,26 @@ def create_app():
     def analyze_opportunity(request: dict[str, object] = Body(...)) -> dict[str, object]:
         return analyze_opportunity_with_market_context(settings, request)
 
+    @app.post("/api/opportunities/escalations/send-feishu")
+    def send_opportunity_escalations(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            result = send_opportunity_escalation_summary(
+                settings,
+                force=bool(request.get("force", False)),
+            )
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="opportunity_escalation_send",
+            target=result.artifact_key,
+            label=f"{result.escalation_count} 条决策升级",
+            metadata={"status": result.status},
+        )
+        return result.to_dict()
+
     @app.post("/api/opportunities/send-feishu")
     def send_opportunity_feishu(request: dict[str, object] = Body(...)) -> dict[str, object]:
         notice_id = str(request.get("notice_id") or "").strip()
@@ -460,11 +489,15 @@ def create_app():
             ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        workflow, refreshed = _refresh_qualification(settings, notice_id, workflow)
+        workflow, refreshed, refreshed_opportunity = _refresh_qualification(
+            settings,
+            notice_id,
+            workflow,
+        )
         bitable = update_opportunity_workflow_in_bitable(
             settings,
             notice_id=notice_id,
-            workflow=workflow.to_dict(),
+            workflow=_workflow_sync_payload(workflow, refreshed_opportunity),
         )
         record_activity(
             settings,
@@ -494,77 +527,12 @@ def create_app():
         challenge = str(request.get("challenge") or "")
         if challenge:
             return {"challenge": challenge}
-        event = request.get("event") if isinstance(request.get("event"), dict) else request
-        action_payload = (
-            event.get("action") if isinstance(event.get("action"), dict) else {}
-        )
-        value = (
-            action_payload.get("value")
-            if isinstance(action_payload.get("value"), dict)
-            else {}
-        )
-        action = str(value.get("action") or "").strip()
-        notice_id = str(value.get("notice_id") or "").strip()
-        if not action or not notice_id:
-            raise HTTPException(status_code=400, detail="callback action and notice_id are required")
-        operator = event.get("operator") if isinstance(event.get("operator"), dict) else {}
-        operator_id = (
-            operator.get("operator_id")
-            if isinstance(operator.get("operator_id"), dict)
-            else {}
-        )
-        actor_open_id = str(operator_id.get("open_id") or operator.get("open_id") or "")
-        actor_name = str(operator.get("name") or actor_open_id or "飞书用户")
-        opportunity = get_opportunity(settings, notice_id)
-        if opportunity is None:
-            raise HTTPException(status_code=404, detail="opportunity not found")
         try:
-            workflow = apply_action(
-                settings,
-                notice_id,
-                action,
-                actor_open_id=actor_open_id,
-                actor_name=actor_name,
-                qualification=_mapping_value(opportunity.get("qualification")),
-                decision_reason=str(value.get("reason") or "").strip(),
-                payload={"event_id": _feishu_event_id(request)},
-            )
-        except WorkflowGateError as exc:
-            return {
-                "toast": {
-                    "type": "warning",
-                    "content": f"暂不能推进：{'、'.join(exc.reasons)}",
-                },
-                "blocked": True,
-                "reasons": list(exc.reasons),
-            }
+            return process_opportunity_card_action(settings, request)
+        except OpportunityNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        workflow, refreshed = _refresh_qualification(settings, notice_id, workflow)
-        bitable = update_opportunity_workflow_in_bitable(
-            settings,
-            notice_id=notice_id,
-            workflow=workflow.to_dict(),
-        )
-        record_activity(
-            settings,
-            event_type="feishu_opportunity_action",
-            target=notice_id,
-            label=workflow.stage_label,
-            metadata={"action": action, "actor_open_id": actor_open_id},
-        )
-        return {
-            "toast": {"type": "success", "content": f"机会已更新为{workflow.stage_label}"},
-            "card": build_opportunity_card(
-                opportunity,
-                workflow,
-                next_action=workflow.next_action or "根据当前阶段继续推进",
-                qualification=refreshed,
-            ),
-            "workflow": workflow.to_dict(),
-            "qualification": refreshed,
-            "bitable_status": bitable.status,
-        }
 
     @app.post("/api/integrations/feishu/events")
     def feishu_message_event(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -1204,11 +1172,6 @@ def _feishu_callback_token(payload: dict[str, object]) -> str:
     return str(header.get("token") or payload.get("token") or "")
 
 
-def _feishu_event_id(payload: dict[str, object]) -> str:
-    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
-    return str(header.get("event_id") or "")
-
-
 def _model_strategy_from_request(request: dict[str, object]) -> str | None:
     value = request.get("model_strategy")
     if value in (None, ""):
@@ -1508,7 +1471,7 @@ def _mapping_value(value: object) -> dict[str, object]:
 def _refresh_qualification(settings: Settings, notice_id: str, workflow):
     opportunity = get_opportunity(settings, notice_id)
     if opportunity is None:
-        return workflow, {}
+        return workflow, {}, {}
     qualification = _mapping_value(opportunity.get("qualification"))
     workflow = update_workflow(
         settings,
@@ -1516,7 +1479,23 @@ def _refresh_qualification(settings: Settings, notice_id: str, workflow):
         qualification_score=int(qualification.get("score") or 0),
         qualification_status=str(qualification.get("status") or "pending"),
     )
-    return workflow, qualification
+    opportunity["workflow"] = workflow.to_dict()
+    opportunity["qualification"] = qualification
+    return workflow, qualification, opportunity
+
+
+def _workflow_sync_payload(workflow, opportunity: dict[str, object]) -> dict[str, object]:
+    payload = workflow.to_dict()
+    action_state = _mapping_value(opportunity.get("action_state"))
+    payload.update(
+        {
+            "decision_sla_status": action_state.get("decision_sla_status") or "not_applicable",
+            "decision_sla_hours": action_state.get("decision_sla_hours") or 0,
+            "decision_wait_hours": action_state.get("decision_wait_hours") or 0,
+            "decision_due_at": action_state.get("decision_due_at") or "",
+        }
+    )
+    return payload
 
 
 def _int_stat(stats: dict[str, object], key: str) -> int:

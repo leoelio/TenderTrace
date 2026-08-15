@@ -96,6 +96,7 @@ const el = {
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
   opportunitySortSelect: document.querySelector("#opportunitySortSelect"),
   opportunitySummary: document.querySelector("#opportunitySummary"),
+  opportunityDecisionBoard: document.querySelector("#opportunityDecisionBoard"),
   opportunityMarket: document.querySelector("#opportunityMarket"),
   openFeishuBitableButton: document.querySelector("#openFeishuBitableButton"),
   opportunityList: document.querySelector("#opportunityList"),
@@ -1233,11 +1234,12 @@ function renderOpportunities(payload) {
     el.opportunitySummary.innerHTML = [
       summaryTile("当前线索", summary.total ?? items.length),
       summaryTile("A 级机会", levels.A ?? 0),
-      summaryTile("待认领重点", actionQueue.unowned_priority ?? 0),
-      summaryTile("7 日内截止", actionQueue.due_soon ?? 0),
-      summaryTile("已启动协同", actionQueue.collaboration_started ?? 0),
-      summaryTile("平均评分", summary.average_score ?? 0),
+      summaryTile("准入就绪", actionQueue.qualification_ready ?? 0),
+      summaryTile("待管理决策", actionQueue.decision_pending ?? 0),
+      summaryTile("SLA 超时", actionQueue.decision_overdue ?? 0),
+      summaryTile("Go 通过率", actionQueue.go_rate == null ? "-" : `${actionQueue.go_rate}%`),
     ].join("");
+    renderOpportunityDecisionBoard(actionQueue);
   }
   if (!el.opportunityList) return;
   if (el.opportunityMarket) {
@@ -1275,7 +1277,11 @@ function renderOpportunities(payload) {
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
           const qualification = item.qualification || {};
           const decision = workflow.decision || "pending";
-          const actionSignal = actionState.due_soon
+          const actionSignal = actionState.decision_sla_status === "overdue"
+            ? `<small class="action-signal action-signal-danger">决策已超时 ${escapeHtml(actionState.decision_wait_hours || 0)} 小时</small>`
+            : actionState.decision_sla_status === "due_soon"
+              ? `<small class="action-signal">决策剩余 ${escapeHtml(actionState.decision_remaining_hours || 0)} 小时</small>`
+            : actionState.due_soon
             ? `<small class="action-signal">距截止 ${escapeHtml(actionState.days_to_deadline)} 天</small>`
             : actionState.owner_required && ["A", "B"].includes(intelligence.level)
               ? '<small class="action-signal">重点机会待认领</small>'
@@ -1332,6 +1338,7 @@ function openOpportunityDetail(noticeId) {
   const intelligence = item.intelligence || {};
   const workflow = item.workflow || {};
   const qualification = item.qualification || {};
+  const actionState = item.action_state || {};
   const qualificationGates = Array.isArray(qualification.gates) ? qualification.gates : [];
   const approvalBlockers = qualificationBlockers(qualification, "approve_bid");
   const scores = intelligence.scores || {};
@@ -1415,6 +1422,7 @@ function openOpportunityDetail(noticeId) {
       ${approvalBlockers.length ? `<p class="qualification-blockers">Go 决策前需补齐：${escapeHtml(approvalBlockers.join("、"))}</p>` : '<p class="qualification-blockers qualification-ready">资料门禁已满足，可以提交 Go 决策。</p>'}
       ${workflow.decision_reason ? detailLine("决策依据", workflow.decision_reason) : ""}
       ${workflow.decision_by ? detailLine("决策记录", `${workflow.decision_by}${workflow.decision_at ? ` · ${workflow.decision_at}` : ""}`) : ""}
+      ${actionState.decision_required ? detailLine("决策 SLA", decisionSlaLabel(actionState)) : ""}
       <div class="qualification-decision-actions">
         ${opportunityActionButtons(item)}
       </div>
@@ -1458,6 +1466,67 @@ function qualificationStatusLabel(status) {
 
 function decisionLabel(decision) {
   return { go: "Go", hold: "Hold", no_go: "No-Go", pending: "待决策" }[decision] || "待决策";
+}
+
+function decisionSlaLabel(actionState) {
+  const status = actionState.decision_sla_status;
+  if (status === "overdue") return `已超时 · 已等待 ${actionState.decision_wait_hours || 0} 小时`;
+  if (status === "due_soon") return `即将到期 · 剩余 ${actionState.decision_remaining_hours || 0} 小时`;
+  if (status === "on_track") return `计时中 · 截止 ${actionState.decision_due_at || "-"}`;
+  return "计时起点待确认";
+}
+
+function renderOpportunityDecisionBoard(actionQueue) {
+  if (!el.opportunityDecisionBoard) return;
+  const decisions = actionQueue.decisions || {};
+  const stages = actionQueue.stage_counts || {};
+  const allEscalations = Array.isArray(actionQueue.escalations) ? actionQueue.escalations : [];
+  const escalations = allEscalations.slice(0, 5);
+  el.opportunityDecisionBoard.className = "opportunity-decision-board";
+  el.opportunityDecisionBoard.innerHTML = `
+    <section>
+      <span class="decision-board-kicker">资格与决策</span>
+      <strong>${escapeHtml(actionQueue.qualification_ready || 0)} 条可决策</strong>
+      <div class="decision-board-lines">
+        ${decisionBoardLine("阻断待补", actionQueue.qualification_blocked || 0)}
+        ${decisionBoardLine("待管理决策", actionQueue.decision_pending || 0)}
+        ${decisionBoardLine(`超过 ${actionQueue.decision_sla_hours || 0} 小时`, actionQueue.decision_overdue || 0, actionQueue.decision_overdue ? "danger" : "")}
+      </div>
+    </section>
+    <section>
+      <span class="decision-board-kicker">决策与转化</span>
+      <strong>${actionQueue.go_rate == null ? "暂无闭环决策" : `Go 通过率 ${escapeHtml(actionQueue.go_rate)}%`}</strong>
+      <div class="decision-board-pipeline">
+        ${decisionPipelineValue("Go", decisions.go || 0, "go")}
+        ${decisionPipelineValue("Hold", decisions.hold || 0, "hold")}
+        ${decisionPipelineValue("No-Go", decisions.no_go || 0, "no-go")}
+      </div>
+      <small>投标准备 ${escapeHtml(stages.bidding || 0)} · 中标 ${escapeHtml(stages.won || 0)} · 赢单率 ${actionQueue.win_rate == null ? "-" : `${escapeHtml(actionQueue.win_rate)}%`}</small>
+    </section>
+    <section>
+      <span class="decision-board-kicker">SLA 升级队列</span>
+      <div class="decision-board-heading">
+        <strong>${allEscalations.length ? `${allEscalations.length} 条需要管理介入` : "当前无超时决策"}</strong>
+        ${allEscalations.length ? '<button class="text-link" type="button" data-send-opportunity-escalations>发送飞书摘要</button>' : ""}
+      </div>
+      <div class="decision-escalation-list">
+        ${escalations.length ? escalations.map((item) => `
+          <button type="button" data-view-opportunity="${escapeHtml(item.notice_id)}">
+            <span>${escapeHtml(item.title || "未命名机会")}</span>
+            <small>${escapeHtml(item.owner || "待分配")} · ${escapeHtml(item.wait_hours || 0)} 小时</small>
+          </button>
+        `).join("") : '<small>进入策略制定阶段后，系统自动开始决策计时。</small>'}
+      </div>
+    </section>
+  `;
+}
+
+function decisionBoardLine(label, value, tone = "") {
+  return `<p class="${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></p>`;
+}
+
+function decisionPipelineValue(label, value, tone) {
+  return `<div class="pipeline-${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
 
 function opportunityActionButtons(item) {
@@ -1758,6 +1827,18 @@ function renderSettingsSummary(payload) {
     settingTile("本地模型", config.ollama_model || "-"),
     settingTile("云端模型", `${config.openai_model || "-"} · ${config.openai_key_configured ? "已配置" : "未配置"}`),
     settingTile("调度器", config.scheduler_enabled ? "启用" : "关闭"),
+    settingTile(
+      "销售准入策略",
+      config.qualification_policy
+        ? `机会 ${config.qualification_policy.minimum_opportunity_score} · 可信 ${config.qualification_policy.minimum_credibility} · 完整 ${config.qualification_policy.minimum_completeness} · 覆盖 ${config.qualification_policy.minimum_requirement_coverage}`
+        : "-",
+    ),
+    settingTile(
+      "决策 SLA",
+      config.qualification_policy
+        ? `${config.qualification_policy.decision_sla_hours} 小时 · ${config.qualification_policy.escalation_enabled ? `自动 ${config.qualification_policy.escalation_cron}` : "手动升级"}`
+        : "-",
+    ),
     settingTile("Outbox", config.outbox_dir || "-"),
     settingTile("数据库", config.db_path || "-"),
     settingTile("登录态目录", config.secrets_dir || "-"),
@@ -1784,6 +1865,13 @@ function renderFeishuOverview(payload) {
     ["伙伴线索入口", partnerLeadImport, partnerLeadDetail],
     ["会话自然语言指令", conversationCommands, conversationDetail],
     ["机会卡片", features.opportunity_cards, "可操作机会卡片与原文入口"],
+    [
+      "决策 SLA 升级",
+      features.decision_escalation,
+      features.decision_escalation?.automation_enabled
+        ? `自动 ${features.decision_escalation.cron}`
+        : "机会页手动发送，自动提醒默认关闭",
+    ],
     ["销售任务", features.task_sync, "负责人任务与下一步行动"],
     ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],
     ["状态回调", features.card_callback, "卡片动作回写台账与审计流"],
@@ -2121,6 +2209,14 @@ async function applyOpportunityAction(noticeId, action) {
   if (el.opportunityDetailDialog?.open) openOpportunityDetail(noticeId);
   const workflow = result.workflow || {};
   showToast(`机会已更新：${workflow.stage_label || decisionLabel(workflow.decision)}`);
+}
+
+async function sendOpportunityEscalations() {
+  const result = await api("/api/opportunities/escalations/send-feishu", {
+    method: "POST",
+    body: JSON.stringify({ force: true }),
+  });
+  showToast(result.status === "sent" ? `已发送 ${result.escalation_count} 条决策升级` : "当前没有需要发送的超时决策");
 }
 
 async function saveMemoryWeekly() {
@@ -2740,6 +2836,11 @@ function bindEvents() {
         opportunityActionTarget.dataset.opportunityId,
         opportunityActionTarget.dataset.opportunityAction,
       ).catch(toastError("机会状态更新失败"));
+      return;
+    }
+    const opportunityEscalationTarget = event.target.closest("[data-send-opportunity-escalations]");
+    if (opportunityEscalationTarget) {
+      sendOpportunityEscalations().catch(toastError("飞书升级摘要发送失败"));
       return;
     }
     const viewOpportunityTarget = event.target.closest("[data-view-opportunity]");

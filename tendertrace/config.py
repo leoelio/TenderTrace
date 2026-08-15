@@ -126,6 +126,13 @@ class Settings:
     vector_enabled: bool
     vector_model: str
     vector_top_k: int
+    qualification_min_opportunity_score: int
+    qualification_min_credibility: int
+    qualification_min_completeness: int
+    qualification_min_requirement_coverage: int
+    decision_sla_hours: int
+    opportunity_escalation_enabled: bool
+    opportunity_escalation_cron: str
     attachment_max_per_notice: int
     attachment_max_bytes: int
     api_token_present: bool
@@ -368,6 +375,48 @@ class Settings:
                 _first_value("TENDERTRACE_VECTOR_TOP_K", env_files, "30"),
                 "TENDERTRACE_VECTOR_TOP_K",
             ),
+            qualification_min_opportunity_score=_parse_percentage(
+                _first_value(
+                    "TENDERTRACE_QUALIFICATION_MIN_OPPORTUNITY_SCORE", env_files, "65"
+                ),
+                "TENDERTRACE_QUALIFICATION_MIN_OPPORTUNITY_SCORE",
+            ),
+            qualification_min_credibility=_parse_percentage(
+                _first_value(
+                    "TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY", env_files, "60"
+                ),
+                "TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY",
+            ),
+            qualification_min_completeness=_parse_percentage(
+                _first_value(
+                    "TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS", env_files, "55"
+                ),
+                "TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS",
+            ),
+            qualification_min_requirement_coverage=_parse_percentage(
+                _first_value(
+                    "TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE",
+                    env_files,
+                    "40",
+                ),
+                "TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE",
+            ),
+            decision_sla_hours=_parse_positive_int(
+                _first_value("TENDERTRACE_DECISION_SLA_HOURS", env_files, "24"),
+                "TENDERTRACE_DECISION_SLA_HOURS",
+            ),
+            opportunity_escalation_enabled=_parse_bool(
+                _first_value(
+                    "TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED",
+                    env_files,
+                    "false",
+                )
+            ),
+            opportunity_escalation_cron=_first_value(
+                "TENDERTRACE_OPPORTUNITY_ESCALATION_CRON",
+                env_files,
+                "0 9,14 * * 1-5",
+            ),
             attachment_max_per_notice=attachment_max_per_notice,
             attachment_max_bytes=attachment_max_bytes,
             api_token_present=_bool_secret_present(api_token),
@@ -445,6 +494,17 @@ class Settings:
             "vector_enabled": self.vector_enabled,
             "vector_model": self.vector_model,
             "vector_top_k": self.vector_top_k,
+            "qualification_policy": {
+                "minimum_opportunity_score": self.qualification_min_opportunity_score,
+                "minimum_credibility": self.qualification_min_credibility,
+                "minimum_completeness": self.qualification_min_completeness,
+                "minimum_requirement_coverage": (
+                    self.qualification_min_requirement_coverage
+                ),
+                "decision_sla_hours": self.decision_sla_hours,
+                "escalation_enabled": self.opportunity_escalation_enabled,
+                "escalation_cron": self.opportunity_escalation_cron,
+            },
             "attachment_max_per_notice": self.attachment_max_per_notice,
             "attachment_max_bytes": self.attachment_max_bytes,
             "api_token_configured": self.api_token_present,
@@ -535,6 +595,16 @@ def _parse_positive_float(value: str, name: str) -> float:
         raise ConfigError(f"{name} must be a number") from exc
     if parsed <= 0:
         raise ConfigError(f"{name} must be positive")
+    return parsed
+
+
+def _parse_percentage(value: str, name: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be an integer") from exc
+    if not 0 <= parsed <= 100:
+        raise ConfigError(f"{name} must be between 0 and 100")
     return parsed
 
 

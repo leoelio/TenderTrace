@@ -36,11 +36,11 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经预检后进入本地公告库、FTS 和证据链；系统核验公网原文、保存内容哈希与正文摘录，并回写稳定指纹、入库及核验状态。系统自身同步记录不会循环导入。
-- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作回写本地状态流、多维表格与审计事件。
+- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
-- 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分和需求覆盖形成可解释门禁；只有阶段与资料条件同时满足，才允许从机会确认推进到策略制定与投标准备。
-- 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；飞书卡片每次操作后按最新阶段原地刷新，只保留当前可执行动作。
+- 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分和需求覆盖形成可解释门禁；阈值由运行配置管理，只有阶段与资料条件同时满足才允许推进。
+- 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；策略制定阶段按独立阶段时钟执行决策 SLA，超时进入管理升级队列，可手动或定时发送幂等飞书摘要。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
 - 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
@@ -174,6 +174,15 @@ TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=false
 TENDERTRACE_FEISHU_LEAD_IMPORT_CRON=*/15 * * * *
 TENDERTRACE_PUBLIC_BASE_URL=http://127.0.0.1:8000
 TENDERTRACE_API_TOKEN=
+
+# 销售准入阈值与策略制定阶段的管理决策 SLA。
+TENDERTRACE_QUALIFICATION_MIN_OPPORTUNITY_SCORE=65
+TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=60
+TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS=55
+TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=40
+TENDERTRACE_DECISION_SLA_HOURS=24
+TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
+TENDERTRACE_OPPORTUNITY_ESCALATION_CRON=0 9,14 * * 1-5
 
 # 可选飞书消息/群聊接口。
 FEISHU_ENABLED=false
@@ -322,6 +331,7 @@ python -m tendertrace embed-notices
 - `POST /api/opportunities/send-feishu`：发送可操作机会卡片，并按需创建幂等任务与截止日程。
 - `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
 - `POST /api/opportunities/{notice_id}/actions`：执行带阶段和资格门禁的认领、确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
+- `POST /api/opportunities/escalations/send-feishu`：发送当前决策 SLA 超时摘要；自动任务按每日机会集合去重。
 - `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态并同步多维表格。
 - `POST /api/integrations/feishu/events`：接收飞书消息事件，校验令牌、去重后异步执行自然语言查询或创建订阅。
 - `GET /api/integrations/feishu/message-events`：查看飞书会话指令的运行、订阅、失败与恢复审计。
@@ -330,7 +340,7 @@ python -m tendertrace embed-notices
 
 机会协同使用公告 ID 生成任务 `client_token` 与日程 `idempotency_key`，重复同步不会重复创建任务或日程。启用截止日程需配置 `FEISHU_CALENDAR_ID`；启用卡片动作需配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，并在飞书开发者后台把可公网访问的 `/api/integrations/feishu/callback` 注册为回调地址。本地 `127.0.0.1` 不能直接接收飞书云端回调。
 
-飞书会话也可以直接作为 TenderTrace 的自然语言入口。为自建应用启用机器人能力并订阅 `im.message.receive_v1` 后，安装可选依赖 `python -m pip install -e .[feishu]`，运行 `python -m tendertrace feishu-bot-listen` 即可通过官方长连接接收消息，无需把本地服务暴露到公网。即时问题会运行检索、生成 Word 并回传原会话；带发送时间或频率的问题会创建绑定原会话的增量订阅。事件先写入 `feishu_message_events`，以 `event_id` 和 `message_id` 双重去重，进程重启时会恢复未处理或超时任务。启用 `TENDERTRACE_SCHEDULER_ENABLED` 时，该 CLI 同时承担订阅调度；同一数据库只能运行一个启用调度器的进程。
+飞书会话也可以直接作为 TenderTrace 的自然语言入口。为自建应用启用机器人能力并订阅 `im.message.receive_v1` 与 `card.action.trigger` 后，安装可选依赖 `python -m pip install -e .[feishu]`，运行 `python -m tendertrace feishu-bot-listen` 即可通过官方长连接接收消息和机会卡片动作，无需把本地服务暴露到公网。即时问题会运行检索、生成 Word 并回传原会话；带发送时间或频率的问题会创建绑定原会话的增量订阅。事件先写入 `feishu_message_events`，以 `event_id` 和 `message_id` 双重去重，进程重启时会恢复未处理或超时任务。启用 `TENDERTRACE_SCHEDULER_ENABLED` 时，该 CLI 同时承担订阅调度；同一数据库只能运行一个启用调度器的进程。
 
 生产环境也可使用未加密的 HTTP 事件订阅：配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，将可公网访问的 `/api/integrations/feishu/events` 设置为请求地址。该入口只接受令牌校验通过的事件并立即返回，实际检索在线程池执行。需要事件加密时应使用已经支持加密处理的官方长连接模式。长连接和 HTTP 回调只选择一种，避免同一事件产生无意义的重复投递；即使同时收到，持久化幂等键也会阻止重复运行。
 
@@ -474,11 +484,11 @@ The current architecture is local-first: background ingestion continuously store
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
-- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, callback-driven sales stages, and an auditable local event stream.
+- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
-- Explainable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
-- Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. Card callbacks refresh the original shared card with only the actions valid for its current stage.
+- Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
+- Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. A stage-specific decision clock drives SLA escalation queues and deduplicated manual or scheduled Feishu summaries.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
 - Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
@@ -604,6 +614,15 @@ TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=
 TENDERTRACE_FEISHU_BITABLE_TABLE_ID=
 TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=false
 TENDERTRACE_FEISHU_LEAD_IMPORT_CRON=*/15 * * * *
+
+# Sales qualification thresholds and management decision SLA.
+TENDERTRACE_QUALIFICATION_MIN_OPPORTUNITY_SCORE=65
+TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=60
+TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS=55
+TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=40
+TENDERTRACE_DECISION_SLA_HOURS=24
+TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
+TENDERTRACE_OPPORTUNITY_ESCALATION_CRON=0 9,14 * * 1-5
 ```
 
 Model modes:
@@ -723,6 +742,7 @@ Available Web APIs:
 - `POST /api/opportunities/send-feishu`: send an actionable opportunity card and optionally create an idempotent task and deadline event.
 - `GET /api/opportunities/{notice_id}/workflow`: inspect the owner, sales stage, and Feishu artifact state.
 - `POST /api/opportunities/{notice_id}/actions`: execute stage- and qualification-gated claim, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions.
+- `POST /api/opportunities/escalations/send-feishu`: send the current overdue decision summary with daily escalation-set deduplication.
 - `POST /api/integrations/feishu/callback`: verify card callbacks, advance the opportunity stage, and update Bitable.
 - `POST /api/integrations/feishu/events`: verify, deduplicate, and asynchronously execute inbound Feishu text commands.
 - `GET /api/integrations/feishu/message-events`: inspect inbound run, subscription, failure, and recovery audits.

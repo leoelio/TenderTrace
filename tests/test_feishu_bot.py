@@ -27,6 +27,12 @@ class FakeFeishuClient:
 
 
 class FeishuBotTests(unittest.TestCase):
+    def test_listener_registers_message_and_card_action_callbacks(self) -> None:
+        source = Path("tendertrace/integrations/feishu_bot.py").read_text(encoding="utf-8")
+
+        self.assertIn("register_p2_im_message_receive_v1", source)
+        self.assertIn("register_p2_card_action_trigger", source)
+
     def test_accepts_text_event_removes_mention_and_deduplicates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

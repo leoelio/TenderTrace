@@ -10,7 +10,12 @@ from tendertrace.integrations.feishu_opportunity import (
     build_opportunity_card,
     start_opportunity_collaboration,
 )
-from tendertrace.workflow import WorkflowGateError, apply_action, get_workflow
+from tendertrace.workflow import (
+    WorkflowGateError,
+    apply_action,
+    get_workflow,
+    update_workflow,
+)
 
 
 class _FakeFeishuClient:
@@ -56,7 +61,26 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertEqual(initial.stage, "identified")
         self.assertEqual(claimed.stage, "qualifying")
         self.assertEqual(claimed.owner_open_id, "ou_owner")
+        self.assertTrue(claimed.stage_changed_at)
         self.assertEqual(event_count, 1)
+
+    def test_metadata_sync_does_not_reset_stage_clock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            claimed = apply_action(
+                settings,
+                "notice-1",
+                "claim",
+                actor_open_id="ou_owner",
+            )
+            synced = update_workflow(
+                settings,
+                "notice-1",
+                feishu_message_id="message-id",
+            )
+
+        self.assertEqual(synced.stage_changed_at, claimed.stage_changed_at)
 
     def test_collaboration_creates_task_calendar_and_card_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

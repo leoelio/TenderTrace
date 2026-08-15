@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from tendertrace.config import Settings
 from tendertrace.delivery.feishu_bitable import update_opportunity_workflow_in_bitable
 from tendertrace.integrations.feishu import FeishuClient
-from tendertrace.qualification import assess_qualification
+from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.workflow import OpportunityWorkflow, get_workflow, update_workflow
 
 
@@ -60,7 +60,11 @@ def start_opportunity_collaboration(
         next_action=next_action,
         due_at=due_at.isoformat(timespec="minutes") if due_at else "",
     )
-    qualification = assess_qualification(opportunity, card_workflow.to_dict()).to_dict()
+    qualification = assess_qualification(
+        opportunity,
+        card_workflow.to_dict(),
+        policy=policy_from_settings(settings),
+    ).to_dict()
 
     if create_task and not task_guid:
         task = feishu.create_task(
@@ -144,6 +148,7 @@ def build_opportunity_card(
     ).to_dict()
     qualification_blockers = _qualification_blockers(qualification)
     decision = _decision_label(workflow.decision)
+    decision_sla = _decision_sla_text(_mapping(opportunity.get("action_state")))
     action_rows = _card_action_rows(opportunity, workflow)
     return {
         "config": {"wide_screen_mode": True, "update_multi": True},
@@ -172,6 +177,7 @@ def build_opportunity_card(
                     "content": (
                         f"**下一步** {next_action}\n"
                         f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
+                        f"**决策 SLA** {decision_sla}\n"
                         f"**风险** {risk_text}"
                     ),
                 },
@@ -329,3 +335,16 @@ def _decision_label(value: str) -> str:
         "hold": "Hold",
         "no_go": "No-Go",
     }.get(value, "待决策")
+
+
+def _decision_sla_text(action_state: dict[str, Any]) -> str:
+    status = str(action_state.get("decision_sla_status") or "not_applicable")
+    if status == "overdue":
+        return f"已超时，等待 {action_state.get('decision_wait_hours') or 0} 小时"
+    if status == "due_soon":
+        return f"即将到期，剩余 {action_state.get('decision_remaining_hours') or 0} 小时"
+    if status == "on_track":
+        return f"进行中，截止 {action_state.get('decision_due_at') or '-'}"
+    if status == "unknown":
+        return "待确认计时起点"
+    return "当前阶段不计时"

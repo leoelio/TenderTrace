@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import json
 import re
 from statistics import median
@@ -12,7 +12,7 @@ from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.intent.topic import extract_topic
-from tendertrace.qualification import assess_qualification
+from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.retrieval import parse_date
 from tendertrace.workflow import workflow_snapshots
 
@@ -276,6 +276,8 @@ def list_opportunities(
     market["available_categories"] = all_market.get("category_distribution", [])
     market["selected_category"] = topic or ""
     items: list[dict[str, object]] = []
+    qualification_policy = policy_from_settings(settings)
+    reference_time = datetime.now(timezone.utc)
     workflows = workflow_snapshots(settings, [notice_id for notice_id, _notice in rows])
     for notice_id, notice in rows:
         payload = _notice_payload(notice)
@@ -298,8 +300,16 @@ def list_opportunities(
             "intelligence": intelligence,
             "workflow": workflow,
         }
-        item["qualification"] = assess_qualification(item, workflow).to_dict()
-        item["action_state"] = _opportunity_action_state(item)
+        item["qualification"] = assess_qualification(
+            item,
+            workflow,
+            policy=qualification_policy,
+        ).to_dict()
+        item["action_state"] = _opportunity_action_state(
+            item,
+            decision_sla_hours=settings.decision_sla_hours,
+            now=reference_time,
+        )
         items.append(item)
     items = _sort_opportunities(items, sort)
     all_matching_items = items
@@ -326,7 +336,14 @@ def list_opportunities(
             if all_matching_items
             else 0.0,
             "market": market,
-            "action_queue": _action_queue_summary(all_matching_items),
+            "action_queue": _action_queue_summary(
+                all_matching_items,
+                decision_sla_hours=settings.decision_sla_hours,
+            ),
+            "qualification_policy": {
+                **qualification_policy.to_dict(),
+                "decision_sla_hours": settings.decision_sla_hours,
+            },
             "sort": sort,
         },
     }
@@ -367,8 +384,15 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "intelligence": intelligence,
         "workflow": workflow.to_dict(),
     }
-    item["qualification"] = assess_qualification(item, workflow.to_dict()).to_dict()
-    item["action_state"] = _opportunity_action_state(item)
+    item["qualification"] = assess_qualification(
+        item,
+        workflow.to_dict(),
+        policy=policy_from_settings(settings),
+    ).to_dict()
+    item["action_state"] = _opportunity_action_state(
+        item,
+        decision_sla_hours=settings.decision_sla_hours,
+    )
     return item
 
 
@@ -401,14 +425,20 @@ def _sort_opportunities(
     )
 
 
-def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
+def _opportunity_action_state(
+    item: dict[str, object],
+    *,
+    decision_sla_hours: int,
+    now: datetime | None = None,
+) -> dict[str, object]:
     intelligence = _mapping(item.get("intelligence"))
     workflow = _mapping(item.get("workflow"))
     qualification = _mapping(item.get("qualification"))
     level = str(intelligence.get("level") or "D")
     stage = str(workflow.get("stage") or "identified")
     deadline = _deadline_date(item)
-    today = date.today()
+    reference_time = now or datetime.now(timezone.utc)
+    today = reference_time.date()
     days_to_deadline = (deadline - today).days if deadline else None
     terminal = stage in {"won", "lost", "archived"}
     overdue = days_to_deadline is not None and days_to_deadline < 0
@@ -416,7 +446,37 @@ def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
     owner_required = not str(workflow.get("owner_open_id") or workflow.get("owner_name") or "")
     actionable = not terminal and not overdue
     qualification_blocked = str(qualification.get("status") or "blocked") != "ready"
-    decision_required = str(workflow.get("decision") or "pending") == "pending"
+    decision_required = (
+        stage == "pursuing" and str(workflow.get("decision") or "pending") == "pending"
+    )
+    decision_anchor = _workflow_timestamp(
+        workflow.get("stage_changed_at") or workflow.get("updated_at")
+    )
+    decision_due_at = (
+        decision_anchor + timedelta(hours=decision_sla_hours)
+        if decision_required and decision_anchor
+        else None
+    )
+    decision_remaining_hours = (
+        round((decision_due_at - reference_time).total_seconds() / 3600, 1)
+        if decision_due_at
+        else None
+    )
+    decision_wait_hours = (
+        round(max(0.0, (reference_time - decision_anchor).total_seconds() / 3600), 1)
+        if decision_required and decision_anchor
+        else 0.0
+    )
+    decision_sla_status = "not_applicable"
+    if decision_required:
+        if decision_remaining_hours is None:
+            decision_sla_status = "unknown"
+        elif decision_remaining_hours < 0:
+            decision_sla_status = "overdue"
+        elif decision_remaining_hours <= min(6, max(1, decision_sla_hours // 4)):
+            decision_sla_status = "due_soon"
+        else:
+            decision_sla_status = "on_track"
     priority = {"A": 40, "B": 30, "C": 20, "D": 10}.get(level, 0)
     if actionable and owner_required and level in {"A", "B"}:
         priority += 12
@@ -426,6 +486,10 @@ def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
         priority += 4
     if actionable and not qualification_blocked and decision_required:
         priority += 8
+    if decision_sla_status == "due_soon":
+        priority += 12
+    elif decision_sla_status == "overdue":
+        priority += 24
     if not actionable:
         priority = 0
     return {
@@ -437,15 +501,30 @@ def _opportunity_action_state(item: dict[str, object]) -> dict[str, object]:
         "days_to_deadline": days_to_deadline,
         "qualification_blocked": qualification_blocked,
         "decision_required": decision_required,
+        "decision_sla_status": decision_sla_status,
+        "decision_sla_hours": decision_sla_hours,
+        "decision_wait_hours": decision_wait_hours,
+        "decision_remaining_hours": decision_remaining_hours,
+        "decision_due_at": decision_due_at.isoformat(timespec="minutes") if decision_due_at else "",
     }
 
 
-def _action_queue_summary(items: list[dict[str, object]]) -> dict[str, object]:
+def _action_queue_summary(
+    items: list[dict[str, object]],
+    *,
+    decision_sla_hours: int,
+) -> dict[str, object]:
     stages = {stage: 0 for stage in ("identified", "qualifying", "pursuing", "bidding", "won", "lost", "archived")}
     unowned_priority = 0
     due_soon = 0
     overdue = 0
     collaboration_started = 0
+    qualification_ready = 0
+    qualification_blocked = 0
+    decision_pending = 0
+    decision_overdue = 0
+    decisions = {name: 0 for name in ("go", "hold", "no_go")}
+    escalations: list[dict[str, object]] = []
     deadlines: list[tuple[date, dict[str, object]]] = []
     for item in items:
         workflow = _mapping(item.get("workflow"))
@@ -459,6 +538,27 @@ def _action_queue_summary(items: list[dict[str, object]]) -> dict[str, object]:
         overdue += int(bool(action.get("overdue")))
         if stage != "identified" or workflow.get("feishu_message_id"):
             collaboration_started += 1
+        qualification = _mapping(item.get("qualification"))
+        if qualification.get("status") == "ready":
+            qualification_ready += 1
+        else:
+            qualification_blocked += 1
+        decision = str(workflow.get("decision") or "pending")
+        if decision in decisions:
+            decisions[decision] += 1
+        if action.get("decision_required"):
+            decision_pending += 1
+        if action.get("decision_sla_status") == "overdue":
+            decision_overdue += 1
+            escalations.append(
+                {
+                    "notice_id": str(item.get("notice_id") or ""),
+                    "title": str(item.get("title") or ""),
+                    "owner": str(workflow.get("owner_name") or "待分配"),
+                    "wait_hours": float(action.get("decision_wait_hours") or 0),
+                    "due_at": str(action.get("decision_due_at") or ""),
+                }
+            )
         deadline = _deadline_date(item)
         if deadline and deadline >= date.today():
             deadlines.append((deadline, item))
@@ -472,11 +572,25 @@ def _action_queue_summary(items: list[dict[str, object]]) -> dict[str, object]:
         if deadlines
         else None
     )
+    escalations.sort(key=lambda item: float(item.get("wait_hours") or 0), reverse=True)
+    closed_decisions = decisions["go"] + decisions["no_go"]
+    outcomes = stages["won"] + stages["lost"]
     return {
         "unowned_priority": unowned_priority,
         "due_soon": due_soon,
         "overdue": overdue,
         "collaboration_started": collaboration_started,
+        "qualification_ready": qualification_ready,
+        "qualification_blocked": qualification_blocked,
+        "decision_pending": decision_pending,
+        "decision_overdue": decision_overdue,
+        "decision_sla_hours": decision_sla_hours,
+        "decisions": decisions,
+        "go_rate": round(decisions["go"] / closed_decisions * 100, 1)
+        if closed_decisions
+        else None,
+        "win_rate": round(stages["won"] / outcomes * 100, 1) if outcomes else None,
+        "escalations": escalations,
         "stage_counts": stages,
         "next_deadline": next_deadline,
     }
@@ -490,6 +604,21 @@ def _deadline_date(item: dict[str, object]) -> date | None:
 def _normalized_date(value: object) -> str:
     parsed = parse_date(str(value or ""))
     return parsed.isoformat() if parsed else ""
+
+
+def _workflow_timestamp(value: object) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (
+        parsed.replace(tzinfo=timezone.utc)
+        if parsed.tzinfo is None
+        else parsed.astimezone(timezone.utc)
+    )
 
 
 def _opportunity_score(item: dict[str, object]) -> int:

@@ -81,6 +81,10 @@ class OpportunityApiTests(unittest.TestCase):
                         "/api/opportunities/notice-api-1/actions",
                         json={"action": "prepare_bid", "actor_name": "测试负责人"},
                     )
+                    escalation = client.post(
+                        "/api/opportunities/escalations/send-feishu",
+                        json={},
+                    )
             finally:
                 for key, value in old_env.items():
                     if value is None:
@@ -93,6 +97,8 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(claimed.json()["workflow"]["owner_name"], "测试负责人")
         self.assertEqual(blocked.status_code, 409)
         self.assertIn("当前阶段", blocked.json()["detail"]["reasons"][0])
+        self.assertEqual(escalation.status_code, 200)
+        self.assertEqual(escalation.json()["status"], "skipped")
 
 
 if __name__ == "__main__":

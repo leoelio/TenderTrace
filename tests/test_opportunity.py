@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -8,6 +8,8 @@ from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
 from tendertrace.opportunity import (
+    _action_queue_summary,
+    _opportunity_action_state,
     analyze_opportunity_payload,
     build_market_context,
     enrich_opportunity_intelligence,
@@ -18,6 +20,45 @@ from tendertrace.opportunity import (
 
 
 class OpportunityIntelligenceTests(unittest.TestCase):
+    def test_decision_sla_only_applies_to_pending_pursuit_decisions(self) -> None:
+        item = {
+            "notice_id": "sla-1",
+            "title": "服务器采购项目",
+            "bid_deadline": "2026-08-30",
+            "intelligence": {"level": "A", "score": 90},
+            "qualification": {"status": "ready"},
+            "workflow": {
+                "stage": "pursuing",
+                "decision": "pending",
+                "owner_name": "张三",
+                "stage_changed_at": "2026-08-14T00:00:00+00:00",
+                "updated_at": "2026-08-15T12:00:00+00:00",
+            },
+        }
+
+        action = _opportunity_action_state(
+            item,
+            decision_sla_hours=24,
+            now=datetime(2026, 8, 16, tzinfo=timezone.utc),
+        )
+        item["action_state"] = action
+        summary = _action_queue_summary([item], decision_sla_hours=24)
+
+        self.assertTrue(action["decision_required"])
+        self.assertEqual(action["decision_sla_status"], "overdue")
+        self.assertEqual(action["decision_wait_hours"], 48.0)
+        self.assertEqual(summary["decision_overdue"], 1)
+        self.assertEqual(summary["escalations"][0]["notice_id"], "sla-1")
+
+        item["workflow"]["stage"] = "qualifying"
+        qualifying = _opportunity_action_state(
+            item,
+            decision_sla_hours=24,
+            now=datetime(2026, 8, 16, tzinfo=timezone.utc),
+        )
+        self.assertFalse(qualifying["decision_required"])
+        self.assertEqual(qualifying["decision_sla_status"], "not_applicable")
+
     def test_complete_recent_notice_becomes_actionable_opportunity(self) -> None:
         notice = _notice()
 

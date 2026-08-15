@@ -22,6 +22,11 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.feishu_lead_import_enabled)
         self.assertEqual(settings.feishu_lead_import_cron, "*/15 * * * *")
         self.assertEqual(settings.vector_model, "BAAI/bge-small-zh-v1.5")
+        self.assertEqual(settings.qualification_min_opportunity_score, 65)
+        self.assertEqual(settings.qualification_min_credibility, 60)
+        self.assertEqual(settings.decision_sla_hours, 24)
+        self.assertFalse(settings.opportunity_escalation_enabled)
+        self.assertEqual(settings.opportunity_escalation_cron, "0 9,14 * * 1-5")
         self.assertFalse(settings.api_token_present)
         self.assertIn("openai_key_configured", settings.safe_summary())
         self.assertIn("openai_api_style", settings.safe_summary())
@@ -31,6 +36,38 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.safe_summary()["smtp_password_configured"])
         self.assertFalse(settings.safe_summary()["api_token_configured"])
         self.assertFalse(settings.safe_summary()["feishu_lead_import_enabled"])
+        self.assertEqual(
+            settings.safe_summary()["qualification_policy"]["decision_sla_hours"],
+            24,
+        )
+
+    def test_qualification_policy_is_configurable_and_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_QUALIFICATION_MIN_OPPORTUNITY_SCORE=75\n"
+                "TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=70\n"
+                "TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS=65\n"
+                "TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=50\n"
+                "TENDERTRACE_DECISION_SLA_HOURS=12\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        self.assertEqual(settings.qualification_min_opportunity_score, 75)
+        self.assertEqual(settings.qualification_min_credibility, 70)
+        self.assertEqual(settings.qualification_min_completeness, 65)
+        self.assertEqual(settings.qualification_min_requirement_coverage, 50)
+        self.assertEqual(settings.decision_sla_hours, 12)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=101\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
 
     def test_feishu_lead_import_requires_complete_bitable_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

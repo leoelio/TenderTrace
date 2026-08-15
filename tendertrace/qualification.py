@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
 
+from tendertrace.config import Settings
 from tendertrace.retrieval import parse_date
 
 
@@ -13,6 +14,9 @@ class QualificationPolicy:
     minimum_credibility: int = 60
     minimum_completeness: int = 55
     minimum_requirement_coverage: int = 40
+
+    def to_dict(self) -> dict[str, int]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,15 @@ class QualificationAssessment:
             "evaluated_at": self.evaluated_at,
             "policy": asdict(self.policy),
         }
+
+
+def policy_from_settings(settings: Settings) -> QualificationPolicy:
+    return QualificationPolicy(
+        minimum_opportunity_score=settings.qualification_min_opportunity_score,
+        minimum_credibility=settings.qualification_min_credibility,
+        minimum_completeness=settings.qualification_min_completeness,
+        minimum_requirement_coverage=settings.qualification_min_requirement_coverage,
+    )
 
 
 def assess_qualification(
