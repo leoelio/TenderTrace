@@ -84,7 +84,7 @@ class SourceObservabilityTests(unittest.TestCase):
             source_map = build_source_map(settings)
 
         health = {item["site"]: item["health"] for item in source_map["items"]}
-        self.assertEqual(source_map["source_count"], 7)
+        self.assertEqual(source_map["source_count"], 8)
         self.assertEqual(health["ted"]["runs"], 1)
         self.assertEqual(health["ted"]["hit_runs"], 1)
         self.assertEqual(health["ted"]["notices"], 3)

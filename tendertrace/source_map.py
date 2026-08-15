@@ -8,6 +8,7 @@ from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.ted import TED_SEARCH_API
 from tendertrace.adapters.uk_ocds import CONTRACTS_FINDER_API, FIND_TENDER_API
+from tendertrace.adapters.ungm import UNGM_SEARCH_URL
 from tendertrace.adapters.worldbank import WORLD_BANK_API
 from tendertrace.config import Settings
 from tendertrace.db import connection
@@ -90,6 +91,27 @@ def build_source_map(settings: Settings) -> dict[str, object]:
             discovery_rules={
                 "scope": ["global", "eu"],
                 "authority": "Publications Office of the European Union",
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="ungm",
+            engine="official-public-search",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="ungm-procurement-search",
+                    url=UNGM_SEARCH_URL,
+                    kind="api",
+                    method="POST",
+                )
+            ],
+            health=health.get("ungm", {}),
+            discovery_rules={
+                "scope": ["global"],
+                "authority": "United Nations Global Marketplace",
+                "coverage": "32 UN organizations",
                 "same_domain": True,
             },
         ),

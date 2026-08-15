@@ -133,6 +133,8 @@ class Settings:
     decision_sla_hours: int
     opportunity_escalation_enabled: bool
     opportunity_escalation_cron: str
+    opportunity_briefing_enabled: bool
+    opportunity_briefing_cron: str
     attachment_max_per_notice: int
     attachment_max_bytes: int
     api_token_present: bool
@@ -417,6 +419,18 @@ class Settings:
                 env_files,
                 "0 9,14 * * 1-5",
             ),
+            opportunity_briefing_enabled=_parse_bool(
+                _first_value(
+                    "TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED",
+                    env_files,
+                    "false",
+                )
+            ),
+            opportunity_briefing_cron=_first_value(
+                "TENDERTRACE_OPPORTUNITY_BRIEFING_CRON",
+                env_files,
+                "45 8 * * 1-5",
+            ),
             attachment_max_per_notice=attachment_max_per_notice,
             attachment_max_bytes=attachment_max_bytes,
             api_token_present=_bool_secret_present(api_token),
@@ -504,6 +518,8 @@ class Settings:
                 "decision_sla_hours": self.decision_sla_hours,
                 "escalation_enabled": self.opportunity_escalation_enabled,
                 "escalation_cron": self.opportunity_escalation_cron,
+                "briefing_enabled": self.opportunity_briefing_enabled,
+                "briefing_cron": self.opportunity_briefing_cron,
             },
             "attachment_max_per_notice": self.attachment_max_per_notice,
             "attachment_max_bytes": self.attachment_max_bytes,

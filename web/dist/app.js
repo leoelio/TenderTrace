@@ -92,6 +92,7 @@ const el = {
   refreshRunsButton: document.querySelector("#refreshRunsButton"),
   refreshEvaluationButton: document.querySelector("#refreshEvaluationButton"),
   refreshOpportunitiesButton: document.querySelector("#refreshOpportunitiesButton"),
+  sendOpportunityBriefingButton: document.querySelector("#sendOpportunityBriefingButton"),
   opportunityTopicFilter: document.querySelector("#opportunityTopicFilter"),
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
   opportunitySortSelect: document.querySelector("#opportunitySortSelect"),
@@ -1872,6 +1873,13 @@ function renderFeishuOverview(payload) {
         ? `自动 ${features.decision_escalation.cron}`
         : "机会页手动发送，自动提醒默认关闭",
     ],
+    [
+      "机会经营晨报",
+      features.opportunity_briefing,
+      features.opportunity_briefing?.automation_enabled
+        ? `工作日自动 ${features.opportunity_briefing.cron}`
+        : "机会池、负责人、资格门禁、决策时效与来源风险合并推送",
+    ],
     ["销售任务", features.task_sync, "负责人任务与下一步行动"],
     ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],
     ["状态回调", features.card_callback, "卡片动作回写台账与审计流"],
@@ -2217,6 +2225,19 @@ async function sendOpportunityEscalations() {
     body: JSON.stringify({ force: true }),
   });
   showToast(result.status === "sent" ? `已发送 ${result.escalation_count} 条决策升级` : "当前没有需要发送的超时决策");
+}
+
+async function sendOpportunityBriefing() {
+  const result = await api("/api/opportunities/briefing/send-feishu", {
+    method: "POST",
+    body: JSON.stringify({ force: true }),
+  });
+  await refreshFeishu();
+  showToast(
+    result.status === "sent"
+      ? `机会经营晨报已发送，共 ${result.opportunity_count} 条机会`
+      : "当前机会池为空，未发送晨报",
+  );
 }
 
 async function saveMemoryWeekly() {
@@ -2913,6 +2934,9 @@ function bindEvents() {
   );
   el.refreshOpportunitiesButton?.addEventListener("click", () =>
     refreshOpportunities().catch(toastError("机会情报刷新失败")),
+  );
+  el.sendOpportunityBriefingButton?.addEventListener("click", () =>
+    sendOpportunityBriefing().catch(toastError("机会经营晨报发送失败")),
   );
   el.opportunityLevelFilter?.addEventListener("change", () =>
     refreshOpportunities().catch(toastError("机会情报筛选失败")),

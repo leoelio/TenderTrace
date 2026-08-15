@@ -39,6 +39,7 @@ from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
 )
+from tendertrace.integrations.feishu_briefing import send_opportunity_briefing
 from tendertrace.integrations.feishu_escalation import (
     send_opportunity_escalation_summary,
 )
@@ -264,6 +265,11 @@ def create_app():
                     "automation_enabled": settings.opportunity_escalation_enabled,
                     "cron": settings.opportunity_escalation_cron,
                 },
+                "opportunity_briefing": {
+                    "ready": report_ready,
+                    "automation_enabled": settings.opportunity_briefing_enabled,
+                    "cron": settings.opportunity_briefing_cron,
+                },
                 "task_sync": {"ready": bool(message["configured"])},
                 "deadline_calendar": {
                     "ready": bool(message["configured"] and settings.feishu_calendar_id),
@@ -400,6 +406,26 @@ def create_app():
             event_type="opportunity_escalation_send",
             target=result.artifact_key,
             label=f"{result.escalation_count} 条决策升级",
+            metadata={"status": result.status},
+        )
+        return result.to_dict()
+
+    @app.post("/api/opportunities/briefing/send-feishu")
+    def send_opportunity_management_briefing(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            result = send_opportunity_briefing(
+                settings,
+                force=bool(request.get("force", False)),
+            )
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="opportunity_briefing_send",
+            target=result.artifact_key,
+            label=f"{result.opportunity_count} 条机会经营晨报",
             metadata={"status": result.status},
         )
         return result.to_dict()

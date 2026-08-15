@@ -85,6 +85,20 @@ class OpportunityApiTests(unittest.TestCase):
                         "/api/opportunities/escalations/send-feishu",
                         json={},
                     )
+                    with patch.object(
+                        api_module,
+                        "send_opportunity_briefing",
+                        return_value=SimpleNamespace(
+                            status="skipped",
+                            artifact_key="",
+                            opportunity_count=0,
+                            to_dict=lambda: {"status": "skipped", "opportunity_count": 0},
+                        ),
+                    ):
+                        briefing = client.post(
+                            "/api/opportunities/briefing/send-feishu",
+                            json={},
+                        )
             finally:
                 for key, value in old_env.items():
                     if value is None:
@@ -99,6 +113,8 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertIn("当前阶段", blocked.json()["detail"]["reasons"][0])
         self.assertEqual(escalation.status_code, 200)
         self.assertEqual(escalation.json()["status"], "skipped")
+        self.assertEqual(briefing.status_code, 200)
+        self.assertEqual(briefing.json()["status"], "skipped")
 
 
 if __name__ == "__main__":

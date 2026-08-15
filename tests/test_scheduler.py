@@ -9,6 +9,7 @@ from tendertrace.scheduling.scheduler import (
     schedule_feishu_lead_import,
     schedule_ingest_pool,
     schedule_ingest_subscription,
+    schedule_opportunity_briefing,
     schedule_opportunity_escalation,
     schedule_subscription,
 )
@@ -124,6 +125,23 @@ class SchedulerTests(unittest.TestCase):
 
         job = scheduler.jobs[0]["kwargs"]
         self.assertEqual(job["id"], "feishu:opportunity-escalation")
+        self.assertTrue(job["replace_existing"])
+        self.assertTrue(job["coalesce"])
+
+    def test_opportunity_briefing_registers_configured_cron_job(self) -> None:
+        scheduler = FakeScheduler()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=30 8 * * 1-5\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        schedule_opportunity_briefing(scheduler, settings)
+
+        job = scheduler.jobs[0]["kwargs"]
+        self.assertEqual(job["id"], "feishu:opportunity-briefing")
         self.assertTrue(job["replace_existing"])
         self.assertTrue(job["coalesce"])
 

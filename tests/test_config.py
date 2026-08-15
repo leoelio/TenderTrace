@@ -27,6 +27,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.decision_sla_hours, 24)
         self.assertFalse(settings.opportunity_escalation_enabled)
         self.assertEqual(settings.opportunity_escalation_cron, "0 9,14 * * 1-5")
+        self.assertFalse(settings.opportunity_briefing_enabled)
+        self.assertEqual(settings.opportunity_briefing_cron, "45 8 * * 1-5")
         self.assertFalse(settings.api_token_present)
         self.assertIn("openai_key_configured", settings.safe_summary())
         self.assertIn("openai_api_style", settings.safe_summary())
@@ -40,6 +42,22 @@ class SettingsTests(unittest.TestCase):
             settings.safe_summary()["qualification_policy"]["decision_sla_hours"],
             24,
         )
+        self.assertFalse(
+            settings.safe_summary()["qualification_policy"]["briefing_enabled"]
+        )
+
+    def test_opportunity_briefing_schedule_is_configurable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true\n"
+                "TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=15 8 * * 1-5\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        self.assertTrue(settings.opportunity_briefing_enabled)
+        self.assertEqual(settings.opportunity_briefing_cron, "15 8 * * 1-5")
 
     def test_qualification_policy_is_configurable_and_validated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

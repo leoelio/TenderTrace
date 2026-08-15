@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P32</strong> · Official OCDS Sources · Resilient Fetching · Bidirectional Feishu
+  <strong>Current stage: P33</strong> · UN Procurement · Opportunity Briefing · Enterprise Glass UI
 </p>
 
 ---
@@ -26,7 +26,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 ## 核心能力
 
 - 自然语言意图解析：识别主题、同义词、地区、省市区、时间范围、发送频率。
-- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、世界银行，以及英国 Contracts Finder / Find a Tender 官方 OCDS API，共 7 个来源。
+- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、UNGM、世界银行，以及英国 Contracts Finder / Find a Tender 官方 OCDS API，共 8 个来源；UNGM 一处覆盖 32 个联合国组织。
 - 范围路由：国内、省市查询只启用国内源；英国、欧盟、世界银行、全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
 - 托管抓取：统一阻断识别、`Retry-After`、指数退避、HTTP 优先、Playwright 动态页恢复、静态资源拦截、批量详情抓取和页面快照。
 - 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码。
@@ -41,6 +41,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
 - 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分和需求覆盖形成可解释门禁；阈值由运行配置管理，只有阶段与资料条件同时满足才允许推进。
 - 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；策略制定阶段按独立阶段时钟执行决策 SLA，超时进入管理升级队列，可手动或定时发送幂等飞书摘要。
+- 机会经营晨报：把机会等级、负责人缺口、资格门禁、截止时间、决策 SLA、市场信号和来源健康合并成可操作飞书卡片；支持工作日自动发送、同日状态去重和卡片内直接推进机会。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
 - 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
@@ -183,6 +184,8 @@ TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=40
 TENDERTRACE_DECISION_SLA_HOURS=24
 TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
 TENDERTRACE_OPPORTUNITY_ESCALATION_CRON=0 9,14 * * 1-5
+TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=false
+TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=45 8 * * 1-5
 
 # 可选飞书消息/群聊接口。
 FEISHU_ENABLED=false
@@ -332,6 +335,7 @@ python -m tendertrace embed-notices
 - `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
 - `POST /api/opportunities/{notice_id}/actions`：执行带阶段和资格门禁的认领、确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
 - `POST /api/opportunities/escalations/send-feishu`：发送当前决策 SLA 超时摘要；自动任务按每日机会集合去重。
+- `POST /api/opportunities/briefing/send-feishu`：发送机会经营晨报，汇总机会池、负责人、资格、决策、市场和来源风险；自动任务按同日机会状态去重。
 - `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态并同步多维表格。
 - `POST /api/integrations/feishu/events`：接收飞书消息事件，校验令牌、去重后异步执行自然语言查询或创建订阅。
 - `GET /api/integrations/feishu/message-events`：查看飞书会话指令的运行、订阅、失败与恢复审计。
@@ -339,6 +343,8 @@ python -m tendertrace embed-notices
 设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232025`，需要先在应用后台启用机器人能力并发布新版本；若返回 `232034`，需要确认当前租户已经安装已发布应用。
 
 机会协同使用公告 ID 生成任务 `client_token` 与日程 `idempotency_key`，重复同步不会重复创建任务或日程。启用截止日程需配置 `FEISHU_CALENDAR_ID`；启用卡片动作需配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，并在飞书开发者后台把可公网访问的 `/api/integrations/feishu/callback` 注册为回调地址。本地 `127.0.0.1` 不能直接接收飞书云端回调。
+
+机会经营晨报默认关闭自动发送。设置 `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` 汇总本地真实机会与来源健康记录并投递到默认会话；Web 机会情报页也可手动触发。卡片中的认领、确认、Go 和投标准备动作复用同一套状态图、资格门禁和回调审计，不维护第二份流程状态。
 
 飞书会话也可以直接作为 TenderTrace 的自然语言入口。为自建应用启用机器人能力并订阅 `im.message.receive_v1` 与 `card.action.trigger` 后，安装可选依赖 `python -m pip install -e .[feishu]`，运行 `python -m tendertrace feishu-bot-listen` 即可通过官方长连接接收消息和机会卡片动作，无需把本地服务暴露到公网。即时问题会运行检索、生成 Word 并回传原会话；带发送时间或频率的问题会创建绑定原会话的增量订阅。事件先写入 `feishu_message_events`，以 `event_id` 和 `message_id` 双重去重，进程重启时会恢复未处理或超时任务。启用 `TENDERTRACE_SCHEDULER_ENABLED` 时，该 CLI 同时承担订阅调度；同一数据库只能运行一个启用调度器的进程。
 
@@ -372,8 +378,8 @@ Web UI 覆盖以下视图：
 - 数据源：查看公开源、千里马登录态、入口路由、发现规则，以及命中率、延迟和可靠性等来源健康指标。
 - Agent 评测：分开展示人工金标用例与意图 Harness；金标完整后才给出严格 Recall 验收状态。
 - 用户记忆：查看使用画像、知识偏好、风险信号和生成式行动建议。
-- 机会情报：按行动优先、截止时间或发布时间排序，查看待认领/临期队列和市场基准，并在详情弹窗中研判竞争者、需求覆盖、证据边界、风险与角色行动。
-- 设置：查看运行配置，以及飞书报告、台账、机会卡片、任务、截止日程、状态回调和智能体能力矩阵。
+- 机会情报：按行动优先、截止时间或发布时间排序，查看待认领/临期队列和市场基准，在详情弹窗中研判竞争者、需求覆盖、证据边界、风险与角色行动，并可发送经营晨报。
+- 设置：查看运行配置，以及飞书报告、台账、机会卡片、经营晨报、任务、截止日程、状态回调和智能体能力矩阵。
 
 ## 本地库检索流程
 
@@ -474,7 +480,7 @@ The current architecture is local-first: background ingestion continuously store
 ## Key Features
 
 - Natural-language intent parsing for topic, synonyms, region, time range, and delivery schedule.
-- Seven-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, World Bank, and the official UK Contracts Finder / Find a Tender OCDS APIs.
+- Eight-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, UNGM, World Bank, and the official UK Contracts Finder / Find a Tender OCDS APIs. UNGM adds procurement coverage across 32 UN organizations.
 - Scope-aware routing that keeps domestic queries on domestic sources and activates the matching UK, EU, World Bank, or global sources only when requested.
 - Managed fetching with `Retry-After`, exponential backoff, block detection, HTTP-first execution, resource-light Playwright recovery, and traceable fetch statistics.
 - Login-state vault based on Playwright `storage_state`; credentials are never stored in code.
@@ -489,6 +495,7 @@ The current architecture is local-first: background ingestion continuously store
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
 - Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
 - Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. A stage-specific decision clock drives SLA escalation queues and deduplicated manual or scheduled Feishu summaries.
+- Actionable Feishu opportunity briefings that combine grade, owner gaps, qualification gates, deadlines, decision SLA, market signals, and source health, with weekday automation, daily state deduplication, and in-card workflow actions.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
 - Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
@@ -623,6 +630,8 @@ TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=40
 TENDERTRACE_DECISION_SLA_HOURS=24
 TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
 TENDERTRACE_OPPORTUNITY_ESCALATION_CRON=0 9,14 * * 1-5
+TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=false
+TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=45 8 * * 1-5
 ```
 
 Model modes:
@@ -743,6 +752,7 @@ Available Web APIs:
 - `GET /api/opportunities/{notice_id}/workflow`: inspect the owner, sales stage, and Feishu artifact state.
 - `POST /api/opportunities/{notice_id}/actions`: execute stage- and qualification-gated claim, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions.
 - `POST /api/opportunities/escalations/send-feishu`: send the current overdue decision summary with daily escalation-set deduplication.
+- `POST /api/opportunities/briefing/send-feishu`: send an opportunity operations briefing that combines pipeline, ownership, qualification, decision, market, and source-risk context.
 - `POST /api/integrations/feishu/callback`: verify card callbacks, advance the opportunity stage, and update Bitable.
 - `POST /api/integrations/feishu/events`: verify, deduplicate, and asynchronously execute inbound Feishu text commands.
 - `GET /api/integrations/feishu/message-events`: inspect inbound run, subscription, failure, and recovery audits.
@@ -750,6 +760,8 @@ Available Web APIs:
 The Feishu connection center can select a default chat from the bot's visible chats. Queries and subscriptions can opt into automatic Word delivery, while every success or failure is written to the local delivery ledger. Error `232025` means bot capability must be enabled and a new app version published; error `232034` means the published app is not installed in the current tenant.
 
 Task `client_token` and calendar `idempotency_key` values are derived from the notice ID, so repeated synchronization does not duplicate those artifacts. Set `FEISHU_CALENDAR_ID` to enable deadline events. Set `FEISHU_CALLBACK_VERIFICATION_TOKEN` and register the publicly reachable `/api/integrations/feishu/callback` endpoint in Feishu Developer Console to enable card actions; a local `127.0.0.1` URL is not reachable from Feishu Cloud.
+
+Scheduled opportunity briefings are disabled by default. Set `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` and configure `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` to deliver a state-deduplicated weekday briefing to the default chat. The Web Opportunity Intelligence view can also trigger it manually. Claim, qualify, Go, and bid-preparation buttons reuse the same workflow graph, qualification gates, callback handler, and audit stream as the Web UI.
 
 Feishu conversations can also be the native natural-language entry point. Enable the bot capability, subscribe to `im.message.receive_v1`, install the optional dependency with `python -m pip install -e .[feishu]`, then run `python -m tendertrace feishu-bot-listen`. The official long connection does not require exposing the local service. Immediate questions run retrieval, generate Word, and deliver it to the originating chat; questions containing a delivery time or cadence create an incremental subscription bound to that chat. Every event is persisted and deduplicated by both event and message ID, and unfinished or stale work is recovered after restart. When `TENDERTRACE_SCHEDULER_ENABLED` is enabled, this CLI also owns subscription scheduling; only one scheduler-enabled process may use a given database.
 
@@ -777,8 +789,8 @@ The Web UI includes:
 - Data sources: inspect public sources and Qianlima login-state status.
 - Agent evaluation: inspect RAG, agent, harness, recall, gold-set metrics, and vector coverage.
 - User memory: inspect usage profiles, knowledge preferences, risk signals, and generated next-step advice.
-- Opportunity intelligence: filter by procurement category and grade, inspect market benchmarks, and open a detailed evidence, competition, requirement, risk, and role-action review.
-- Settings: inspect runtime plus Feishu report, Bitable, opportunity-card, task, deadline-calendar, callback, and agent readiness.
+- Opportunity intelligence: filter by procurement category and grade, inspect market benchmarks, open detailed evidence and competition reviews, and send the management briefing.
+- Settings: inspect runtime plus Feishu report, Bitable, opportunity card, operations briefing, task, deadline calendar, callback, and agent readiness.
 
 ## Local-First Retrieval Flow
 

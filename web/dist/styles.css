@@ -4836,3 +4836,269 @@ body.theme-dark .setting-tile {
     width: calc(100% - 20px);
   }
 }
+
+/* Material clarity pass: premium translucency without sacrificing data legibility. */
+:root {
+  --glass-surface: rgba(255, 255, 255, 0.72);
+  --glass-raised: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(106, 124, 149, 0.22);
+  --glass-highlight: rgba(255, 255, 255, 0.84);
+  --focus-ring: rgba(18, 101, 214, 0.13);
+}
+
+body {
+  background: linear-gradient(145deg, #e9eef5 0%, #f8fafc 45%, #eef3f1 100%) fixed;
+}
+
+body::before {
+  display: none;
+}
+
+.topbar {
+  border-bottom-color: var(--glass-border);
+  background: rgba(248, 250, 253, 0.68);
+  box-shadow: 0 1px 0 var(--glass-highlight), 0 10px 32px rgba(36, 52, 76, 0.06);
+  backdrop-filter: saturate(165%) blur(28px);
+  -webkit-backdrop-filter: saturate(165%) blur(28px);
+}
+
+.panel,
+.topbar-popover,
+.opportunity-detail-dialog,
+.toast,
+.app-footer {
+  border-color: var(--glass-border);
+  background: var(--glass-surface);
+  box-shadow: 0 16px 42px rgba(35, 52, 77, 0.075), inset 0 1px 0 var(--glass-highlight);
+  backdrop-filter: saturate(145%) blur(24px);
+  -webkit-backdrop-filter: saturate(145%) blur(24px);
+}
+
+.panel-heading,
+.section-heading {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.panel-heading .action-group,
+.section-heading .action-group {
+  align-items: center;
+}
+
+.panel-heading select,
+.panel-heading button,
+.panel-heading a,
+.section-heading button {
+  min-height: 34px;
+}
+
+.nav-tab,
+.primary-button,
+.primary-lite-button,
+.ghost-button,
+.danger-button,
+.icon-button,
+.user-chip,
+select,
+input,
+textarea {
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.nav-tab.active {
+  border-color: rgba(18, 101, 214, 0.18);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 5px 16px rgba(29, 66, 115, 0.09), inset 0 1px 0 #fff;
+}
+
+.ghost-button,
+.link-button,
+.primary-lite-button,
+select,
+input[type="time"],
+input[type="number"],
+.search-field input {
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.ghost-button:hover,
+.link-button:hover {
+  border-color: rgba(18, 101, 214, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.chat-stream,
+.composer,
+.list-tools,
+.metrics,
+.feishu-center {
+  background: rgba(247, 249, 252, 0.48);
+}
+
+.bubble,
+.smart-start,
+.download-strip,
+.eval-card,
+.setting-tile,
+.source-row {
+  border-color: var(--line-soft);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 7px 20px rgba(38, 55, 80, 0.035);
+}
+
+.opportunity-panel .panel-heading {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.opportunity-panel .panel-heading .action-group {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.opportunity-summary,
+.opportunity-decision-board,
+.opportunity-market,
+.opportunity-ledger-head {
+  background: rgba(248, 250, 252, 0.64);
+}
+
+.opportunity-summary .summary-tile,
+.opportunity-decision-board > section,
+.opportunity-market > div {
+  background: transparent;
+}
+
+.opportunity-ledger-head {
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.opportunity-row {
+  border-top: 0;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.opportunity-row:last-child {
+  border-bottom: 0;
+}
+
+.opportunity-row:hover {
+  background: rgba(235, 243, 253, 0.74);
+  box-shadow: inset 3px 0 0 rgba(18, 101, 214, 0.5);
+}
+
+.table-wrap,
+.integration-list {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.38);
+}
+
+th {
+  background: rgba(242, 246, 250, 0.88);
+}
+
+tbody tr {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(247, 249, 252, 0.54);
+}
+
+.integration-row {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.integration-row:hover {
+  background: rgba(235, 243, 253, 0.62);
+}
+
+body.theme-dark {
+  --glass-surface: rgba(23, 32, 43, 0.76);
+  --glass-raised: rgba(29, 40, 54, 0.88);
+  --glass-border: rgba(157, 176, 201, 0.2);
+  --glass-highlight: rgba(255, 255, 255, 0.08);
+  --focus-ring: rgba(106, 162, 255, 0.2);
+  background: linear-gradient(145deg, #10171f 0%, #17202b 48%, #10201d 100%) fixed;
+}
+
+body.theme-dark .panel-heading,
+body.theme-dark .section-heading,
+body.theme-dark .opportunity-summary,
+body.theme-dark .opportunity-decision-board,
+body.theme-dark .opportunity-market,
+body.theme-dark .opportunity-ledger-head,
+body.theme-dark .opportunity-row,
+body.theme-dark .integration-row,
+body.theme-dark tbody tr {
+  background: rgba(26, 36, 49, 0.7);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .topbar,
+  .panel,
+  .topbar-popover,
+  .opportunity-detail-dialog,
+  .toast,
+  .app-footer {
+    background: var(--surface-solid);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .opportunity-panel .panel-heading .action-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .opportunity-panel #opportunityLevelFilter,
+  .opportunity-panel #opportunityTopicFilter,
+  .opportunity-panel #opportunitySortSelect {
+    width: min(180px, calc(50% - 4px));
+  }
+}
+
+@media (max-width: 700px) {
+  .page {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .panel,
+  .topbar-popover,
+  .opportunity-detail-dialog {
+    backdrop-filter: saturate(130%) blur(18px);
+    -webkit-backdrop-filter: saturate(130%) blur(18px);
+  }
+
+  .opportunity-panel .panel-heading .action-group > * {
+    min-width: 0;
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .opportunity-panel #opportunityLevelFilter,
+  .opportunity-panel #opportunityTopicFilter,
+  .opportunity-panel #opportunitySortSelect {
+    width: auto;
+  }
+}
