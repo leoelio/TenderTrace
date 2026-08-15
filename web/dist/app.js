@@ -258,6 +258,7 @@ function statusLabel(status) {
     deleted: "已删除",
     configured: "正常",
     login_required: "需登录",
+    login_expired: "登录过期",
     pass: "通过",
     incomplete: "未就绪",
     warn: "提醒",

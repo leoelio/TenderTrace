@@ -7,8 +7,11 @@ from tendertrace.config import Settings
 from tendertrace.fetching import FetchResult
 from tendertrace.vault.qianlima import (
     QianlimaSessionVault,
+    build_member_search_url,
+    login_session_expired,
     parse_rendered_detail,
     parse_rendered_search,
+    qianlima_auth_failure,
 )
 
 
@@ -78,6 +81,45 @@ class QianlimaVaultTests(unittest.TestCase):
         self.assertEqual(notices[0].source_site, "qianlima")
         self.assertEqual(notices[0].fields["collector"], "playwright")
         self.assertTrue(notices[0].fields["cluster_key"].startswith("qianlima:"))
+
+    def test_member_search_url_encodes_dynamic_keyword(self) -> None:
+        url = build_member_search_url("服务器 存储")
+
+        self.assertEqual(
+            url,
+            "https://search.vip.qianlima.com/?keywords=%E6%9C%8D%E5%8A%A1%E5%99%A8+%E5%AD%98%E5%82%A8",
+        )
+
+    def test_search_parser_rejects_navigation_and_external_links(self) -> None:
+        html = """
+        <html><body>
+          <a href="https://example.com/bid-123.html">外部网站服务器采购公告</a>
+          <a href="https://www.qianlima.com/about.html">千里马网站服务介绍页面</a>
+          <a href="https://www.qianlima.com/bid-622632729.html">内蒙古充电桩建设项目采购公告</a>
+        </body></html>
+        """
+
+        notices = parse_rendered_search(html)
+
+        self.assertEqual(len(notices), 1)
+        self.assertEqual(
+            notices[0].source_url,
+            "https://www.qianlima.com/bid-622632729.html",
+        )
+
+    def test_expired_login_marker_is_specific(self) -> None:
+        self.assertTrue(login_session_expired("<div>提示：登录状态超时，请重新登录!</div>"))
+        self.assertFalse(login_session_expired('<a class="login-btn">有效公告详情</a>'))
+
+    def test_member_api_auth_failure_requires_qianlima_rest_endpoint(self) -> None:
+        self.assertTrue(
+            qianlima_auth_failure(
+                401,
+                "https://search.vip.qianlima.com/rest/service/website/search/solr",
+            )
+        )
+        self.assertFalse(qianlima_auth_failure(200, "https://search.vip.qianlima.com/rest/x"))
+        self.assertFalse(qianlima_auth_failure(401, "https://example.com/rest/x"))
 
     def test_parse_rendered_detail_enriches_login_source_notice(self) -> None:
         notice = parse_rendered_search(

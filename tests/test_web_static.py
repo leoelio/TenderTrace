@@ -123,6 +123,7 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("applyExampleQuery", js)
         self.assertIn("normalizeWorkbenchLayout", js)
         self.assertIn("source-health-grid", js)
+        self.assertIn('login_expired: "登录过期"', js)
         self.assertIn("发现规则", js)
         self.assertIn("autoSelectActionMode", js)
         self.assertIn("hasScheduledIntent", js)

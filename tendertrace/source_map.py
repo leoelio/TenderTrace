@@ -12,7 +12,7 @@ from tendertrace.adapters.ungm import UNGM_SEARCH_URL
 from tendertrace.adapters.worldbank import WORLD_BANK_API
 from tendertrace.config import Settings
 from tendertrace.db import connection
-from tendertrace.vault.qianlima import QIANLIMA_SEARCH_URL, QianlimaSessionVault
+from tendertrace.vault.qianlima import QIANLIMA_MEMBER_SEARCH_URL, QianlimaSessionVault
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,9 @@ def build_source_map(settings: Settings) -> dict[str, object]:
     health = source_health(settings)
     qianlima = QianlimaSessionVault(settings)
     qianlima_status = qianlima.status()
+    qianlima_health = health.get("qianlima", {})
+    qianlima_expired = _qianlima_login_expired(qianlima_health)
+    qianlima_ready = qianlima_status.ready and not qianlima_expired
     items = [
         SourceMapItem(
             site="ccgp",
@@ -167,22 +170,44 @@ def build_source_map(settings: Settings) -> dict[str, object]:
         SourceMapItem(
             site="qianlima",
             engine="playwright+storage-state",
-            status="configured" if qianlima_status.ready else "login_required",
+            status=(
+                "configured"
+                if qianlima_ready
+                else "login_expired"
+                if qianlima_expired
+                else "login_required"
+            ),
             requires_login=True,
-            routes=[SourceMapRoute(name="qianlima-search", url=QIANLIMA_SEARCH_URL, kind="search")],
-            health=health.get("qianlima", {}),
+            routes=[
+                SourceMapRoute(
+                    name="qianlima-member-search",
+                    url=QIANLIMA_MEMBER_SEARCH_URL,
+                    kind="search",
+                )
+            ],
+            health=qianlima_health,
             discovery_rules={
-                "allow": [r"/notice/", r"/spxm/", r"\.(pdf|docx?|xlsx?|zip|rar)$"],
+                "allow": [r"/bid-\d+\.html$", r"/notice/", r"\.(pdf|docx?|xlsx?|zip|rar)$"],
                 "deny": [r"/login", r"/register"],
                 "same_domain": False,
             },
         ),
     ]
+    qianlima_payload = qianlima_status.to_dict()
+    qianlima_payload["storage_state_ready"] = qianlima_status.ready
+    if qianlima_expired:
+        qianlima_payload.update(
+            {
+                "ready": False,
+                "validation": "expired",
+                "detail": "登录态已过期，请运行 python -m tendertrace login-qianlima 重新保存",
+            }
+        )
     return {
         "items": [item.to_dict() for item in items],
         "source_count": len(items),
-        "login_source_ready": qianlima_status.ready,
-        "qianlima": qianlima_status.to_dict(),
+        "login_source_ready": qianlima_ready,
+        "qianlima": qianlima_payload,
     }
 
 
@@ -238,7 +263,7 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
             fetch_stats = item.get("fetch_stats")
             if isinstance(fetch_stats, dict):
                 _merge_fetch_stats(bucket, fetch_stats)
-            if item.get("error"):
+            if item.get("error") and not bucket["last_error"]:
                 bucket["last_error"] = str(item["error"])
     for site, count in artifact_counts.items():
         bucket = health.setdefault(site, _empty_health())
@@ -336,8 +361,13 @@ def _merge_fetch_stats(bucket: dict[str, object], fetch_stats: dict[str, Any]) -
             (int(bucket["avg_elapsed_ms"]) * previous_requests + incoming_avg * incoming_requests)
             / total_requests
         )
-    if fetch_stats.get("last_error"):
+    if fetch_stats.get("last_error") and not bucket["last_error"]:
         bucket["last_error"] = str(fetch_stats["last_error"])
+
+
+def _qianlima_login_expired(health: dict[str, object]) -> bool:
+    error = str(health.get("last_error") or "").casefold()
+    return "qianlima login session expired" in error
 
 
 def _loads(value: str) -> dict[str, Any]:

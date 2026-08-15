@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from tendertrace.config import Settings
-from tendertrace.db import init_db
+from tendertrace.db import connection, init_db
 from tendertrace.runlog import finish_run, start_run
 from tendertrace.source_map import build_source_map
 
@@ -97,6 +97,59 @@ class SourceObservabilityTests(unittest.TestCase):
         self.assertEqual(health["qianlima"]["health_status"], "degraded")
         self.assertEqual(health["ggzy"]["runs"], 2)
         self.assertEqual(health["ggzy"]["hit_rate"], 0.5)
+
+    def test_latest_login_failure_marks_saved_session_expired(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            settings.ensure_directories()
+            (settings.secrets_dir / "qianlima_storage_state.json").write_text(
+                '{"cookies":[{"domain":".qianlima.com","name":"session","value":"hidden"}],"origins":[]}',
+                encoding="utf-8",
+            )
+            for run_id, error in (
+                ("run-old", "TimeoutError: old network timeout"),
+                (
+                    "run-new",
+                    "RuntimeError: qianlima login session expired; run login-qianlima again",
+                ),
+            ):
+                start_run(settings, run_id=run_id, original_query="上海服务器采购", mode="full")
+                finish_run(
+                    settings,
+                    run_id=run_id,
+                    status="finished",
+                    output_docx_path=None,
+                    stats={
+                        "source_stats": [
+                            {
+                                "source": "qianlima",
+                                "status": "failed",
+                                "count": 0,
+                                "error": error,
+                            }
+                        ]
+                    },
+                )
+            with connection(settings) as conn:
+                conn.execute(
+                    "UPDATE runs SET started_at = ? WHERE id = ?",
+                    ("2026-08-15 08:00:00", "run-old"),
+                )
+                conn.execute(
+                    "UPDATE runs SET started_at = ? WHERE id = ?",
+                    ("2026-08-16 08:00:00", "run-new"),
+                )
+
+            source_map = build_source_map(settings)
+
+        qianlima = next(item for item in source_map["items"] if item["site"] == "qianlima")
+        self.assertEqual(qianlima["status"], "login_expired")
+        self.assertFalse(source_map["login_source_ready"])
+        self.assertTrue(source_map["qianlima"]["storage_state_ready"])
+        self.assertFalse(source_map["qianlima"]["ready"])
+        self.assertEqual(source_map["qianlima"]["validation"], "expired")
+        self.assertIn("login session expired", qianlima["health"]["last_error"])
 
 
 if __name__ == "__main__":

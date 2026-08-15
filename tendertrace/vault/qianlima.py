@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -7,7 +8,7 @@ import json
 import re
 import time
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin, urlparse
 
 from selectolax.parser import HTMLParser
 
@@ -26,6 +27,7 @@ from tendertrace.pipeline.artifacts import page_artifact_from_fetch
 
 QIANLIMA_HOME_URL = "https://www.qianlima.com/"
 QIANLIMA_SEARCH_URL = "https://search.qianlima.com/spxm/index.html"
+QIANLIMA_MEMBER_SEARCH_URL = "https://search.vip.qianlima.com/"
 
 
 @dataclass(frozen=True)
@@ -104,16 +106,26 @@ class QianlimaSessionVault:
             ) from exc
 
         try:
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(headless=True)
+            with (
+                sync_playwright() as playwright,
+                closing(playwright.chromium.launch(headless=True)) as browser,
+            ):
                 context = browser.new_context(storage_state=str(self.storage_state_path))
                 page = context.new_page()
-                page.goto(QIANLIMA_SEARCH_URL, wait_until="domcontentloaded", timeout=timeout_ms)
-                html = page.content()
-                browser.close()
+                _block_static_assets(page)
+                html, _, _, auth_failed = _load_rendered_page(
+                    page,
+                    build_member_search_url("招标"),
+                    timeout_ms=timeout_ms,
+                )
         except Exception as exc:
             return {"status": "fail", "detail": f"{type(exc).__name__}: {exc}"}
 
+        if auth_failed or login_session_expired(html):
+            return {
+                "status": "fail",
+                "detail": "saved qianlima login session expired; run login-qianlima again",
+            }
         notices = parse_rendered_search(html)
         if notices:
             return {
@@ -179,71 +191,90 @@ class QianlimaAdapter:
 
         keyword = _topic_keyword(bidql)
         stats = FetchStats()
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            context = browser.new_context(storage_state=str(self.vault.storage_state_path))
-            page = context.new_page()
-            started = time.monotonic()
-            page.goto(QIANLIMA_SEARCH_URL, wait_until="domcontentloaded", timeout=self.timeout_ms)
-            html = page.content()
-            stats.record(
-                _rendered_fetch_result(
-                    QIANLIMA_SEARCH_URL,
-                    final_url=page.url,
+        try:
+            with (
+                sync_playwright() as playwright,
+                closing(playwright.chromium.launch(headless=True)) as browser,
+            ):
+                context = browser.new_context(storage_state=str(self.vault.storage_state_path))
+                page = context.new_page()
+                _block_static_assets(page)
+                started = time.monotonic()
+                search_url = build_member_search_url(keyword)
+                html, final_url, status_code, auth_failed = _load_rendered_page(
+                    page,
+                    search_url,
+                    timeout_ms=self.timeout_ms,
+                )
+                session_expired = auth_failed or login_session_expired(html)
+                search_result = _rendered_fetch_result(
+                    search_url,
+                    final_url=final_url,
                     html=html,
                     elapsed_ms=_elapsed_ms(started),
+                    status_code=status_code,
+                    blocked=session_expired,
+                    error="qianlima member APIs rejected saved session" if auth_failed else "",
                 )
-            )
-            candidates = parse_rendered_search(html, keyword=keyword)[
-                : max(max_pages, 1) * max_results
-            ]
-            enriched: list[Notice] = []
-            for notice in candidates:
-                started = time.monotonic()
-                try:
-                    response = page.goto(
-                        notice.source_url,
-                        wait_until="domcontentloaded",
-                        timeout=self.timeout_ms,
+                stats.record(search_result)
+                if session_expired:
+                    raise RuntimeError(
+                        "qianlima login session expired; run login-qianlima again"
                     )
-                    detail_html = page.content()
-                    fetch_result = _rendered_fetch_result(
-                        notice.source_url,
-                        final_url=page.url,
-                        html=detail_html,
-                        elapsed_ms=_elapsed_ms(started),
-                        status_code=response.status if response is not None else 200,
-                    )
-                    stats.record(fetch_result)
-                    enriched.append(parse_rendered_detail(notice, detail_html, fetch_result))
-                except Exception as exc:
-                    stats.record(
-                        FetchResult(
-                            url=notice.source_url,
-                            final_url=notice.source_url,
-                            method="GET",
-                            status_code=0,
-                            text="",
-                            content_type="text/html",
-                            fetched_at=_now_iso(),
+                candidates = parse_rendered_search(html)[: max(max_pages, 1) * max_results]
+                enriched: list[Notice] = []
+                for notice in candidates:
+                    started = time.monotonic()
+                    try:
+                        detail_html, detail_url, detail_status, _ = _load_rendered_page(
+                            page,
+                            notice.source_url,
+                            timeout_ms=self.timeout_ms,
+                        )
+                        fetch_result = _rendered_fetch_result(
+                            notice.source_url,
+                            final_url=detail_url,
+                            html=detail_html,
                             elapsed_ms=_elapsed_ms(started),
-                            attempt_count=1,
-                            fetcher="playwright",
-                            error=f"{type(exc).__name__}: {exc}",
+                            status_code=detail_status,
                         )
-                    )
-                    enriched.append(
-                        Notice(
-                            **{
-                                **notice.to_dict(),
-                                "attachments": notice.attachments,
-                                "fields": {**notice.fields, "detail_error": str(exc)},
-                            }
+                        stats.record(fetch_result)
+                        enriched.append(parse_rendered_detail(notice, detail_html, fetch_result))
+                    except Exception as exc:
+                        stats.record(
+                            FetchResult(
+                                url=notice.source_url,
+                                final_url=notice.source_url,
+                                method="GET",
+                                status_code=0,
+                                text="",
+                                content_type="text/html",
+                                fetched_at=_now_iso(),
+                                elapsed_ms=_elapsed_ms(started),
+                                attempt_count=1,
+                                fetcher="playwright",
+                                error=f"{type(exc).__name__}: {exc}",
+                            )
                         )
-                    )
-            browser.close()
-        self.last_fetch_stats = stats.to_dict()
+                        enriched.append(
+                            Notice(
+                                **{
+                                    **notice.to_dict(),
+                                    "attachments": notice.attachments,
+                                    "fields": {**notice.fields, "detail_error": str(exc)},
+                                }
+                            )
+                        )
+        finally:
+            self.last_fetch_stats = stats.to_dict()
         return [notice for notice in enriched if _matches_bidql(notice, bidql)][:max_results]
+
+
+def build_member_search_url(keyword: str) -> str:
+    term = keyword.strip()
+    if not term:
+        return QIANLIMA_MEMBER_SEARCH_URL
+    return f"{QIANLIMA_MEMBER_SEARCH_URL}?{urlencode({'keywords': term})}"
 
 
 def parse_rendered_search(html: str, *, keyword: str = "") -> list[Notice]:
@@ -265,7 +296,7 @@ def parse_rendered_search(html: str, *, keyword: str = "") -> list[Notice]:
             source_url = href
         else:
             source_url = f"https://search.qianlima.com{href}"
-        if source_url in seen:
+        if not _is_notice_url(source_url) or source_url in seen:
             continue
         seen.add(source_url)
         notice_id = hashlib.sha1(source_url.encode("utf-8")).hexdigest()[:16]
@@ -430,6 +461,8 @@ def _rendered_fetch_result(
     html: str,
     elapsed_ms: int,
     status_code: int = 200,
+    blocked: bool | None = None,
+    error: str = "",
 ) -> FetchResult:
     return FetchResult(
         url=url,
@@ -442,13 +475,103 @@ def _rendered_fetch_result(
         elapsed_ms=elapsed_ms,
         attempt_count=1,
         fetcher="playwright",
-        blocked=_looks_like_login_page(html),
+        blocked=login_session_expired(html) if blocked is None else blocked,
+        error=error,
     )
 
 
-def _looks_like_login_page(html: str) -> bool:
-    sample = (html or "")[:5000].lower()
-    return any(marker in sample for marker in ("login", "captcha", "登录", "请登录", "验证码"))
+def login_session_expired(html: str) -> bool:
+    sample = _clean_spaces(HTMLParser(html or "").text(separator=" ")).casefold()
+    return any(
+        marker in sample
+        for marker in (
+            "登录状态超时",
+            "登录已过期",
+            "请重新登录",
+            "login session expired",
+        )
+    )
+
+
+def _is_notice_url(url: str) -> bool:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").casefold()
+    if host != "qianlima.com" and not host.endswith(".qianlima.com"):
+        return False
+    return bool(re.search(r"(?:/bid-\d+\.html$|/notice/[^?#]+)", parsed.path, re.IGNORECASE))
+
+
+def _block_static_assets(page) -> None:
+    page.route(
+        "**/*",
+        lambda route: (
+            route.abort()
+            if route.request.resource_type in {"image", "media", "font"}
+            else route.continue_()
+        ),
+    )
+
+
+def qianlima_auth_failure(status_code: int, url: str) -> bool:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").casefold()
+    return bool(
+        status_code in {401, 403}
+        and (host == "qianlima.com" or host.endswith(".qianlima.com"))
+        and parsed.path.startswith("/rest/")
+    )
+
+
+def _load_rendered_page(
+    page,
+    url: str,
+    *,
+    timeout_ms: int,
+) -> tuple[str, str, int, bool]:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    auth_failed = False
+
+    def capture_auth_failure(response) -> None:
+        nonlocal auth_failed
+        if qianlima_auth_failure(response.status, response.url):
+            auth_failed = True
+
+    page.on("response", capture_auth_failure)
+    try:
+        response = page.goto(url, wait_until="commit", timeout=timeout_ms)
+        try:
+            page.wait_for_function(
+                "document.readyState !== 'loading'",
+                timeout=max(1000, min(timeout_ms, 8000)),
+            )
+        except PlaywrightTimeoutError:
+            pass
+        try:
+            page.wait_for_function(
+                """
+                () => {
+                  const text = document.body?.innerText || '';
+                  return Boolean(
+                    document.querySelector('a[href*="/bid-"]') ||
+                    text.includes('未找到') ||
+                    text.includes('登录状态超时') ||
+                    text.includes('请重新登录')
+                  );
+                }
+                """,
+                timeout=max(1000, min(timeout_ms, 6000)),
+            )
+        except PlaywrightTimeoutError:
+            pass
+        return (
+            page.content(),
+            page.url,
+            response.status if response is not None else 0,
+            auth_failed,
+        )
+    finally:
+        page.remove_listener("response", capture_auth_failure)
 
 
 def _elapsed_ms(started: float) -> int:

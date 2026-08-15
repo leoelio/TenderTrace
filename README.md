@@ -29,7 +29,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、UNGM、世界银行，以及英国 Contracts Finder / Find a Tender 官方 OCDS API，共 8 个来源；UNGM 一处覆盖 32 个联合国组织。
 - 范围路由：国内、省市查询只启用国内源；英国、欧盟、世界银行、全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
 - 托管抓取：统一阻断识别、`Retry-After`、指数退避、HTTP 优先、Playwright 动态页恢复、静态资源拦截、批量详情抓取和页面快照。
-- 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码。
+- 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码；会员检索会提交真实主题并监听同域 API 鉴权，过期会话明确标记为 `login_expired`，不会伪装成零结果。
 - 本地优先检索：公告入库后写入 SQLite FTS5，使用 jieba 分词和 BM25 排序。
 - 后台采集订阅：采集订阅与用户报告订阅分离，只负责持续养大 `notices` 库。
 - 增量推送：用户订阅通过 `sent_history` 保证已经发送过的公告不重复出现在后续 Word。
@@ -483,7 +483,7 @@ The current architecture is local-first: background ingestion continuously store
 - Eight-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, UNGM, World Bank, and the official UK Contracts Finder / Find a Tender OCDS APIs. UNGM adds procurement coverage across 32 UN organizations.
 - Scope-aware routing that keeps domestic queries on domestic sources and activates the matching UK, EU, World Bank, or global sources only when requested.
 - Managed fetching with `Retry-After`, exponential backoff, block detection, HTTP-first execution, resource-light Playwright recovery, and traceable fetch statistics.
-- Login-state vault based on Playwright `storage_state`; credentials are never stored in code.
+- Login-state vault based on Playwright `storage_state`; credentials are never stored in code. Member search submits the actual topic and treats same-origin API authentication failures as `login_expired` instead of silently returning zero results.
 - Local-first retrieval with SQLite FTS5, jieba tokenization, and BM25 ranking.
 - Background ingest subscriptions separated from user report subscriptions.
 - Incremental scheduled delivery with `sent_history` deduplication.
