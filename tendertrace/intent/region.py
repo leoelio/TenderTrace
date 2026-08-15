@@ -77,6 +77,12 @@ _PROVINCE_SHORT_NAMES: dict[str, tuple[str, ...]] = {
 }
 
 _INTERNATIONAL_SCOPES = (
+    ("美洲开发银行", "idb"),
+    ("Inter-American Development Bank", "idb"),
+    ("拉丁美洲", "idb"),
+    ("拉美", "idb"),
+    ("IDB", "idb"),
+    ("idb", "idb"),
     ("世界银行", "worldbank"),
     ("联合国全球采购市场", "global"),
     ("联合国采购", "global"),

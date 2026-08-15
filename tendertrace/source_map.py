@@ -6,6 +6,7 @@ from typing import Any
 
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
+from tendertrace.adapters.idb import IDB_DATASTORE_API
 from tendertrace.adapters.ted import TED_SEARCH_API
 from tendertrace.adapters.uk_ocds import CONTRACTS_FINDER_API, FIND_TENDER_API
 from tendertrace.adapters.ungm import UNGM_SEARCH_URL
@@ -131,6 +132,22 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "scope": ["global", "worldbank"],
                 "authority": "World Bank Group",
                 "same_domain": False,
+            },
+        ),
+        SourceMapItem(
+            site="idb",
+            engine="official-ckan-api",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(name="idb-procurement-datastore", url=IDB_DATASTORE_API, kind="api")
+            ],
+            health=health.get("idb", {}),
+            discovery_rules={
+                "scope": ["global", "idb"],
+                "authority": "Inter-American Development Bank",
+                "license": "CC BY 4.0",
+                "same_domain": True,
             },
         ),
         SourceMapItem(

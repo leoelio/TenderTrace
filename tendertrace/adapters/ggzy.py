@@ -231,6 +231,7 @@ class GgzyAdapter:
             "eu",
             "worldbank",
             "uk",
+            "idb",
         }
 
     def collect(

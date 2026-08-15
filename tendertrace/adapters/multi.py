@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
+from tendertrace.adapters.idb import IdbAdapter
 from tendertrace.adapters.ted import TedAdapter
 from tendertrace.adapters.uk_ocds import ContractsFinderAdapter, FindTenderAdapter
 from tendertrace.adapters.ungm import UngmAdapter
@@ -60,6 +61,7 @@ class MultiSourceAdapter:
             TedAdapter(),
             UngmAdapter(),
             WorldBankAdapter(),
+            IdbAdapter(),
             ContractsFinderAdapter(),
             FindTenderAdapter(),
         ]

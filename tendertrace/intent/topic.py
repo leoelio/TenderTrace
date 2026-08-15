@@ -156,7 +156,7 @@ def _remove_context(
     for phrase in _STOP_PHRASES:
         text = text.replace(phrase, " ")
     text = re.sub(r"(或者|或是|以及|和|与|及|或)", " ", text)
-    text = re.sub(r"[，,。？?！!；;：:（）(){}【】\\s]+", " ", text)
+    text = re.sub(r"[，,。？?！!；;：:（）(){}【】\s]+", " ", text)
     return text
 
 

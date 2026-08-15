@@ -171,6 +171,7 @@ class QianlimaAdapter:
             "eu",
             "worldbank",
             "uk",
+            "idb",
         }
 
     def collect(

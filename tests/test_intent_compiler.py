@@ -110,6 +110,20 @@ class IntentCompilerTests(unittest.TestCase):
         self.assertIn("server", bidql["topic"]["source_terms"])
         self.assertNotIn("region", bidql["meta"]["clarify_needed"])
 
+    def test_idb_scope_and_english_topic_are_preserved(self) -> None:
+        bidql = compile_intent("最近1个月美洲开发银行 solar 招标信息", now=NOW)
+
+        self.assertEqual(bidql["region"]["scope"], "idb")
+        self.assertEqual(bidql["topic"]["core"], ["solar"])
+        self.assertEqual(bidql["topic"]["source_terms"], ["solar"])
+        self.assertNotIn("region", bidql["meta"]["clarify_needed"])
+
+    def test_global_english_topic_does_not_lose_leading_s(self) -> None:
+        bidql = compile_intent("最近1个月全球 server 招标信息", now=NOW)
+
+        self.assertEqual(bidql["topic"]["core"], ["server"])
+        self.assertEqual(bidql["topic"]["source_terms"], ["server"])
+
     def test_low_confidence_topic_requests_clarification(self) -> None:
         bidql = compile_intent("最近1个月上海相关信息有哪些", now=NOW)
 
