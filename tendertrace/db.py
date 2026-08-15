@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 
 DDL = (
@@ -276,6 +276,21 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS memory_advice_feedback (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'admin',
+        advice_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'web',
+        actor TEXT,
+        note TEXT,
+        context_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (user_id, advice_id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS delivery_attempts (
         id TEXT PRIMARY KEY,
         channel TEXT NOT NULL,
@@ -408,6 +423,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_user_activity_type_time ON user_activity_events(event_type, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_weekly_reports_user_period ON weekly_reports(user_id, week_start, week_end)",
     "CREATE INDEX IF NOT EXISTS idx_user_memory_profiles_user ON user_memory_profiles(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_memory_advice_feedback_user ON memory_advice_feedback(user_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_artifact ON delivery_attempts(artifact_key, channel, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_status ON delivery_attempts(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_workflows_stage ON opportunity_workflows(stage, updated_at)",

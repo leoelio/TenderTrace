@@ -9,8 +9,10 @@ from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
 from tendertrace.integrations.feishu_card_actions import (
     callback_response_payload,
+    process_feishu_card_action,
     process_opportunity_card_action,
 )
+from tendertrace.memory import build_weekly_report
 
 
 class FeishuCardActionTests(unittest.TestCase):
@@ -55,6 +57,37 @@ class FeishuCardActionTests(unittest.TestCase):
         self.assertTrue(result["blocked"])
         self.assertEqual(result["toast"]["type"], "warning")
         self.assertIn("当前阶段", result["reasons"][0])
+
+    def test_memory_advice_action_updates_shared_feedback_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            report = build_weekly_report(settings)
+            advice_id = report["recommendation_plan"][0]["id"]
+            payload = {
+                "header": {"event_id": "memory-event-1"},
+                "event": {
+                    "operator": {
+                        "name": "张三",
+                        "operator_id": {"open_id": "ou_owner"},
+                    },
+                    "action": {
+                        "value": {
+                            "action": "memory_advice_accept",
+                            "advice_id": advice_id,
+                            "user_id": "admin",
+                        }
+                    },
+                },
+            }
+
+            result = process_feishu_card_action(settings, payload)
+            refreshed = build_weekly_report(settings)
+
+        self.assertEqual(result["feedback"]["status"], "accepted")
+        self.assertEqual(refreshed["recommendation_plan"][0]["feedback_status"], "accepted")
+        self.assertIn("已采纳", result["toast"]["content"])
+        self.assertEqual(result["card"]["header"]["title"]["content"], "TenderTrace 使用与机会周报")
 
 
 def _payload(action: str) -> dict[str, object]:

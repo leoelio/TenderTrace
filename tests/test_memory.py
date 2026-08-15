@@ -12,6 +12,7 @@ from tendertrace.memory import (
     build_weekly_report,
     load_memory_profile,
     persist_weekly_report,
+    record_advice_feedback,
     record_activity,
 )
 
@@ -81,6 +82,19 @@ class MemoryTests(unittest.TestCase):
                 settings,
                 now="2026-07-24T18:00:00+08:00",
             )
+            subscription_advice = next(
+                item for item in report["recommendation_plan"] if item["kind"] == "subscription"
+            )
+            record_advice_feedback(
+                settings,
+                advice_id=subscription_advice["id"],
+                status="accepted",
+                source="web",
+            )
+            report = build_weekly_report(
+                settings,
+                now="2026-07-24T18:00:00+08:00",
+            )
             saved = persist_weekly_report(settings, report)
             profile = load_memory_profile(settings)
             with connection(settings) as conn:
@@ -98,6 +112,11 @@ class MemoryTests(unittest.TestCase):
         self.assertIn("recommendation_plan", report)
         self.assertGreaterEqual(report["knowledge_profile"]["behavior"]["download_rate"], 1.0)
         self.assertTrue(any(item["kind"] == "subscription" for item in report["recommendation_plan"]))
+        accepted = next(
+            item for item in report["recommendation_plan"] if item["kind"] == "subscription"
+        )
+        self.assertEqual(accepted["feedback_status"], "accepted")
+        self.assertEqual(report["recommendation_feedback"]["accepted"], 1)
         self.assertIn("saved_report_id", saved)
         self.assertIsNotNone(profile)
         self.assertEqual(profile["knowledge_profile"]["behavior"]["download_rate"], 1.0)
@@ -134,6 +153,11 @@ class MemoryTests(unittest.TestCase):
                     },
                 )
                 report_response = client.get("/api/memory/weekly")
+                advice_id = report_response.json()["recommendation_plan"][0]["id"]
+                feedback_response = client.post(
+                    f"/api/memory/advice/{advice_id}/feedback",
+                    json={"status": "completed", "source": "web"},
+                )
                 save_response = client.post("/api/memory/weekly", json={"days": 7})
                 profile_response = client.get("/api/memory/profile")
             finally:
@@ -147,6 +171,12 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual(event_response.json()["event_type"], "click")
         self.assertEqual(report_response.status_code, 200)
         self.assertGreaterEqual(report_response.json()["summary"]["clicks"], 1)
+        self.assertEqual(feedback_response.status_code, 200)
+        self.assertEqual(feedback_response.json()["feedback"]["status"], "completed")
+        self.assertEqual(
+            feedback_response.json()["report"]["recommendation_plan"][0]["feedback_status"],
+            "completed",
+        )
         self.assertEqual(save_response.status_code, 200)
         self.assertIn("saved_report_id", save_response.json())
         self.assertEqual(profile_response.status_code, 200)

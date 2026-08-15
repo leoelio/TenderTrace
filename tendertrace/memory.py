@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 import json
 from typing import Any
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
@@ -14,6 +14,7 @@ from tendertrace.intent import compile_intent
 
 DEFAULT_USER_ID = "admin"
 MAX_REPORT_DAYS = 31
+ADVICE_FEEDBACK_STATUSES = {"accepted", "completed", "dismissed"}
 
 
 def record_activity(
@@ -108,6 +109,12 @@ def build_weekly_report(
         risk_signals,
         opportunity_summary,
     )
+    recommendation_plan = _attach_advice_feedback(settings, user_id, recommendation_plan)
+    active_recommendations = [
+        item
+        for item in recommendation_plan
+        if item.get("feedback_status") not in {"completed", "dismissed"}
+    ]
     return {
         "user_id": user_id,
         "period": {
@@ -126,10 +133,11 @@ def build_weekly_report(
         "opportunity_summary": opportunity_summary,
         "risk_signals": risk_signals,
         "recommendation_plan": recommendation_plan,
+        "recommendation_feedback": _feedback_summary(recommendation_plan),
         "generated_advice": _generated_advice(
             summary,
             knowledge_profile,
-            recommendation_plan,
+            active_recommendations,
             opportunity_summary,
         ),
         "analysis": _analysis(
@@ -139,7 +147,7 @@ def build_weekly_report(
             risk_signals,
             opportunity_summary,
         ),
-        "suggestions": _suggestions(recommendation_plan),
+        "suggestions": _suggestions(active_recommendations),
     }
 
 
@@ -196,6 +204,68 @@ def load_memory_profile(settings: Settings, *, user_id: str = DEFAULT_USER_ID) -
     if isinstance(payload, dict):
         return {**payload, "updated_at": row["updated_at"]}
     return {"user_id": user_id, "updated_at": row["updated_at"]}
+
+
+def record_advice_feedback(
+    settings: Settings,
+    *,
+    advice_id: str,
+    status: str,
+    user_id: str = DEFAULT_USER_ID,
+    source: str = "web",
+    actor: str = "",
+    note: str = "",
+    context: dict[str, Any] | None = None,
+) -> dict[str, object]:
+    advice_id = advice_id.strip()
+    status = status.strip().lower()
+    user_id = (user_id or DEFAULT_USER_ID).strip() or DEFAULT_USER_ID
+    if not advice_id:
+        raise ValueError("advice_id is required")
+    try:
+        UUID(advice_id)
+    except ValueError as exc:
+        raise ValueError("advice_id must be a UUID") from exc
+    if status not in ADVICE_FEEDBACK_STATUSES:
+        allowed = ", ".join(sorted(ADVICE_FEEDBACK_STATUSES))
+        raise ValueError(f"status must be one of: {allowed}")
+    feedback_id = str(uuid5(NAMESPACE_URL, f"tendertrace:advice-feedback:{user_id}:{advice_id}"))
+    payload = _metadata_dict(context)
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO memory_advice_feedback(
+                id, user_id, advice_id, status, source, actor, note, context_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, advice_id) DO UPDATE SET
+                status = excluded.status,
+                source = excluded.source,
+                actor = excluded.actor,
+                note = excluded.note,
+                context_json = excluded.context_json,
+                updated_at = datetime('now')
+            """,
+            (
+                feedback_id,
+                user_id,
+                advice_id,
+                status,
+                source.strip() or "web",
+                actor.strip(),
+                note.strip(),
+                json_dumps(payload),
+            ),
+        )
+        row = conn.execute(
+            """
+            SELECT id, user_id, advice_id, status, source, actor, note, context_json,
+                   created_at, updated_at
+            FROM memory_advice_feedback
+            WHERE user_id = ? AND advice_id = ?
+            """,
+            (user_id, advice_id),
+        ).fetchone()
+    return _feedback_row(row)
 
 
 def _load_events(
@@ -740,13 +810,85 @@ def _recommendation(
     action: str,
     **evidence: object,
 ) -> dict[str, object]:
+    evidence = {key: value for key, value in evidence.items() if value not in (None, "", [])}
+    identity = {
+        key: value
+        for key, value in evidence.items()
+        if key not in {"count", "run_ids"}
+    }
+    identity_json = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return {
+        "id": str(uuid5(NAMESPACE_URL, f"tendertrace:advice:{kind}:{identity_json}")),
         "priority": priority,
         "kind": kind,
         "title": title,
         "reason": reason,
         "action": action,
-        "evidence": {key: value for key, value in evidence.items() if value not in (None, "", [])},
+        "evidence": evidence,
+        "feedback_status": "pending",
+    }
+
+
+def _attach_advice_feedback(
+    settings: Settings,
+    user_id: str,
+    plan: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    advice_ids = [str(item.get("id") or "") for item in plan if item.get("id")]
+    if not advice_ids:
+        return plan
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, user_id, advice_id, status, source, actor, note, context_json,
+                   created_at, updated_at
+            FROM memory_advice_feedback
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchall()
+    wanted = set(advice_ids)
+    feedback_by_advice = {
+        str(row["advice_id"]): _feedback_row(row)
+        for row in rows
+        if str(row["advice_id"]) in wanted
+    }
+    return [
+        {
+            **item,
+            "feedback_status": feedback_by_advice.get(str(item.get("id") or ""), {}).get(
+                "status", "pending"
+            ),
+            "feedback": feedback_by_advice.get(str(item.get("id") or "")),
+        }
+        for item in plan
+    ]
+
+
+def _feedback_summary(plan: list[dict[str, object]]) -> dict[str, int]:
+    counts = Counter(str(item.get("feedback_status") or "pending") for item in plan)
+    return {
+        "pending": counts["pending"],
+        "accepted": counts["accepted"],
+        "completed": counts["completed"],
+        "dismissed": counts["dismissed"],
+    }
+
+
+def _feedback_row(row: Any) -> dict[str, object]:
+    if row is None:
+        return {}
+    return {
+        "id": str(row["id"]),
+        "user_id": str(row["user_id"]),
+        "advice_id": str(row["advice_id"]),
+        "status": str(row["status"]),
+        "source": str(row["source"] or ""),
+        "actor": str(row["actor"] or ""),
+        "note": str(row["note"] or ""),
+        "context": _loads_json(row["context_json"], {}),
+        "created_at": str(row["created_at"] or ""),
+        "updated_at": str(row["updated_at"] or ""),
     }
 
 
@@ -758,6 +900,7 @@ def _profile_snapshot(report: dict[str, object]) -> dict[str, object]:
         "opportunity_summary": report.get("opportunity_summary") or {},
         "risk_signals": report.get("risk_signals") or [],
         "recommendation_plan": report.get("recommendation_plan") or [],
+        "recommendation_feedback": report.get("recommendation_feedback") or {},
         "generated_advice": report.get("generated_advice") or {},
     }
 

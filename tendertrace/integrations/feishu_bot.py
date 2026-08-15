@@ -11,7 +11,7 @@ from tendertrace.db import connection, init_db
 from tendertrace.integrations.feishu import FeishuClient, FeishuError, feishu_status
 from tendertrace.integrations.feishu_card_actions import (
     callback_response_payload,
-    process_opportunity_card_action,
+    process_feishu_card_action,
 )
 from tendertrace.intent import compile_intent
 from tendertrace.runner import RunOnceResult, run_once
@@ -259,7 +259,7 @@ def start_feishu_bot_listener(settings: Settings) -> None:
 
         payload = json.loads(lark.JSON.marshal(data) or "{}")
         try:
-            result = process_opportunity_card_action(settings, payload)
+            result = process_feishu_card_action(settings, payload)
             response = callback_response_payload(result)
         except (FeishuError, ValueError) as exc:
             response = {

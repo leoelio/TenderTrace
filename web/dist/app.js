@@ -1634,18 +1634,17 @@ function renderMemory(report) {
   );
   renderMemoryList(
     el.memorySuggestions,
-    recommendationPlan.length ? recommendationPlan : report.suggestions || [],
+    riskSignals,
     (item) => {
-      if (typeof item === "string") return `<div class="note-row">${escapeHtml(item)}</div>`;
       return `
-        <div class="case-row recommendation-row">
-          <strong>${priorityBadge(item.priority)}${escapeHtml(item.title || "建议")}</strong>
-          <span>${escapeHtml(item.reason || "")}</span>
-          <span>${escapeHtml(item.action || "")}</span>
+        <div class="case-row risk-row risk-${escapeHtml(item.severity || "low")}">
+          <strong>${escapeHtml(item.title || "风险信号")}</strong>
+          <span>${escapeHtml(item.detail || "")}</span>
+          <span>${escapeHtml(formatAdviceEvidence(item.evidence))}</span>
         </div>
       `;
     },
-    "暂无建议",
+    "当前周期未发现需要优先处理的风险",
   );
   renderMemoryList(
     el.memoryEvents,
@@ -1740,9 +1739,9 @@ function renderMemoryProfile(profile = {}, opportunities = {}) {
 
 function renderGeneratedAdvice(advice = {}, plan = []) {
   if (!el.memoryGeneratedAdvice) return;
-  const actions = Array.isArray(advice.next_actions) ? advice.next_actions.filter(Boolean) : [];
-  const fallbackActions = plan.map((item) => item.action).filter(Boolean).slice(0, 3);
-  const nextActions = actions.length ? actions : fallbackActions;
+  const nextActions = plan
+    .filter((item) => !["completed", "dismissed"].includes(item.feedback_status || "pending"))
+    .slice(0, 3);
   el.memoryGeneratedAdvice.className = "case-list advice-list";
   el.memoryGeneratedAdvice.innerHTML = `
     <div class="advice-hero">
@@ -1753,10 +1752,21 @@ function renderGeneratedAdvice(advice = {}, plan = []) {
       nextActions.length
         ? nextActions
             .map(
-              (item, index) => `
+              (item) => `
                 <div class="advice-action">
-                  <span>${index + 1}</span>
-                  <strong>${escapeHtml(item)}</strong>
+                  <div class="advice-action-copy">
+                    <div class="advice-action-title">
+                      ${priorityBadge(item.priority)}
+                      <strong>${escapeHtml(item.title || "行动建议")}</strong>
+                      ${adviceStatusBadge(item.feedback_status)}
+                    </div>
+                    <p>${escapeHtml(item.reason || "")}</p>
+                    <b>${escapeHtml(item.action || "")}</b>
+                    <small>${escapeHtml(formatAdviceEvidence(item.evidence))}</small>
+                  </div>
+                  <div class="advice-feedback-actions">
+                    ${adviceFeedbackButtons(item)}
+                  </div>
                 </div>
               `,
             )
@@ -1764,6 +1774,54 @@ function renderGeneratedAdvice(advice = {}, plan = []) {
         : '<div class="note-row">暂无下一步动作</div>'
     }
   `;
+}
+
+function adviceFeedbackButtons(item) {
+  const id = escapeHtml(item.id || "");
+  const status = item.feedback_status || "pending";
+  if (!id) return "";
+  const buttons = [];
+  if (status === "pending") {
+    buttons.push(`<button type="button" data-advice-id="${id}" data-advice-status="accepted">采纳</button>`);
+  }
+  if (["pending", "accepted"].includes(status)) {
+    buttons.push(`<button type="button" data-advice-id="${id}" data-advice-status="completed">完成</button>`);
+    buttons.push(`<button type="button" data-advice-id="${id}" data-advice-status="dismissed">忽略</button>`);
+  }
+  return buttons.join("");
+}
+
+function adviceStatusBadge(status = "pending") {
+  const label = { pending: "待处理", accepted: "已采纳", completed: "已完成", dismissed: "已忽略" }[status];
+  return `<span class="advice-status advice-status-${escapeHtml(status)}">${escapeHtml(label || status)}</span>`;
+}
+
+function formatAdviceEvidence(evidence = {}) {
+  if (!evidence || typeof evidence !== "object") return "依据：当前周期行为与机会数据";
+  const labels = {
+    level: "机会等级",
+    count: "数量",
+    query: "查询",
+    topic: "主题",
+    region: "区域",
+    run_ids: "失败运行",
+  };
+  const parts = Object.entries(evidence).map(([key, value]) => {
+    const rendered = formatAdviceEvidenceValue(value);
+    return `${labels[key] || key}=${rendered}`;
+  });
+  return parts.length ? `依据：${parts.join(" · ")}` : "依据：当前周期行为与机会数据";
+}
+
+function formatAdviceEvidenceValue(value) {
+  if (Array.isArray(value)) return value.map(formatAdviceEvidenceValue).join("、");
+  if (value && typeof value === "object") {
+    if (value.query) return `“${value.query}”×${value.count || 1}`;
+    return Object.entries(value)
+      .map(([key, item]) => `${key}:${formatAdviceEvidenceValue(item)}`)
+      .join(" / ");
+  }
+  return String(value ?? "-");
 }
 
 function firstCounterName(items, fallback) {
@@ -2088,6 +2146,21 @@ function opportunityPageSize() {
 async function refreshMemoryWeekly() {
   state.memory = await api("/api/memory/weekly");
   renderMemory(state.memory);
+}
+
+async function updateAdviceFeedback(adviceId, status) {
+  const result = await api(`/api/memory/advice/${encodeURIComponent(adviceId)}/feedback`, {
+    method: "POST",
+    body: JSON.stringify({
+      status,
+      user_id: el.userLabel?.textContent?.trim() || "admin",
+      source: "web",
+    }),
+  });
+  state.memory = result.report;
+  renderMemory(state.memory);
+  const label = { accepted: "建议已采纳", completed: "建议已完成", dismissed: "建议已忽略" }[status];
+  showToast(label || "建议状态已更新");
 }
 
 async function refreshFeishu() {
@@ -2964,6 +3037,15 @@ function bindEvents() {
   el.sendMemoryFeishuButton?.addEventListener("click", () =>
     sendMemoryWeeklyToFeishu().catch(toastError("周报发送失败")),
   );
+  el.memoryGeneratedAdvice?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-advice-id][data-advice-status]");
+    if (!button) return;
+    button.disabled = true;
+    updateAdviceFeedback(button.dataset.adviceId, button.dataset.adviceStatus).catch((error) => {
+      button.disabled = false;
+      toastError("建议状态更新失败")(error);
+    });
+  });
   el.refreshFeishuButton?.addEventListener("click", () =>
     refreshFeishu().catch(toastError("飞书状态刷新失败")),
   );

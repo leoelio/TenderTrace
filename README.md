@@ -330,13 +330,14 @@ python -m tendertrace embed-notices
 - `POST /api/integrations/feishu/bitable/import-leads`：预检或导入伙伴提交的多维表格线索。
 - `GET /api/integrations/feishu/bitable/import-runs`：查看伙伴线索同步运行审计。
 - `POST /api/outbox/{filename}/send-feishu`：上传并发送指定 Word 报告。
-- `POST /api/memory/weekly/send-feishu`：发送最近一周的使用摘要与建议。
+- `POST /api/memory/advice/{advice_id}/feedback`：采纳、完成或忽略动态建议，并写入用户记忆反馈账本。
+- `POST /api/memory/weekly/send-feishu`：发送最近一周的交互式使用与机会周报，可在卡片内处理建议。
 - `POST /api/opportunities/send-feishu`：发送可操作机会卡片，并按需创建幂等任务与截止日程。
 - `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
 - `POST /api/opportunities/{notice_id}/actions`：执行带阶段和资格门禁的认领、确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
 - `POST /api/opportunities/escalations/send-feishu`：发送当前决策 SLA 超时摘要；自动任务按每日机会集合去重。
 - `POST /api/opportunities/briefing/send-feishu`：发送机会经营晨报，汇总机会池、负责人、资格、决策、市场和来源风险；自动任务按同日机会状态去重。
-- `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态并同步多维表格。
+- `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态或回写建议反馈，并同步相关业务状态。
 - `POST /api/integrations/feishu/events`：接收飞书消息事件，校验令牌、去重后异步执行自然语言查询或创建订阅。
 - `GET /api/integrations/feishu/message-events`：查看飞书会话指令的运行、订阅、失败与恢复审计。
 
@@ -747,13 +748,14 @@ Available Web APIs:
 - `POST /api/integrations/feishu/bitable/import-leads`: preview or import partner-submitted Bitable leads.
 - `GET /api/integrations/feishu/bitable/import-runs`: inspect partner-lead synchronization audits.
 - `POST /api/outbox/{filename}/send-feishu`: upload and send a Word report.
-- `POST /api/memory/weekly/send-feishu`: send the weekly usage digest and recommendations.
+- `POST /api/memory/advice/{advice_id}/feedback`: accept, complete, or dismiss a dynamic recommendation and persist that decision in the memory ledger.
+- `POST /api/memory/weekly/send-feishu`: send an interactive weekly usage and opportunity card whose recommendations can be actioned in Feishu.
 - `POST /api/opportunities/send-feishu`: send an actionable opportunity card and optionally create an idempotent task and deadline event.
 - `GET /api/opportunities/{notice_id}/workflow`: inspect the owner, sales stage, and Feishu artifact state.
 - `POST /api/opportunities/{notice_id}/actions`: execute stage- and qualification-gated claim, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions.
 - `POST /api/opportunities/escalations/send-feishu`: send the current overdue decision summary with daily escalation-set deduplication.
 - `POST /api/opportunities/briefing/send-feishu`: send an opportunity operations briefing that combines pipeline, ownership, qualification, decision, market, and source-risk context.
-- `POST /api/integrations/feishu/callback`: verify card callbacks, advance the opportunity stage, and update Bitable.
+- `POST /api/integrations/feishu/callback`: verify card callbacks, then advance opportunity state or persist recommendation feedback through the shared business workflow.
 - `POST /api/integrations/feishu/events`: verify, deduplicate, and asynchronously execute inbound Feishu text commands.
 - `GET /api/integrations/feishu/message-events`: inspect inbound run, subscription, failure, and recovery audits.
 

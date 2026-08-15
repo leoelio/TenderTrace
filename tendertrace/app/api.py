@@ -32,8 +32,9 @@ from tendertrace.integrations.feishu import (
 )
 from tendertrace.integrations.feishu_card_actions import (
     OpportunityNotFoundError,
-    process_opportunity_card_action,
+    process_feishu_card_action,
 )
+from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
@@ -57,6 +58,7 @@ from tendertrace.memory import (
     build_weekly_report,
     load_memory_profile,
     persist_weekly_report,
+    record_advice_feedback,
     record_activity,
 )
 from tendertrace.opportunity import (
@@ -554,7 +556,7 @@ def create_app():
         if challenge:
             return {"challenge": challenge}
         try:
-            return process_opportunity_card_action(settings, request)
+            return process_feishu_card_action(settings, request)
         except OpportunityNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
@@ -1031,6 +1033,42 @@ def create_app():
         )
         return persist_weekly_report(settings, report)
 
+    @app.post("/api/memory/advice/{advice_id}/feedback")
+    def memory_advice_feedback(
+        advice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        user_id = str(request.get("user_id") or "admin")
+        context = request.get("context")
+        if context is not None and not isinstance(context, dict):
+            raise HTTPException(status_code=400, detail="context must be an object")
+        try:
+            feedback = record_advice_feedback(
+                settings,
+                advice_id=advice_id,
+                status=str(request.get("status") or ""),
+                user_id=user_id,
+                source=str(request.get("source") or "web"),
+                actor=str(request.get("actor") or ""),
+                note=str(request.get("note") or ""),
+                context=context,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="advice_feedback",
+            target=advice_id,
+            label=str(feedback.get("status") or ""),
+            metadata={"source": feedback.get("source") or "web"},
+            user_id=user_id,
+        )
+        return {
+            "status": "updated",
+            "feedback": feedback,
+            "report": build_weekly_report(settings, user_id=user_id),
+        }
+
     @app.post("/api/memory/weekly/send-feishu")
     def send_weekly_memory_to_feishu(
         request: dict[str, object] | None = Body(default=None),
@@ -1055,8 +1093,8 @@ def create_app():
             receive_id_type=_optional_string(request.get("receive_id_type")),
         )
         try:
-            response = FeishuClient(settings).send_text(
-                _weekly_report_text(report),
+            response = FeishuClient(settings).send_card(
+                build_memory_weekly_card(report),
                 receive_id=receive_id,
                 receive_id_type=receive_id_type,
             )
@@ -1303,36 +1341,6 @@ def _resolve_outbox_path(settings: Settings, filename: str) -> Path:
 
         raise HTTPException(status_code=400, detail="invalid outbox path")
     return path
-
-
-def _weekly_report_text(report: dict[str, object]) -> str:
-    period = report.get("period") if isinstance(report.get("period"), dict) else {}
-    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
-    advice = (
-        report.get("generated_advice")
-        if isinstance(report.get("generated_advice"), dict)
-        else {}
-    )
-    lines = [
-        f"TenderTrace 使用周报｜{period.get('from', '-')} 至 {period.get('to', '-')}",
-        (
-            f"运行 {summary.get('runs_finished', 0)} 次 · 下载 {summary.get('downloads', 0)} 次 · "
-            f"新增订阅 {summary.get('subscriptions_created', 0)} 个"
-        ),
-    ]
-    advice_summary = str(advice.get("summary") or "").strip()
-    if advice_summary:
-        lines.extend(["", advice_summary])
-    recommendations = report.get("recommendation_plan")
-    if isinstance(recommendations, list) and recommendations:
-        lines.append("")
-        for item in recommendations[:3]:
-            if not isinstance(item, dict):
-                continue
-            title = str(item.get("title") or item.get("action") or "").strip()
-            if title:
-                lines.append(f"• {title}")
-    return "\n".join(lines)
 
 
 def _opportunity_message(opportunity: dict[str, object]) -> str:

@@ -26,6 +26,8 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("/api/evaluations/agent", js)
         self.assertIn("/api/memory/events", js)
         self.assertIn("/api/memory/weekly", js)
+        self.assertIn("/api/memory/advice/", js)
+        self.assertIn("data-advice-status", js)
         self.assertIn("/api/integrations/feishu/overview", js)
         self.assertIn('id="openFeishuBitableButton"', html)
         self.assertIn('id="opportunityTopicFilter"', html)
