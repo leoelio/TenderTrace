@@ -7,6 +7,7 @@ from typing import Any
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.ted import TED_SEARCH_API
+from tendertrace.adapters.uk_ocds import CONTRACTS_FINDER_API, FIND_TENDER_API
 from tendertrace.adapters.worldbank import WORLD_BANK_API
 from tendertrace.config import Settings
 from tendertrace.db import connection
@@ -105,6 +106,40 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "scope": ["global", "worldbank"],
                 "authority": "World Bank Group",
                 "same_domain": False,
+            },
+        ),
+        SourceMapItem(
+            site="contracts_finder",
+            engine="official-ocds-api",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="uk-contracts-finder-ocds", url=CONTRACTS_FINDER_API, kind="api"
+                )
+            ],
+            health=health.get("contracts_finder", {}),
+            discovery_rules={
+                "scope": ["global", "uk"],
+                "authority": "UK Cabinet Office",
+                "standard": "OCDS 1.1",
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="find_tender",
+            engine="official-ocds-api",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(name="uk-find-tender-ocds", url=FIND_TENDER_API, kind="api")
+            ],
+            health=health.get("find_tender", {}),
+            discovery_rules={
+                "scope": ["global", "uk"],
+                "authority": "UK Cabinet Office",
+                "standard": "OCDS 1.1",
+                "same_domain": True,
             },
         ),
         SourceMapItem(

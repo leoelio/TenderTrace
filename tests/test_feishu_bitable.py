@@ -12,6 +12,8 @@ from tendertrace.delivery.feishu_bitable import (
     sync_notices_to_bitable,
     update_opportunity_workflow_in_bitable,
 )
+from tendertrace.integrations.feishu_leads import import_partner_leads
+from tendertrace.db import connection, init_db
 
 
 class FakeResponse:
@@ -127,6 +129,47 @@ class MissingFieldClient(FakeFeishuClient):
                 {
                     "code": 0,
                     "data": {"items": [{"field_id": "fld-title", "field_name": "标题", "type": 1}]},
+                }
+            )
+        return super().get(url, params=params, headers=headers)
+
+
+class PartnerLeadClient(FakeFeishuClient):
+    def get(self, url: str, *, params=None, headers=None):
+        if url.endswith("/records"):
+            return FakeResponse(
+                {
+                    "code": 0,
+                    "data": {
+                        "items": [
+                            {
+                                "record_id": "rec-partner-1",
+                                "fields": {
+                                    "标题": "合作伙伴提交的数据中心服务器采购",
+                                    "来源链接": "https://partner.example.com/tender/1",
+                                    "来源": "华东合作伙伴",
+                                    "状态": "伙伴提交",
+                                    "线索正文": "采购机架服务器及三年维保服务。",
+                                    "伙伴提交人": "李四",
+                                    "地区": "上海",
+                                    "发布时间": "2026-08-15",
+                                    "采购人": "示例采购单位",
+                                    "附件链接": "https://partner.example.com/spec.pdf",
+                                },
+                            },
+                            {
+                                "record_id": "rec-synced",
+                                "fields": {
+                                    "标题": "系统已同步记录",
+                                    "来源链接": "https://example.com/existing",
+                                    "状态": "新增",
+                                    "公告ID": "existing",
+                                    "项目指纹": "ccgp:existing",
+                                },
+                            },
+                        ],
+                        "has_more": False,
+                    },
                 }
             )
         return super().get(url, params=params, headers=headers)
@@ -251,6 +294,42 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["协同状态"], "机会确认")
         self.assertEqual(fields["机会负责人"], "张三")
         self.assertNotIn("标题", fields)
+
+    def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            init_db(settings)
+
+            preview = import_partner_leads(
+                settings,
+                dry_run=True,
+                http_client_factory=PartnerLeadClient,
+            )
+            result = import_partner_leads(
+                settings,
+                http_client_factory=PartnerLeadClient,
+            )
+            with connection(settings) as conn:
+                notice = conn.execute(
+                    "SELECT * FROM notices WHERE id = ?",
+                    ("feishu_partner:rec-partner-1",),
+                ).fetchone()
+                fts_count = conn.execute(
+                    "SELECT COUNT(*) FROM notices_fts WHERE notice_id = ?",
+                    ("feishu_partner:rec-partner-1",),
+                ).fetchone()[0]
+
+        self.assertEqual(preview.candidate_count, 1)
+        self.assertEqual(preview.imported_count, 0)
+        self.assertEqual(result.status, "imported")
+        self.assertEqual(result.imported_count, 1)
+        self.assertEqual(result.skipped_count, 1)
+        self.assertEqual(notice["title"], "合作伙伴提交的数据中心服务器采购")
+        self.assertEqual(fts_count, 1)
+        update = FakeFeishuClient.updated_records[-1][1]
+        self.assertEqual(update["状态"], "已入库")
+        self.assertEqual(update["公告ID"], "rec-partner-1")
+        self.assertEqual(update["项目指纹"], "feishu_partner:rec-partner-1")
 
 
 def _settings(root: Path) -> Settings:

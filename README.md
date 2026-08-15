@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P31</strong> · Global Sources · Opportunity Workflow · Feishu Collaboration
+  <strong>Current stage: P32</strong> · Official OCDS Sources · Resilient Fetching · Bidirectional Feishu
 </p>
 
 ---
@@ -26,15 +26,16 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 ## 核心能力
 
 - 自然语言意图解析：识别主题、同义词、地区、省市区、时间范围、发送频率。
-- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源，以及 TED 欧盟招标与世界银行采购公告官方 API。
-- 范围路由：国内、省市查询只启用国内源；欧盟、世界银行、全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
-- 托管抓取：统一 retry、阻断识别、浏览器兜底、批量详情抓取和页面快照。
+- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、世界银行，以及英国 Contracts Finder / Find a Tender 官方 OCDS API，共 7 个来源。
+- 范围路由：国内、省市查询只启用国内源；英国、欧盟、世界银行、全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
+- 托管抓取：统一阻断识别、`Retry-After`、指数退避、HTTP 优先、Playwright 动态页恢复、静态资源拦截、批量详情抓取和页面快照。
 - 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码。
 - 本地优先检索：公告入库后写入 SQLite FTS5，使用 jieba 分词和 BM25 排序。
 - 后台采集订阅：采集订阅与用户报告订阅分离，只负责持续养大 `notices` 库。
 - 增量推送：用户订阅通过 `sent_history` 保证已经发送过的公告不重复出现在后续 Word。
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
+- 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经只读预检后进入本地公告库、FTS 和证据链，并回写稳定指纹与“已入库”状态；系统自身同步记录不会循环导入。
 - 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作回写本地状态流、多维表格与审计事件。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
@@ -235,6 +236,8 @@ TENDERTRACE_DELIVERY_CHANNELS=web,outbox,email
 ```powershell
 python -m tendertrace feishu-bitable-check
 python -m tendertrace feishu-bitable-check --ensure-fields
+python -m tendertrace feishu-import-leads --dry-run
+python -m tendertrace feishu-import-leads
 ```
 
 演示订阅增量二次运行：
@@ -327,6 +330,10 @@ TENDERTRACE_FEISHU_BITABLE_BASE_URL=
 记录视图插件位于 `integrations/feishu-record-view/`，已配置 App ID 与 BlockTypeID，未包含任何密钥。安装官方 CLI 后先执行 `opdev login`，再进入 `opportunity-view` 执行 `npm install` 和 `npm run start`。本地调试必须在 `block.json` 增加实际 Base 文档 URL；生产构建可直接执行 `npm run build`。插件调用 TenderTrace `/api/opportunities/analyze`，在用户切换记录时自动刷新，并可把评分、策略、竞争情报、竞争证据、历史竞争者、需求覆盖率、待核对项和优化建议回写当前记录，或把机会摘要发送到默认飞书会话。
 
 配置 `TENDERTRACE_FEISHU_BITABLE_BASE_URL` 后，机会情报页和设置页会提供飞书台账直达入口；连接中心展示的线索数仅统计含项目指纹或公告 ID 的 TenderTrace 业务记录，不包含飞书默认空白行。
+
+合作伙伴线索使用同一张多维表格：填写“标题”“来源链接”，可选填写“线索正文”“伙伴提交人”“地区”“采购人”和附件链接，再把“状态”设为“伙伴提交”或“待导入”。设置页“导入伙伴线索”会先执行只读预检，用户确认后才入库；CLI 可用 `feishu-import-leads --dry-run` 执行同样的审计。导入内容保留原始链接并以“待来源核验”的证据状态进入系统，不会被伪装成已由官方源验证的信息。
+
+抓取器的 HTTP/动态浏览器分层、资源拦截、退避和恢复策略参考了 [Scrapling](https://github.com/D4Vinci/Scrapling) 的公开设计；TenderTrace 未复制其实现，也未引入 Patchright、curl-cffi 等额外运行时依赖。
 
 ## Web 工作台
 
@@ -440,14 +447,16 @@ The current architecture is local-first: background ingestion continuously store
 ## Key Features
 
 - Natural-language intent parsing for topic, synonyms, region, time range, and delivery schedule.
-- Multi-source collection from Chinese procurement platforms, a Qianlima login-state source, the official TED Search API, and the World Bank procurement notices API.
-- Scope-aware routing that keeps domestic queries on domestic sources and activates TED/World Bank only for EU, World Bank, or global intent.
+- Seven-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, World Bank, and the official UK Contracts Finder / Find a Tender OCDS APIs.
+- Scope-aware routing that keeps domestic queries on domestic sources and activates the matching UK, EU, World Bank, or global sources only when requested.
+- Managed fetching with `Retry-After`, exponential backoff, block detection, HTTP-first execution, resource-light Playwright recovery, and traceable fetch statistics.
 - Login-state vault based on Playwright `storage_state`; credentials are never stored in code.
 - Local-first retrieval with SQLite FTS5, jieba tokenization, and BM25 ranking.
 - Background ingest subscriptions separated from user report subscriptions.
 - Incremental scheduled delivery with `sent_history` deduplication.
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
+- Bidirectional Feishu partner-lead ingestion: approved Bitable rows enter the local notice library, FTS, and evidence chain, then receive an idempotent fingerprint and imported status.
 - Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, callback-driven sales stages, and an auditable local event stream.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
@@ -693,6 +702,10 @@ Server-side Bitable sync also requires the target Base document's `app_token` an
 The record-view extension lives in `integrations/feishu-record-view/`. Its App ID and BlockTypeID are committed, while credentials are not. Run `opdev login`, then `npm install` and `npm run start` under `opportunity-view`. Local debugging requires an actual Base document URL in `block.json`; production assets build with `npm run build`. The extension calls `/api/opportunities/analyze`, refreshes on row selection changes, writes scores, strategy, competition evidence, requirement coverage, and recommendations back to the current row, and can send the opportunity digest to the configured Feishu chat.
 
 When `TENDERTRACE_FEISHU_BITABLE_BASE_URL` is configured, the Opportunity Intelligence and Settings views expose a direct Base link. The synced lead count excludes Feishu's default blank rows and counts only TenderTrace records with a project fingerprint or notice ID.
+
+For partner-submitted intelligence, fill `标题` and `来源链接`, optionally add `线索正文`, `伙伴提交人`, region, buyer, and attachment links, then set `状态` to `伙伴提交` or `待导入`. The Settings action performs a read-only preview before confirmation. The same workflow is available through `python -m tendertrace feishu-import-leads --dry-run` and `python -m tendertrace feishu-import-leads`. Imported rows retain their original source URL and are explicitly marked as awaiting source verification.
+
+The managed fetcher adopts public architectural ideas from [Scrapling](https://github.com/D4Vinci/Scrapling), including HTTP/dynamic tiers, resource control, backoff, and recovery. TenderTrace does not copy Scrapling's implementation or require its Patchright/curl-cffi runtime stack.
 
 ## Web Workbench
 

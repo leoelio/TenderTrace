@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import httpx
 
@@ -39,6 +40,27 @@ class ManagedFetcherTests(unittest.TestCase):
         with self.assertRaises(FetchError):
             result.raise_for_status()
         self.assertEqual(fetcher.stats.to_dict()["blocked"], 1)
+
+    def test_retry_delay_respects_retry_after_and_exponential_backoff(self) -> None:
+        calls = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(429, headers={"Retry-After": "3"}, text="busy")
+            if calls == 2:
+                return httpx.Response(503, text="busy")
+            return httpx.Response(200, text="ok")
+
+        policy = FetchPolicy(max_retries=2, backoff_seconds=1, max_backoff_seconds=10)
+        with patch("tendertrace.fetching.time.sleep") as sleep:
+            with ManagedFetcher(policy, transport=httpx.MockTransport(handler)) as fetcher:
+                result = fetcher.get("https://example.com/page")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.attempt_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [3.0, 2.0])
 
     def test_page_artifact_contains_traceable_fetch_metadata(self) -> None:
         transport = httpx.MockTransport(

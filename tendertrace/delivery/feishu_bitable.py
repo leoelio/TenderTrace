@@ -54,6 +54,8 @@ REQUIRED_FIELDS = (
     "飞书任务ID",
     "飞书日程ID",
     "协同更新时间",
+    "线索正文",
+    "伙伴提交人",
 )
 
 
@@ -290,6 +292,56 @@ def update_opportunity_workflow_in_bitable(
         app_token=settings.feishu_bitable_app_token,
         table_id=settings.feishu_bitable_table_id,
     )
+
+
+def list_feishu_bitable_records(
+    settings: Settings,
+    *,
+    http_client_factory=httpx.Client,
+) -> list[dict[str, Any]]:
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        raise RuntimeError(f"missing Feishu settings: {', '.join(missing_settings)}")
+    with _client_context(http_client_factory, settings.feishu_timeout) as client:
+        token = _tenant_access_token(settings, client)
+        records: list[dict[str, Any]] = []
+        page_token = ""
+        while True:
+            params = {"page_size": 500}
+            if page_token:
+                params["page_token"] = page_token
+            data = _request_json(
+                client.get(
+                    _table_url(settings, "records"),
+                    params=params,
+                    headers=_auth_header(token),
+                )
+            )
+            records.extend(_items(data))
+            if not data.get("has_more"):
+                return records
+            page_token = str(data.get("page_token") or "")
+            if not page_token:
+                return records
+
+
+def update_feishu_bitable_records(
+    settings: Settings,
+    *,
+    updates: list[tuple[str, dict[str, object]]],
+    http_client_factory=httpx.Client,
+) -> int:
+    if not updates:
+        return 0
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        raise RuntimeError(f"missing Feishu settings: {', '.join(missing_settings)}")
+    with _client_context(http_client_factory, settings.feishu_timeout) as client:
+        token = _tenant_access_token(settings, client)
+        return sum(
+            _update_record(settings, client, token, record_id, fields)
+            for record_id, fields in updates
+        )
 
 
 def _missing_settings(settings: Settings) -> list[str]:

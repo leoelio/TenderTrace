@@ -226,7 +226,12 @@ class GgzyAdapter:
         self.last_fetch_stats: dict[str, object] = {}
 
     def supports(self, bidql: dict[str, Any]) -> bool:
-        return bidql.get("region", {}).get("scope") not in {"global", "eu", "worldbank"}
+        return bidql.get("region", {}).get("scope") not in {
+            "global",
+            "eu",
+            "worldbank",
+            "uk",
+        }
 
     def collect(
         self, bidql: dict[str, Any], *, max_pages: int = 1, max_results: int = 10

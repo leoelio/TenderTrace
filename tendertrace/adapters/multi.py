@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
 from tendertrace.adapters.ted import TedAdapter
+from tendertrace.adapters.uk_ocds import ContractsFinderAdapter, FindTenderAdapter
 from tendertrace.adapters.worldbank import WorldBankAdapter
 from tendertrace.config import Settings
 
@@ -57,6 +58,8 @@ class MultiSourceAdapter:
             GgzyAdapter(),
             TedAdapter(),
             WorldBankAdapter(),
+            ContractsFinderAdapter(),
+            FindTenderAdapter(),
         ]
         try:
             from tendertrace.vault.qianlima import QianlimaAdapter, QianlimaSessionVault

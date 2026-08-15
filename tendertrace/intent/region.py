@@ -78,6 +78,9 @@ _PROVINCE_SHORT_NAMES: dict[str, tuple[str, ...]] = {
 
 _INTERNATIONAL_SCOPES = (
     ("世界银行", "worldbank"),
+    ("英国", "uk"),
+    ("United Kingdom", "uk"),
+    ("UK", "uk"),
     ("欧盟", "eu"),
     ("欧洲", "eu"),
     ("全球", "global"),

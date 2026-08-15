@@ -144,6 +144,7 @@ const el = {
   feishuAttemptList: document.querySelector("#feishuAttemptList"),
   refreshFeishuButton: document.querySelector("#refreshFeishuButton"),
   testFeishuButton: document.querySelector("#testFeishuButton"),
+  importFeishuLeadsButton: document.querySelector("#importFeishuLeadsButton"),
   configureFeishuReceiverButton: document.querySelector("#configureFeishuReceiverButton"),
   feishuReceiverEditor: document.querySelector("#feishuReceiverEditor"),
   feishuChatSelect: document.querySelector("#feishuChatSelect"),
@@ -1695,6 +1696,7 @@ function renderFeishuOverview(payload) {
   const rows = [
     ["报告与周报", features.report_delivery, "Word 文件和使用周报"],
     ["多维表格", features.bitable_sync, features.bitable_sync?.detail || "公告明细同步"],
+    ["伙伴线索入口", features.partner_lead_ingest, "团队提交后进入本地检索与证据链"],
     ["机会卡片", features.opportunity_cards, "可操作机会卡片与原文入口"],
     ["销售任务", features.task_sync, "负责人任务与下一步行动"],
     ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],
@@ -1936,6 +1938,30 @@ async function testFeishuConnection() {
   });
   await refreshFeishu();
   showToast(result.status === "sent" ? "飞书测试消息已发送" : "飞书测试未完成");
+}
+
+async function importFeishuPartnerLeads() {
+  const preview = await api("/api/integrations/feishu/bitable/import-leads", {
+    method: "POST",
+    body: JSON.stringify({ dry_run: true }),
+  });
+  if (!preview.candidate_count) {
+    showToast(`未发现待导入伙伴线索，已扫描 ${preview.scanned_count || 0} 条记录`);
+    return;
+  }
+  const invalidText = preview.invalid_records?.length
+    ? `，另有 ${preview.invalid_records.length} 条字段不完整`
+    : "";
+  const confirmed = window.confirm(
+    `发现 ${preview.candidate_count} 条候选线索，其中 ${preview.existing_count || 0} 条已入库${invalidText}。确认导入？`,
+  );
+  if (!confirmed) return;
+  const result = await api("/api/integrations/feishu/bitable/import-leads", {
+    method: "POST",
+    body: JSON.stringify({ dry_run: false }),
+  });
+  await Promise.all([refreshFeishu(), refreshOpportunities()]);
+  showToast(`已导入 ${result.imported_count || 0} 条伙伴线索，飞书回写 ${result.updated_count || 0} 条`);
 }
 
 async function openFeishuReceiverEditor() {
@@ -2712,6 +2738,9 @@ function bindEvents() {
   );
   el.testFeishuButton?.addEventListener("click", () =>
     testFeishuConnection().catch(toastError("飞书连接测试失败")),
+  );
+  el.importFeishuLeadsButton?.addEventListener("click", () =>
+    importFeishuPartnerLeads().catch(toastError("伙伴线索导入失败")),
   );
   el.configureFeishuReceiverButton?.addEventListener("click", () =>
     openFeishuReceiverEditor().catch(toastError("飞书会话加载失败")),

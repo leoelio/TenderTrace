@@ -21,6 +21,7 @@ from tendertrace.integrations.feishu import (
     feishu_agent_status,
     feishu_status,
 )
+from tendertrace.integrations.feishu_leads import import_partner_leads
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
@@ -458,6 +459,13 @@ def cmd_feishu_bitable_check(args: argparse.Namespace) -> int:
     return 0 if result.status in {"pass", "warn", "skipped"} else 1
 
 
+def cmd_feishu_import_leads(args: argparse.Namespace) -> int:
+    settings = _settings()
+    result = import_partner_leads(settings, dry_run=args.dry_run)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0 if result.status in {"preview", "imported"} else 1
+
+
 def cmd_source_status(_: argparse.Namespace) -> int:
     settings = _settings()
     source_map = build_source_map(settings)
@@ -751,6 +759,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create missing TenderTrace opportunity fields in the configured table.",
     )
     feishu_check.set_defaults(func=cmd_feishu_bitable_check)
+    feishu_import = sub.add_parser(
+        "feishu-import-leads",
+        help="Import partner-submitted Feishu Bitable rows into the local notice library.",
+    )
+    feishu_import.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview candidates without writing local or Feishu data.",
+    )
+    feishu_import.set_defaults(func=cmd_feishu_import_leads)
     sub.add_parser(
         "source-status", help="Show configured source and login-state status."
     ).set_defaults(func=cmd_source_status)

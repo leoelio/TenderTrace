@@ -30,6 +30,7 @@ from tendertrace.integrations.feishu import (
     feishu_status,
 )
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
+from tendertrace.integrations.feishu_leads import import_partner_leads
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
@@ -196,6 +197,10 @@ def create_app():
                     "ready": bitable_ready,
                     "url": settings.feishu_bitable_base_url,
                 },
+                "partner_lead_ingest": {
+                    "ready": bitable_ready,
+                    "url": settings.feishu_bitable_base_url,
+                },
                 "agent_service": {"ready": bool(agent["configured"])},
                 "opportunity_cards": {"ready": bool(message["configured"])},
                 "task_sync": {"ready": bool(message["configured"])},
@@ -223,6 +228,15 @@ def create_app():
     @app.post("/api/integrations/feishu/bitable/ensure-fields")
     def feishu_bitable_ensure_fields() -> dict[str, object]:
         return check_feishu_bitable(settings, ensure_fields=True).to_dict()
+
+    @app.post("/api/integrations/feishu/bitable/import-leads")
+    def feishu_bitable_import_leads(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        return import_partner_leads(
+            settings,
+            dry_run=bool(request.get("dry_run", False)),
+        ).to_dict()
 
     @app.get("/api/integrations/feishu/chats")
     def feishu_chats(page_size: int = 20, page_token: str | None = None) -> dict[str, object]:

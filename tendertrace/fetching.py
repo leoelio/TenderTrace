@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from email.utils import parsedate_to_datetime
 import json
 from threading import Lock
 import time
@@ -21,6 +22,7 @@ class FetchPolicy:
     timeout: float = 20.0
     max_retries: int = 1
     backoff_seconds: float = 0.2
+    max_backoff_seconds: float = 30.0
     follow_redirects: bool = True
     blocked_statuses: tuple[int, ...] = (403, 429)
     retry_statuses: tuple[int, ...] = (408, 409, 425, 429, 500, 502, 503, 504)
@@ -37,6 +39,8 @@ class FetchPolicy:
     )
     browser_fallback: bool = False
     browser_timeout_ms: int = 30000
+    browser_network_idle_timeout_ms: int = 5000
+    browser_block_resource_types: tuple[str, ...] = ("image", "media", "font")
 
 
 @dataclass
@@ -98,6 +102,7 @@ class FetchResult:
     fetcher: str = "httpx"
     blocked: bool = False
     error: str = ""
+    retry_after_seconds: float | None = None
 
     @property
     def ok(self) -> bool:
@@ -207,7 +212,11 @@ class ManagedFetcher:
             last = result
             if not _should_retry(result, self.policy) or attempt >= attempts:
                 break
-            time.sleep(self.policy.backoff_seconds * attempt)
+            retry_delay = max(
+                self.policy.backoff_seconds * (2 ** (attempt - 1)),
+                result.retry_after_seconds or 0.0,
+            )
+            time.sleep(min(retry_delay, self.policy.max_backoff_seconds))
         return last or FetchResult(
             url=url,
             final_url=url,
@@ -231,6 +240,7 @@ class ManagedFetcher:
     def _request_browser(self, url: str, *, attempt_count: int) -> FetchResult:
         started = time.monotonic()
         try:
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
             return _browser_error(url, started, attempt_count, exc)
@@ -239,11 +249,28 @@ class ManagedFetcher:
                 browser = playwright.chromium.launch(headless=True)
                 context = browser.new_context(extra_http_headers=self.policy.headers)
                 page = context.new_page()
+                blocked_types = set(self.policy.browser_block_resource_types)
+                if blocked_types:
+                    page.route(
+                        "**/*",
+                        lambda route: (
+                            route.abort()
+                            if route.request.resource_type in blocked_types
+                            else route.continue_()
+                        ),
+                    )
                 response = page.goto(
                     url,
-                    wait_until="networkidle",
+                    wait_until="domcontentloaded",
                     timeout=self.policy.browser_timeout_ms,
                 )
+                try:
+                    page.wait_for_load_state(
+                        "networkidle",
+                        timeout=self.policy.browser_network_idle_timeout_ms,
+                    )
+                except PlaywrightTimeoutError:
+                    pass
                 text = page.content()
                 final_url = page.url
                 status = response.status if response is not None else 0
@@ -290,6 +317,7 @@ def _result_from_response(
         attempt_count=attempt_count,
         fetcher=fetcher,
         blocked=_is_blocked(status, text, policy),
+        retry_after_seconds=_retry_after_seconds(response.headers.get("retry-after")),
     )
 
 
@@ -313,6 +341,22 @@ def _should_retry(result: FetchResult, policy: FetchPolicy) -> bool:
     if result.status_code in policy.retry_statuses:
         return True
     return bool(result.error or result.blocked)
+
+
+def _retry_after_seconds(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        target = parsedate_to_datetime(value)
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+        return max(0.0, (target - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def _is_blocked(status_code: int, text: str, policy: FetchPolicy) -> bool:
