@@ -28,6 +28,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("weekly_reports", health["tables"])
         self.assertIn("user_memory_profiles", health["tables"])
         self.assertIn("memory_advice_feedback", health["tables"])
+        self.assertIn("opportunity_fact_overrides", health["tables"])
         self.assertIn("opportunity_workflows", health["tables"])
         self.assertIn("opportunity_events", health["tables"])
         self.assertIn("feishu_lead_import_runs", health["tables"])

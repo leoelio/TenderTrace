@@ -27,6 +27,7 @@ REQUIRED_FIELDS = (
     "项目指纹",
     "运行ID",
     "采购人",
+    "项目编号",
     "附件链接",
     "首次发现时间",
     "最近同步时间",
@@ -69,6 +70,9 @@ REQUIRED_FIELDS = (
     "来源核验",
     "核验时间",
     "核验摘要",
+    "事实核验状态",
+    "事实核验摘要",
+    "事实核验时间",
 )
 
 
@@ -291,6 +295,59 @@ def update_opportunity_workflow_in_bitable(
                 record_id,
                 workflow_fields,
             )
+    except Exception as exc:
+        return FeishuBitableResult(
+            status="failed",
+            message=f"{type(exc).__name__}: {exc}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    return FeishuBitableResult(
+        status="sent",
+        record_count=updated_count,
+        updated_count=updated_count,
+        app_token=settings.feishu_bitable_app_token,
+        table_id=settings.feishu_bitable_table_id,
+    )
+
+
+def update_opportunity_facts_in_bitable(
+    settings: Settings,
+    *,
+    notice_id: str,
+    opportunity: dict[str, object],
+    http_client_factory=httpx.Client,
+) -> FeishuBitableResult:
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        return FeishuBitableResult(
+            status="skipped",
+            message=f"missing Feishu settings: {', '.join(missing_settings)}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    try:
+        with _client_context(http_client_factory, settings.feishu_timeout) as client:
+            token = _tenant_access_token(settings, client)
+            fields = _list_fields(settings, client, token)
+            fact_fields = _opportunity_fact_fields(opportunity)
+            missing_fields = [name for name in fact_fields if name not in fields]
+            if missing_fields:
+                return FeishuBitableResult(
+                    status="failed",
+                    message=f"missing Feishu fields: {', '.join(missing_fields)}",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            record_id = _existing_records_by_notice_id(settings, client, token).get(notice_id)
+            if not record_id:
+                return FeishuBitableResult(
+                    status="skipped",
+                    message="opportunity has not been synced to Feishu bitable",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            updated_count = _update_record(settings, client, token, record_id, fact_fields)
     except Exception as exc:
         return FeishuBitableResult(
             status="failed",
@@ -623,6 +680,7 @@ def _record_fields(
         "项目指纹": cluster_key,
         "运行ID": run_id,
         "采购人": str(structured.get("purchaser") or notice.get("purchaser") or ""),
+        "项目编号": str(structured.get("project_no") or ""),
         "附件链接": "\n".join(_attachment_urls(notice)),
         "首次发现时间": synced_at.isoformat(timespec="seconds"),
         "最近同步时间": synced_at.isoformat(timespec="seconds"),
@@ -668,6 +726,9 @@ def _record_fields(
         "决策SLA时限": "",
         "决策等待小时": "0",
         "决策截止时间": "",
+        "事实核验状态": "待核验",
+        "事实核验摘要": "",
+        "事实核验时间": "",
     }
 
 
@@ -694,6 +755,49 @@ def _update_fields(row: dict[str, object]) -> dict[str, object]:
         "需求覆盖率": row["需求覆盖率"],
         "需求待核对": row["需求待核对"],
         "需求优化建议": row["需求优化建议"],
+        "项目编号": row["项目编号"],
+    }
+
+
+def _opportunity_fact_fields(opportunity: dict[str, object]) -> dict[str, object]:
+    intelligence = (
+        opportunity.get("intelligence")
+        if isinstance(opportunity.get("intelligence"), dict)
+        else {}
+    )
+    scores = (
+        intelligence.get("scores") if isinstance(intelligence.get("scores"), dict) else {}
+    )
+    qualification = (
+        opportunity.get("qualification")
+        if isinstance(opportunity.get("qualification"), dict)
+        else {}
+    )
+    overrides = opportunity.get("fact_overrides")
+    facts = [item for item in overrides if isinstance(item, dict)] if isinstance(overrides, list) else []
+    summary = "；".join(
+        f"{item.get('field_label') or item.get('field_name')}：{item.get('field_value')}"
+        for item in facts
+    )
+    verified_at = max((str(item.get("updated_at") or "") for item in facts), default="")
+    return {
+        "地区": str(opportunity.get("region") or ""),
+        "截止时间": str(opportunity.get("bid_deadline") or ""),
+        "预算": str(opportunity.get("budget") or ""),
+        "采购人": str(opportunity.get("purchaser") or ""),
+        "项目编号": str(opportunity.get("project_no") or ""),
+        "最近同步时间": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "机会等级": (
+            f"{intelligence.get('level', 'D')} · {intelligence.get('level_label', '待研判')}"
+        ),
+        "机会评分": str(intelligence.get("score") or 0),
+        "信息完整度": str(scores.get("completeness") or 0),
+        "信息可信度": str(scores.get("credibility") or 0),
+        "资格评分": str(qualification.get("score") or 0),
+        "准入状态": _qualification_label(qualification.get("status")),
+        "事实核验状态": f"已核验 {len(facts)} 项" if facts else "待核验",
+        "事实核验摘要": summary,
+        "事实核验时间": verified_at,
     }
 
 

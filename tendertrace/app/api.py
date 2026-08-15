@@ -14,6 +14,7 @@ from tendertrace.config import Settings
 from tendertrace.db import connection, database_health, init_db
 from tendertrace.delivery.feishu_bitable import (
     check_feishu_bitable,
+    update_opportunity_facts_in_bitable,
     update_opportunity_workflow_in_bitable,
 )
 from tendertrace.delivery.feishu_report import deliver_report_to_feishu
@@ -66,6 +67,7 @@ from tendertrace.opportunity import (
     get_opportunity,
     list_opportunities,
 )
+from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import run_once
 from tendertrace.sanitize import sanitize_for_output, sanitize_stats
@@ -487,6 +489,77 @@ def create_app():
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return get_workflow(settings, notice_id).to_dict()
+
+    @app.get("/api/opportunities/{notice_id}/facts")
+    def opportunity_facts(notice_id: str) -> dict[str, object]:
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return {
+            "opportunity": opportunity,
+            "overrides": opportunity.get("fact_overrides") or [],
+            "audit": load_fact_audit(settings, notice_id),
+        }
+
+    @app.patch("/api/opportunities/{notice_id}/facts")
+    def update_opportunity_facts(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        facts = request.get("facts")
+        if not isinstance(facts, dict):
+            raise HTTPException(status_code=400, detail="facts must be an object")
+        try:
+            overrides = upsert_verified_facts(
+                settings,
+                notice_id=notice_id,
+                facts=facts,
+                source_url=str(request.get("source_url") or opportunity.get("source_url") or ""),
+                evidence_text=str(request.get("evidence_text") or ""),
+                note=str(request.get("note") or ""),
+                actor=str(request.get("actor") or "admin"),
+                channel=str(request.get("channel") or "web"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        refreshed = get_opportunity(settings, notice_id)
+        if refreshed is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        qualification = _mapping_value(refreshed.get("qualification"))
+        workflow = update_workflow(
+            settings,
+            notice_id,
+            qualification_score=int(qualification.get("score") or 0),
+            qualification_status=str(qualification.get("status") or "blocked"),
+            updated_by=str(request.get("actor") or "admin"),
+        )
+        refreshed = get_opportunity(settings, notice_id) or refreshed
+        bitable = update_opportunity_facts_in_bitable(
+            settings,
+            notice_id=notice_id,
+            opportunity=refreshed,
+        )
+        record_activity(
+            settings,
+            event_type="opportunity_facts_verified",
+            target=notice_id,
+            label=f"核验 {len(overrides)} 项事实",
+            metadata={"fields": sorted(facts), "bitable_status": bitable.status},
+        )
+        return {
+            "status": "updated",
+            "opportunity": refreshed,
+            "workflow": workflow.to_dict(),
+            "overrides": overrides,
+            "audit": load_fact_audit(settings, notice_id),
+            "bitable_status": bitable.status,
+            "bitable_message": bitable.message,
+        }
 
     @app.post("/api/opportunities/{notice_id}/actions")
     def opportunity_action(

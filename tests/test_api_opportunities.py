@@ -71,8 +71,25 @@ class OpportunityApiTests(unittest.TestCase):
                     api_module,
                     "update_opportunity_workflow_in_bitable",
                     return_value=SimpleNamespace(status="skipped"),
+                ), patch.object(
+                    api_module,
+                    "update_opportunity_facts_in_bitable",
+                    return_value=SimpleNamespace(status="sent", message=""),
                 ):
                     client = TestClient(api_module.create_app())
+                    facts = client.patch(
+                        "/api/opportunities/notice-api-1/facts",
+                        json={
+                            "facts": {
+                                "project_no": "SH-2026-001",
+                                "budget": "120 万元",
+                                "bid_deadline": "2026-08-30 17:00",
+                            },
+                            "source_url": "https://example.com/notice-api-1",
+                            "evidence_text": "原始公告已核验",
+                            "actor": "测试分析师",
+                        },
+                    )
                     claimed = client.post(
                         "/api/opportunities/notice-api-1/actions",
                         json={"action": "claim", "actor_name": "测试负责人"},
@@ -107,6 +124,10 @@ class OpportunityApiTests(unittest.TestCase):
                         os.environ[key] = value
 
         self.assertEqual(claimed.status_code, 200)
+        self.assertEqual(facts.status_code, 200)
+        self.assertEqual(facts.json()["bitable_status"], "sent")
+        self.assertEqual(facts.json()["opportunity"]["project_no"], "SH-2026-001")
+        self.assertEqual(len(facts.json()["audit"]), 1)
         self.assertEqual(claimed.json()["workflow"]["stage"], "qualifying")
         self.assertEqual(claimed.json()["workflow"]["owner_name"], "测试负责人")
         self.assertEqual(blocked.status_code, 409)

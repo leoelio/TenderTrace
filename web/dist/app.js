@@ -1355,6 +1355,7 @@ function openOpportunityDetail(noticeId) {
   const suppliers = Array.isArray(competition.historical_suppliers)
     ? competition.historical_suppliers
     : [];
+  const factOverrides = Array.isArray(item.fact_overrides) ? item.fact_overrides : [];
   el.opportunityDetailTitle.textContent = item.title || "机会详情";
   el.opportunityDetailContent.innerHTML = `
     <div class="opportunity-detail-hero">
@@ -1373,6 +1374,41 @@ function openOpportunityDetail(noticeId) {
       ${detailMetric("可信", scores.credibility || 0)}
       ${detailMetric("需求覆盖", review.coverage_score || 0)}
     </div>
+    <section class="opportunity-detail-section opportunity-facts-section">
+      <div class="opportunity-detail-section-title">
+        <h3>事实核验</h3>
+        <span>${escapeHtml(factOverrides.length)} 项已核验</span>
+      </div>
+      <form class="opportunity-facts-form" data-opportunity-facts="${escapeHtml(item.notice_id)}">
+        <div class="opportunity-facts-grid">
+          ${opportunityFactInput("采购主体", "purchaser", item.purchaser)}
+          ${opportunityFactInput("项目编号", "project_no", item.project_no)}
+          ${opportunityFactInput("预算", "budget", item.budget)}
+          ${opportunityFactInput("投标截止", "bid_deadline", item.bid_deadline, "date")}
+          ${opportunityFactInput("地区", "region", item.region)}
+        </div>
+        <div class="opportunity-fact-provenance">
+          <label class="fact-source-field">
+            <span>证据链接</span>
+            <input name="source_url" type="url" value="${escapeHtml(item.source_url || "")}" required />
+          </label>
+          <label>
+            <span>证据摘录</span>
+            <textarea name="evidence_text" rows="2" maxlength="2000" placeholder="原文中的对应事实"></textarea>
+          </label>
+          <label>
+            <span>核验备注</span>
+            <input name="note" maxlength="1000" placeholder="核验依据或更正原因" />
+          </label>
+        </div>
+        <div class="opportunity-fact-footer">
+          <div class="verified-fact-list">
+            ${factOverrides.length ? factOverrides.map(verifiedFactTag).join("") : "<span>暂无人工核验记录</span>"}
+          </div>
+          <button class="primary-lite-button" type="submit">保存并重新研判</button>
+        </div>
+      </form>
+    </section>
     <section class="opportunity-detail-section">
       <h3>市场与竞争</h3>
       ${detailLine("价格位置", benchmark.message || "同品类预算样本不足")}
@@ -1443,6 +1479,23 @@ function openOpportunityDetail(noticeId) {
     </div>
   `;
   if (!el.opportunityDetailDialog.open) el.opportunityDetailDialog.showModal();
+}
+
+function opportunityFactInput(label, name, value, type = "text") {
+  return `
+    <label>
+      <span>${escapeHtml(label)}</span>
+      <input name="${escapeHtml(name)}" type="${escapeHtml(type)}" value="${escapeHtml(value || "")}" />
+    </label>
+  `;
+}
+
+function verifiedFactTag(item) {
+  return `
+    <span title="${escapeHtml(`${item.actor || "系统"} · ${item.updated_at || ""}`)}">
+      ${escapeHtml(item.field_label || item.field_name)}：${escapeHtml(item.field_value || "-")}
+    </span>
+  `;
 }
 
 function detailMetric(label, value) {
@@ -2146,6 +2199,43 @@ function opportunityPageSize() {
 async function refreshMemoryWeekly() {
   state.memory = await api("/api/memory/weekly");
   renderMemory(state.memory);
+}
+
+async function saveOpportunityFacts(form) {
+  const noticeId = form.dataset.opportunityFacts;
+  const data = new FormData(form);
+  const facts = {};
+  for (const field of ["purchaser", "project_no", "budget", "bid_deadline", "region"]) {
+    const value = String(data.get(field) || "").trim();
+    if (value) facts[field] = value;
+  }
+  const button = form.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
+  try {
+    const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/facts`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        facts,
+        source_url: String(data.get("source_url") || "").trim(),
+        evidence_text: String(data.get("evidence_text") || "").trim(),
+        note: String(data.get("note") || "").trim(),
+        actor: el.userLabel?.textContent?.trim() || "admin",
+        channel: "web",
+      }),
+    });
+    state.opportunities = state.opportunities.map((item) =>
+      item.notice_id === noticeId ? result.opportunity : item,
+    );
+    renderOpportunities({ items: state.opportunities, summary: state.opportunitySummaryData });
+    openOpportunityDetail(noticeId);
+    showToast(
+      result.bitable_status === "sent"
+        ? "事实已核验，资格结果与飞书多维表格已更新"
+        : "事实已核验，资格结果已更新",
+    );
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function updateAdviceFeedback(adviceId, status) {
@@ -2861,6 +2951,12 @@ function normalizeWorkbenchLayout() {
 }
 
 function bindEvents() {
+  document.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-opportunity-facts]");
+    if (!form) return;
+    event.preventDefault();
+    saveOpportunityFacts(form).catch(toastError("事实核验保存失败"));
+  });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });

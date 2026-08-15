@@ -12,6 +12,7 @@ from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.intent.topic import extract_topic
+from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.retrieval import parse_date
 from tendertrace.workflow import workflow_snapshots
@@ -296,7 +297,13 @@ def list_opportunities(
             "source_site": notice.source_site,
             "source_url": notice.source_url,
             "budget": str(structured.get("budget") or ""),
+            "project_no": str(structured.get("project_no") or ""),
             "bid_deadline": _normalized_date(structured.get("bid_deadline")),
+            "fact_overrides": (
+                notice.fields.get("fact_overrides")
+                if isinstance(notice.fields.get("fact_overrides"), list)
+                else []
+            ),
             "intelligence": intelligence,
             "workflow": workflow,
         }
@@ -363,6 +370,8 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     if row is None:
         return None
     notice = _notice_from_row(row)
+    overrides = load_fact_overrides(settings, [notice_id]).get(notice_id, [])
+    notice = apply_fact_overrides(notice, overrides)
     payload = _notice_payload(notice)
     structured = _mapping(payload.get("structured_fields"))
     intelligence = _analyze(payload, as_of=None)
@@ -380,7 +389,13 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "source_site": notice.source_site,
         "source_url": notice.source_url,
         "budget": str(structured.get("budget") or ""),
+        "project_no": str(structured.get("project_no") or ""),
         "bid_deadline": _normalized_date(structured.get("bid_deadline")),
+        "fact_overrides": (
+            notice.fields.get("fact_overrides")
+            if isinstance(notice.fields.get("fact_overrides"), list)
+            else []
+        ),
         "intelligence": intelligence,
         "workflow": workflow.to_dict(),
     }
@@ -713,7 +728,12 @@ def _recent_notices(settings: Settings, *, limit: int) -> list[tuple[str, Notice
             """,
             (max(1, min(int(limit), 500)),),
         ).fetchall()
-    return [(str(row["id"]), _notice_from_row(row)) for row in rows]
+    notice_rows = [(str(row["id"]), _notice_from_row(row)) for row in rows]
+    overrides = load_fact_overrides(settings, [notice_id for notice_id, _notice in notice_rows])
+    return [
+        (notice_id, apply_fact_overrides(notice, overrides.get(notice_id, [])))
+        for notice_id, notice in notice_rows
+    ]
 
 
 def _market_entry(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[str, object]:

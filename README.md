@@ -39,6 +39,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
+- 事实核验闭环：分析人员可在 Web 补充采购主体、项目编号、预算、截止时间和地区，并附原文链接与证据摘录；系统保留原始公告，以可审计覆盖层重算完整度、机会等级与销售准入，再同步飞书多维表格。
 - 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分和需求覆盖形成可解释门禁；阈值由运行配置管理，只有阶段与资料条件同时满足才允许推进。
 - 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；策略制定阶段按独立阶段时钟执行决策 SLA，超时进入管理升级队列，可手动或定时发送幂等飞书摘要。
 - 机会经营晨报：把机会等级、负责人缺口、资格门禁、截止时间、决策 SLA、市场信号和来源健康合并成可操作飞书卡片；支持工作日自动发送、同日状态去重和卡片内直接推进机会。
@@ -334,6 +335,8 @@ python -m tendertrace embed-notices
 - `POST /api/memory/weekly/send-feishu`：发送最近一周的交互式使用与机会周报，可在卡片内处理建议。
 - `POST /api/opportunities/send-feishu`：发送可操作机会卡片，并按需创建幂等任务与截止日程。
 - `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
+- `GET /api/opportunities/{notice_id}/facts`：读取字段级核验结果与变更审计。
+- `PATCH /api/opportunities/{notice_id}/facts`：提交带来源链接的核验事实，重算机会与准入，并回写飞书台账。
 - `POST /api/opportunities/{notice_id}/actions`：执行带阶段和资格门禁的认领、确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
 - `POST /api/opportunities/escalations/send-feishu`：发送当前决策 SLA 超时摘要；自动任务按每日机会集合去重。
 - `POST /api/opportunities/briefing/send-feishu`：发送机会经营晨报，汇总机会池、负责人、资格、决策、市场和来源风险；自动任务按同日机会状态去重。
@@ -494,6 +497,7 @@ The current architecture is local-first: background ingestion continuously store
 - Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
+- Auditable fact verification for purchaser, project number, budget, deadline, and region. Evidence-backed overlays preserve the raw notice, recompute opportunity quality and qualification gates, and synchronize the resulting fields to Feishu Bitable.
 - Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
 - Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. A stage-specific decision clock drives SLA escalation queues and deduplicated manual or scheduled Feishu summaries.
 - Actionable Feishu opportunity briefings that combine grade, owner gaps, qualification gates, deadlines, decision SLA, market signals, and source health, with weekday automation, daily state deduplication, and in-card workflow actions.
@@ -752,6 +756,8 @@ Available Web APIs:
 - `POST /api/memory/weekly/send-feishu`: send an interactive weekly usage and opportunity card whose recommendations can be actioned in Feishu.
 - `POST /api/opportunities/send-feishu`: send an actionable opportunity card and optionally create an idempotent task and deadline event.
 - `GET /api/opportunities/{notice_id}/workflow`: inspect the owner, sales stage, and Feishu artifact state.
+- `GET /api/opportunities/{notice_id}/facts`: inspect field-level verified facts and their audit history.
+- `PATCH /api/opportunities/{notice_id}/facts`: submit evidence-backed facts, recompute qualification, and synchronize the Bitable record.
 - `POST /api/opportunities/{notice_id}/actions`: execute stage- and qualification-gated claim, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions.
 - `POST /api/opportunities/escalations/send-feishu`: send the current overdue decision summary with daily escalation-set deduplication.
 - `POST /api/opportunities/briefing/send-feishu`: send an opportunity operations briefing that combines pipeline, ownership, qualification, decision, market, and source-risk context.

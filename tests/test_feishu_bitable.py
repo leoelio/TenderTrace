@@ -10,6 +10,7 @@ from tendertrace.delivery.feishu_bitable import (
     REQUIRED_FIELDS,
     check_feishu_bitable,
     sync_notices_to_bitable,
+    update_opportunity_facts_in_bitable,
     update_opportunity_workflow_in_bitable,
 )
 from tendertrace.integrations.feishu_leads import (
@@ -338,6 +339,47 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["决策SLA状态"], "已超时升级")
         self.assertEqual(fields["决策SLA时限"], "24 小时")
         self.assertEqual(fields["决策等待小时"], "31.5")
+        self.assertNotIn("标题", fields)
+
+    def test_fact_update_recomputes_business_fields_on_existing_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            result = update_opportunity_facts_in_bitable(
+                settings,
+                notice_id="existing",
+                opportunity={
+                    "region": "上海市",
+                    "purchaser": "上海政府采购中心",
+                    "project_no": "SH-2026-0816",
+                    "budget": "320 万元",
+                    "bid_deadline": "2026-08-30",
+                    "fact_overrides": [
+                        {
+                            "field_name": "budget",
+                            "field_label": "预算",
+                            "field_value": "320 万元",
+                            "updated_at": "2026-08-16T09:30:00+08:00",
+                        }
+                    ],
+                    "intelligence": {
+                        "level": "A",
+                        "level_label": "优先推进",
+                        "score": 91,
+                        "scores": {"completeness": 88, "credibility": 93},
+                    },
+                    "qualification": {"score": 86, "status": "ready"},
+                },
+                http_client_factory=FakeFeishuClient,
+            )
+
+        self.assertEqual(result.status, "sent")
+        fields = FakeFeishuClient.updated_records[0][1]
+        self.assertEqual(fields["项目编号"], "SH-2026-0816")
+        self.assertEqual(fields["事实核验状态"], "已核验 1 项")
+        self.assertEqual(fields["事实核验摘要"], "预算：320 万元")
+        self.assertEqual(fields["机会等级"], "A · 优先推进")
+        self.assertEqual(fields["准入状态"], "可决策")
         self.assertNotIn("标题", fields)
 
     def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:

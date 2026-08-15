@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 
 DDL = (
@@ -351,6 +351,23 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS opportunity_fact_overrides (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        field_name TEXT NOT NULL,
+        field_value TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        evidence_text TEXT,
+        note TEXT,
+        actor TEXT,
+        channel TEXT NOT NULL DEFAULT 'web',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (notice_id, field_name),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS feishu_lead_import_runs (
         id TEXT PRIMARY KEY,
         mode TEXT NOT NULL,
@@ -428,6 +445,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_status ON delivery_attempts(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_workflows_stage ON opportunity_workflows(stage, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_events_notice ON opportunity_events(notice_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
 )
