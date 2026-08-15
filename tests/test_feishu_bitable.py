@@ -16,6 +16,7 @@ from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
 )
+from tendertrace.source_verification import SourceVerification
 from tendertrace.db import connection, init_db
 
 
@@ -178,6 +179,30 @@ class PartnerLeadClient(FakeFeishuClient):
         return super().get(url, params=params, headers=headers)
 
 
+class UnsafePartnerLeadClient(FakeFeishuClient):
+    def get(self, url: str, *, params=None, headers=None):
+        if url.endswith("/records"):
+            return FakeResponse(
+                {
+                    "code": 0,
+                    "data": {
+                        "items": [
+                            {
+                                "record_id": "rec-unsafe",
+                                "fields": {
+                                    "标题": "不安全来源",
+                                    "来源链接": "http://127.0.0.1/admin",
+                                    "状态": "待导入",
+                                },
+                            }
+                        ],
+                        "has_more": False,
+                    },
+                }
+            )
+        return super().get(url, params=params, headers=headers)
+
+
 class FeishuBitableTests(unittest.TestCase):
     def setUp(self) -> None:
         FakeFeishuClient.created_records = []
@@ -307,10 +332,12 @@ class FeishuBitableTests(unittest.TestCase):
                 settings,
                 dry_run=True,
                 http_client_factory=PartnerLeadClient,
+                source_verifier=_verified_source,
             )
             result = import_partner_leads(
                 settings,
                 http_client_factory=PartnerLeadClient,
+                source_verifier=_verified_source,
             )
             with connection(settings) as conn:
                 notice = conn.execute(
@@ -327,6 +354,7 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(preview.imported_count, 0)
         self.assertEqual(result.status, "imported")
         self.assertEqual(result.imported_count, 1)
+        self.assertEqual(result.verified_count, 1)
         self.assertEqual(result.skipped_count, 1)
         self.assertEqual(notice["title"], "合作伙伴提交的数据中心服务器采购")
         self.assertEqual(fts_count, 1)
@@ -334,9 +362,28 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(update["状态"], "已入库")
         self.assertEqual(update["公告ID"], "rec-partner-1")
         self.assertEqual(update["项目指纹"], "feishu_partner:rec-partner-1")
+        self.assertEqual(update["来源核验"], "已验证")
+        self.assertIn("HTTP 200", update["核验摘要"])
         self.assertEqual([item.status for item in audit_runs], ["imported", "preview"])
         self.assertEqual(audit_runs[0].imported_count, 1)
+        self.assertEqual(audit_runs[0].verified_count, 1)
         self.assertEqual(audit_runs[1].candidate_count, 1)
+
+    def test_partner_lead_import_rejects_private_network_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            init_db(settings)
+
+            result = import_partner_leads(
+                settings,
+                dry_run=True,
+                http_client_factory=UnsafePartnerLeadClient,
+            )
+
+        self.assertEqual(result.candidate_count, 0)
+        self.assertEqual(result.unsafe_count, 1)
+        self.assertEqual(len(result.invalid_records), 1)
+        self.assertIn("不安全", result.invalid_records[0]["reason"])
 
 
 def _settings(root: Path) -> Settings:
@@ -350,6 +397,21 @@ def _settings(root: Path) -> Settings:
         encoding="utf-8",
     )
     return Settings.load(root)
+
+
+def _verified_source(url: str) -> SourceVerification:
+    return SourceVerification(
+        status="verified",
+        source_url=url,
+        final_url=url,
+        status_code=200,
+        content_type="text/html",
+        snapshot_sha256="a" * 64,
+        text_excerpt="数据中心服务器采购原文，包含机架服务器、存储和维保服务。",
+        selector="main",
+        fetched_bytes=2048,
+        elapsed_ms=12,
+    )
 
 
 def _notice(notice_id: str, *, cluster_key: str) -> dict:

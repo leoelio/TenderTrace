@@ -7,7 +7,6 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-import httpx
 from docx import Document
 from openpyxl import load_workbook
 from pypdf import PdfReader
@@ -16,6 +15,7 @@ from tendertrace.adapters.ccgp import Notice
 from tendertrace.config import Settings
 from tendertrace.pipeline.dedup import canonicalize_url, clean_text
 from tendertrace.pipeline.evidence import attachment_type
+from tendertrace.public_http import UnsafeUrlError, ensure_public_http_url, fetch_public_bytes
 
 
 DEFAULT_MAX_ATTACHMENTS_PER_NOTICE = 3
@@ -102,6 +102,10 @@ def _snapshot_attachment(
     max_bytes: int,
     downloader: Downloader,
 ) -> dict[str, Any]:
+    try:
+        ensure_public_http_url(url, resolve=False)
+    except UnsafeUrlError:
+        return _record_skipped(name, url, "unsafe_url")
     kind = attachment_type(url)
     if not kind:
         return _record_skipped(name, url, "unknown_type")
@@ -138,17 +142,12 @@ def _download_bytes(url: str, max_bytes: int) -> bytes:
             "(KHTML, like Gecko) Chrome/126 Safari/537.36"
         )
     }
-    chunks: list[bytes] = []
-    total = 0
-    with httpx.Client(headers=headers, timeout=DEFAULT_ATTACHMENT_TIMEOUT, follow_redirects=True) as client:
-        with client.stream("GET", url) as response:
-            response.raise_for_status()
-            for chunk in response.iter_bytes():
-                total += len(chunk)
-                if total > max_bytes:
-                    raise ValueError(f"attachment exceeds {max_bytes} bytes")
-                chunks.append(chunk)
-    return b"".join(chunks)
+    return fetch_public_bytes(
+        url,
+        max_bytes=max_bytes,
+        timeout=DEFAULT_ATTACHMENT_TIMEOUT,
+        headers=headers,
+    ).data
 
 
 def _write_attachment(root: Path, sha256: str, kind: str, data: bytes) -> Path:

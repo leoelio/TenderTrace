@@ -13,6 +13,34 @@ from tendertrace.pipeline.attachments import enrich_attachment_snapshots
 
 
 class PipelineAttachmentsTests(unittest.TestCase):
+    def test_private_network_attachment_is_skipped_before_download(self) -> None:
+        def downloader(url: str, max_bytes: int) -> bytes:
+            raise AssertionError("unsafe URL must not reach downloader")
+
+        notice = Notice(
+            id="internal",
+            source_site="partner",
+            title="内部地址附件",
+            publish_time="2026-08-16",
+            region="上海",
+            purchaser="测试单位",
+            source_url="https://example.com/notice",
+            attachments=[
+                Attachment(name="internal", url="http://127.0.0.1/private.pdf")
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = enrich_attachment_snapshots(
+                [notice],
+                settings=Settings.load(Path(tmp)),
+                downloader=downloader,
+            )
+
+        record = result.notices[0].fields["attachment_snapshots"][0]
+        self.assertEqual(record["status"], "skipped")
+        self.assertEqual(record["error"], "unsafe_url")
+
     def test_enrich_attachment_snapshots_downloads_extracts_and_limits(self) -> None:
         files = {
             "https://example.com/spec.pdf": _pdf_bytes("project SH-2026-001 budget 120"),

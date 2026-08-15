@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 DDL = (
@@ -340,6 +340,9 @@ DDL = (
         skipped_count INTEGER NOT NULL DEFAULT 0,
         updated_count INTEGER NOT NULL DEFAULT 0,
         invalid_count INTEGER NOT NULL DEFAULT 0,
+        verified_count INTEGER NOT NULL DEFAULT 0,
+        verification_failed_count INTEGER NOT NULL DEFAULT 0,
+        unsafe_count INTEGER NOT NULL DEFAULT 0,
         message TEXT NOT NULL DEFAULT '',
         started_at TEXT NOT NULL,
         finished_at TEXT NOT NULL,
@@ -393,6 +396,11 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "purchaser TEXT",
         "core_content TEXT",
         "attachments_json TEXT NOT NULL DEFAULT '[]'",
+    ),
+    "feishu_lead_import_runs": (
+        "verified_count INTEGER NOT NULL DEFAULT 0",
+        "verification_failed_count INTEGER NOT NULL DEFAULT 0",
+        "unsafe_count INTEGER NOT NULL DEFAULT 0",
     ),
 }
 

@@ -1696,7 +1696,7 @@ function renderFeishuOverview(payload) {
   const partnerLeadImport = features.partner_lead_ingest || {};
   const partnerLeadLastRun = partnerLeadImport.last_run;
   const partnerLeadDetail = partnerLeadLastRun
-    ? `${partnerLeadImport.automation_enabled ? `自动 ${partnerLeadImport.cron}` : "手动"} · 最近${statusLabel(partnerLeadLastRun.status)} · 导入 ${partnerLeadLastRun.imported_count || 0} 条`
+    ? `${partnerLeadImport.automation_enabled ? `自动 ${partnerLeadImport.cron}` : "手动"} · 最近${statusLabel(partnerLeadLastRun.status)} · 导入 ${partnerLeadLastRun.imported_count || 0} 条 · 核验 ${partnerLeadLastRun.verified_count || 0} 条 · 失败 ${partnerLeadLastRun.verification_failed_count || 0} 条`
     : `${partnerLeadImport.automation_enabled ? `自动 ${partnerLeadImport.cron}` : "手动触发"} · 暂无同步记录`;
   const rows = [
     ["报告与周报", features.report_delivery, "Word 文件和使用周报"],

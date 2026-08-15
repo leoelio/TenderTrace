@@ -35,7 +35,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 增量推送：用户订阅通过 `sent_history` 保证已经发送过的公告不重复出现在后续 Word。
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
-- 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经只读预检后进入本地公告库、FTS 和证据链，并回写稳定指纹与“已入库”状态；系统自身同步记录不会循环导入。
+- 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经预检后进入本地公告库、FTS 和证据链；系统核验公网原文、保存内容哈希与正文摘录，并回写稳定指纹、入库及核验状态。系统自身同步记录不会循环导入。
 - 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作回写本地状态流、多维表格与审计事件。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
@@ -335,9 +335,9 @@ TENDERTRACE_FEISHU_BITABLE_BASE_URL=
 
 配置 `TENDERTRACE_FEISHU_BITABLE_BASE_URL` 后，机会情报页和设置页会提供飞书台账直达入口；连接中心展示的线索数仅统计含项目指纹或公告 ID 的 TenderTrace 业务记录，不包含飞书默认空白行。
 
-合作伙伴线索使用同一张多维表格：填写“标题”“来源链接”，可选填写“线索正文”“伙伴提交人”“地区”“采购人”和附件链接，再把“状态”设为“伙伴提交”或“待导入”。设置页“导入伙伴线索”会先执行只读预检，用户确认后才入库；CLI 可用 `feishu-import-leads --dry-run` 执行同样的审计。导入内容保留原始链接并以“待来源核验”的证据状态进入系统，不会被伪装成已由官方源验证的信息。
+合作伙伴线索使用同一张多维表格：填写“标题”“来源链接”，可选填写“线索正文”“伙伴提交人”“地区”“采购人”和附件链接，再把“状态”设为“伙伴提交”或“待导入”。设置页“导入伙伴线索”会先执行预检，用户确认后才入库；CLI 可用 `feishu-import-leads --dry-run` 执行同样的审计。系统只访问公网 HTTP/HTTPS 地址，拒绝本机、私网、云元数据地址、带凭据 URL 和转向这些地址的重定向；响应受大小上限约束。核验结果会回写“来源核验”“核验时间”“核验摘要”，并直接影响机会可信度评分。
 
-需要自动轮询时，设置 `TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true` 并通过 `TENDERTRACE_FEISHU_LEAD_IMPORT_CRON` 指定频率。该开关默认关闭，且凭据不完整时应用会拒绝启动。手动预检、手动导入和定时导入均写入 `feishu_lead_import_runs`，可通过 `GET /api/integrations/feishu/bitable/import-runs` 查看扫描、候选、导入、跳过、失败与耗时。
+需要自动轮询时，设置 `TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true` 并通过 `TENDERTRACE_FEISHU_LEAD_IMPORT_CRON` 指定频率。该开关默认关闭，且凭据不完整时应用会拒绝启动。手动预检、手动导入和定时导入均写入 `feishu_lead_import_runs`，可通过 `GET /api/integrations/feishu/bitable/import-runs` 查看扫描、候选、导入、核验成功、核验失败、不安全地址、跳过与耗时。
 
 抓取器的 HTTP/动态浏览器分层、资源拦截、退避和恢复策略参考了 [Scrapling](https://github.com/D4Vinci/Scrapling) 的公开设计；TenderTrace 未复制其实现，也未引入 Patchright、curl-cffi 等额外运行时依赖。
 
@@ -462,7 +462,7 @@ The current architecture is local-first: background ingestion continuously store
 - Incremental scheduled delivery with `sent_history` deduplication.
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
-- Bidirectional Feishu partner-lead ingestion: approved Bitable rows enter the local notice library, FTS, and evidence chain, then receive an idempotent fingerprint and imported status.
+- Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
 - Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, callback-driven sales stages, and an auditable local event stream.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
@@ -719,9 +719,9 @@ The record-view extension lives in `integrations/feishu-record-view/`. Its App I
 
 When `TENDERTRACE_FEISHU_BITABLE_BASE_URL` is configured, the Opportunity Intelligence and Settings views expose a direct Base link. The synced lead count excludes Feishu's default blank rows and counts only TenderTrace records with a project fingerprint or notice ID.
 
-For partner-submitted intelligence, fill `标题` and `来源链接`, optionally add `线索正文`, `伙伴提交人`, region, buyer, and attachment links, then set `状态` to `伙伴提交` or `待导入`. The Settings action performs a read-only preview before confirmation. The same workflow is available through `python -m tendertrace feishu-import-leads --dry-run` and `python -m tendertrace feishu-import-leads`. Imported rows retain their original source URL and are explicitly marked as awaiting source verification.
+For partner-submitted intelligence, fill `标题` and `来源链接`, optionally add `线索正文`, `伙伴提交人`, region, buyer, and attachment links, then set `状态` to `伙伴提交` or `待导入`. The Settings action verifies the source during preview and imports only after confirmation. The same workflow is available through `python -m tendertrace feishu-import-leads --dry-run` and `python -m tendertrace feishu-import-leads`. Only public HTTP/HTTPS destinations are fetched; localhost, private networks, metadata addresses, credential-bearing URLs, and redirects to them are rejected. Verification writes `来源核验`, `核验时间`, and `核验摘要` back to Bitable and directly affects opportunity credibility.
 
-Set `TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true` to poll approved rows automatically and configure the cadence with `TENDERTRACE_FEISHU_LEAD_IMPORT_CRON`. Automation is disabled by default, and startup fails when it is enabled without complete Bitable credentials. Preview, manual import, and scheduled runs are recorded in `feishu_lead_import_runs`; `GET /api/integrations/feishu/bitable/import-runs` exposes scan, candidate, import, skip, failure, and duration metrics.
+Set `TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true` to poll approved rows automatically and configure the cadence with `TENDERTRACE_FEISHU_LEAD_IMPORT_CRON`. Automation is disabled by default, and startup fails when it is enabled without complete Bitable credentials. Preview, manual import, and scheduled runs are recorded in `feishu_lead_import_runs`; `GET /api/integrations/feishu/bitable/import-runs` exposes scan, candidate, import, verification, unsafe URL, skip, failure, and duration metrics.
 
 The managed fetcher adopts public architectural ideas from [Scrapling](https://github.com/D4Vinci/Scrapling), including HTTP/dynamic tiers, resource control, backoff, and recovery. TenderTrace does not copy Scrapling's implementation or require its Patchright/curl-cffi runtime stack.
 
