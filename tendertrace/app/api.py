@@ -30,7 +30,10 @@ from tendertrace.integrations.feishu import (
     feishu_status,
 )
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
-from tendertrace.integrations.feishu_leads import import_partner_leads
+from tendertrace.integrations.feishu_leads import (
+    import_partner_leads,
+    list_feishu_lead_import_runs,
+)
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
@@ -160,6 +163,8 @@ def create_app():
         message = feishu_status(settings).to_dict()
         agent = feishu_agent_status(settings).to_dict()
         receiver = load_feishu_receiver(settings)
+        lead_import_runs = list_feishu_lead_import_runs(settings, limit=1)
+        latest_lead_import = lead_import_runs[0].to_dict() if lead_import_runs else None
         bitable_ready = bool(
             settings.feishu_app_id
             and settings.feishu_app_secret_present
@@ -200,6 +205,9 @@ def create_app():
                 "partner_lead_ingest": {
                     "ready": bitable_ready,
                     "url": settings.feishu_bitable_base_url,
+                    "automation_enabled": settings.feishu_lead_import_enabled,
+                    "cron": settings.feishu_lead_import_cron,
+                    "last_run": latest_lead_import,
                 },
                 "agent_service": {"ready": bool(agent["configured"])},
                 "opportunity_cards": {"ready": bool(message["configured"])},
@@ -237,6 +245,15 @@ def create_app():
             settings,
             dry_run=bool(request.get("dry_run", False)),
         ).to_dict()
+
+    @app.get("/api/integrations/feishu/bitable/import-runs")
+    def feishu_bitable_import_runs(limit: int = 20) -> dict[str, object]:
+        return {
+            "items": [
+                item.to_dict()
+                for item in list_feishu_lead_import_runs(settings, limit=limit)
+            ]
+        }
 
     @app.get("/api/integrations/feishu/chats")
     def feishu_chats(page_size: int = 20, page_token: str | None = None) -> dict[str, object]:

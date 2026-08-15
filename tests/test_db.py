@@ -29,7 +29,8 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("user_memory_profiles", health["tables"])
         self.assertIn("opportunity_workflows", health["tables"])
         self.assertIn("opportunity_events", health["tables"])
-        self.assertIn(13, health["schema_versions"])
+        self.assertIn("feishu_lead_import_runs", health["tables"])
+        self.assertIn(14, health["schema_versions"])
 
 
 if __name__ == "__main__":

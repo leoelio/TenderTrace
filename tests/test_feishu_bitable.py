@@ -12,7 +12,10 @@ from tendertrace.delivery.feishu_bitable import (
     sync_notices_to_bitable,
     update_opportunity_workflow_in_bitable,
 )
-from tendertrace.integrations.feishu_leads import import_partner_leads
+from tendertrace.integrations.feishu_leads import (
+    import_partner_leads,
+    list_feishu_lead_import_runs,
+)
 from tendertrace.db import connection, init_db
 
 
@@ -318,6 +321,7 @@ class FeishuBitableTests(unittest.TestCase):
                     "SELECT COUNT(*) FROM notices_fts WHERE notice_id = ?",
                     ("feishu_partner:rec-partner-1",),
                 ).fetchone()[0]
+            audit_runs = list_feishu_lead_import_runs(settings)
 
         self.assertEqual(preview.candidate_count, 1)
         self.assertEqual(preview.imported_count, 0)
@@ -330,6 +334,9 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(update["状态"], "已入库")
         self.assertEqual(update["公告ID"], "rec-partner-1")
         self.assertEqual(update["项目指纹"], "feishu_partner:rec-partner-1")
+        self.assertEqual([item.status for item in audit_runs], ["imported", "preview"])
+        self.assertEqual(audit_runs[0].imported_count, 1)
+        self.assertEqual(audit_runs[1].candidate_count, 1)
 
 
 def _settings(root: Path) -> Settings:

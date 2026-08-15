@@ -81,6 +81,7 @@ REQUIRED_TABLES = {
     "user_activity_events",
     "weekly_reports",
     "user_memory_profiles",
+    "feishu_lead_import_runs",
 }
 
 SECRET_SCAN_PATHS = (

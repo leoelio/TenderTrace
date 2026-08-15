@@ -19,6 +19,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.attachment_max_per_notice, 3)
         self.assertEqual(settings.attachment_max_bytes, 8388608)
         self.assertFalse(settings.vector_enabled)
+        self.assertFalse(settings.feishu_lead_import_enabled)
+        self.assertEqual(settings.feishu_lead_import_cron, "*/15 * * * *")
         self.assertEqual(settings.vector_model, "BAAI/bge-small-zh-v1.5")
         self.assertFalse(settings.api_token_present)
         self.assertIn("openai_key_configured", settings.safe_summary())
@@ -28,6 +30,36 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn("smtp_password", settings.safe_summary())
         self.assertFalse(settings.safe_summary()["smtp_password_configured"])
         self.assertFalse(settings.safe_summary()["api_token_configured"])
+        self.assertFalse(settings.safe_summary()["feishu_lead_import_enabled"])
+
+    def test_feishu_lead_import_requires_complete_bitable_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
+
+    def test_feishu_lead_import_schedule_is_configurable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_FEISHU_APP_ID=cli_test\n"
+                "TENDERTRACE_FEISHU_APP_SECRET=secret\n"
+                "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=base_test\n"
+                "TENDERTRACE_FEISHU_BITABLE_TABLE_ID=tbl_test\n"
+                "TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true\n"
+                "TENDERTRACE_FEISHU_LEAD_IMPORT_CRON=*/5 * * * *\n",
+                encoding="utf-8",
+            )
+
+            settings = Settings.load(root)
+
+        self.assertTrue(settings.feishu_lead_import_enabled)
+        self.assertEqual(settings.feishu_lead_import_cron, "*/5 * * * *")
 
     def test_cloud_mode_requires_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

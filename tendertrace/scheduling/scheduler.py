@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
 from tendertrace.ingest import run_ingest_cycle
+from tendertrace.integrations.feishu_leads import import_partner_leads
 from tendertrace.scheduling.ingest_subscriptions import (
     IngestSubscription,
     list_ingest_subscriptions,
@@ -30,6 +31,8 @@ def start_subscription_scheduler(settings: Settings):
         schedule_ingest_subscription(scheduler, settings, subscription)
     if settings.ingest_enabled:
         schedule_ingest_pool(scheduler, settings)
+    if settings.feishu_lead_import_enabled:
+        schedule_feishu_lead_import(scheduler, settings)
     scheduler.start()
     return scheduler
 
@@ -79,6 +82,25 @@ def schedule_ingest_subscription(
         trigger=CronTrigger.from_crontab(subscription.cron, timezone=subscription.timezone),
         id=f"ingest_subscription:{subscription.id}",
         kwargs={"settings": settings, "subscription_id": subscription.id},
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
+def schedule_feishu_lead_import(scheduler, settings: Settings) -> None:
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError as exc:
+        raise RuntimeError("APScheduler is not installed. Run: python -m pip install -e .[dev]") from exc
+    scheduler.add_job(
+        import_partner_leads,
+        trigger=CronTrigger.from_crontab(
+            settings.feishu_lead_import_cron,
+            timezone=settings.timezone,
+        ),
+        id="feishu:partner-leads",
+        kwargs={"settings": settings},
         replace_existing=True,
         coalesce=True,
         max_instances=1,

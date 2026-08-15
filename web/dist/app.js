@@ -1693,10 +1693,15 @@ function renderFeishuOverview(payload) {
   if (!el.feishuFeatureList) return;
   state.feishu = payload;
   const features = payload.features || {};
+  const partnerLeadImport = features.partner_lead_ingest || {};
+  const partnerLeadLastRun = partnerLeadImport.last_run;
+  const partnerLeadDetail = partnerLeadLastRun
+    ? `${partnerLeadImport.automation_enabled ? `自动 ${partnerLeadImport.cron}` : "手动"} · 最近${statusLabel(partnerLeadLastRun.status)} · 导入 ${partnerLeadLastRun.imported_count || 0} 条`
+    : `${partnerLeadImport.automation_enabled ? `自动 ${partnerLeadImport.cron}` : "手动触发"} · 暂无同步记录`;
   const rows = [
     ["报告与周报", features.report_delivery, "Word 文件和使用周报"],
     ["多维表格", features.bitable_sync, features.bitable_sync?.detail || "公告明细同步"],
-    ["伙伴线索入口", features.partner_lead_ingest, "团队提交后进入本地检索与证据链"],
+    ["伙伴线索入口", partnerLeadImport, partnerLeadDetail],
     ["机会卡片", features.opportunity_cards, "可操作机会卡片与原文入口"],
     ["销售任务", features.task_sync, "负责人任务与下一步行动"],
     ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],

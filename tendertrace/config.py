@@ -88,6 +88,8 @@ class Settings:
     feishu_bitable_table_id: str
     feishu_bitable_base_url: str
     feishu_timeout: float
+    feishu_lead_import_enabled: bool
+    feishu_lead_import_cron: str
     public_base_url: str
     db_path: Path
     outputs_dir: Path
@@ -193,6 +195,27 @@ class Settings:
         feishu_bitable_app_secret = _first_value(
             "TENDERTRACE_FEISHU_APP_SECRET", env_files, feishu_message_app_secret
         )
+        feishu_bitable_app_token = _first_value(
+            "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN", env_files, ""
+        )
+        feishu_bitable_table_id = _first_value(
+            "TENDERTRACE_FEISHU_BITABLE_TABLE_ID", env_files, ""
+        )
+        feishu_lead_import_enabled = _parse_bool(
+            _first_value("TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED", env_files, "false")
+        )
+        if feishu_lead_import_enabled and not all(
+            (
+                feishu_bitable_app_id,
+                _bool_secret_present(feishu_bitable_app_secret),
+                feishu_bitable_app_token,
+                feishu_bitable_table_id,
+            )
+        ):
+            raise ConfigError(
+                "TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true requires complete "
+                "Feishu Bitable configuration"
+            )
         if feishu_enabled and (
             not _bool_secret_present(feishu_message_app_id)
             or not _bool_secret_present(feishu_message_app_secret)
@@ -243,16 +266,8 @@ class Settings:
             ),
             feishu_app_id=feishu_bitable_app_id,
             feishu_app_secret_present=_bool_secret_present(feishu_bitable_app_secret),
-            feishu_bitable_app_token=_first_value(
-                "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN",
-                env_files,
-                "",
-            ),
-            feishu_bitable_table_id=_first_value(
-                "TENDERTRACE_FEISHU_BITABLE_TABLE_ID",
-                env_files,
-                "",
-            ),
+            feishu_bitable_app_token=feishu_bitable_app_token,
+            feishu_bitable_table_id=feishu_bitable_table_id,
             feishu_bitable_base_url=_first_value(
                 "TENDERTRACE_FEISHU_BITABLE_BASE_URL",
                 env_files,
@@ -261,6 +276,10 @@ class Settings:
             feishu_timeout=_parse_positive_float(
                 _first_value("TENDERTRACE_FEISHU_TIMEOUT", env_files, "20"),
                 "TENDERTRACE_FEISHU_TIMEOUT",
+            ),
+            feishu_lead_import_enabled=feishu_lead_import_enabled,
+            feishu_lead_import_cron=_first_value(
+                "TENDERTRACE_FEISHU_LEAD_IMPORT_CRON", env_files, "*/15 * * * *"
             ),
             public_base_url=public_base_url.rstrip("/"),
             db_path=_resolve_path(
@@ -386,6 +405,8 @@ class Settings:
             "feishu_bitable_table_id": self.feishu_bitable_table_id,
             "feishu_bitable_base_url": self.feishu_bitable_base_url,
             "feishu_timeout": self.feishu_timeout,
+            "feishu_lead_import_enabled": self.feishu_lead_import_enabled,
+            "feishu_lead_import_cron": self.feishu_lead_import_cron,
             "public_base_url": self.public_base_url,
             "db_path": str(self.db_path),
             "outputs_dir": str(self.outputs_dir),

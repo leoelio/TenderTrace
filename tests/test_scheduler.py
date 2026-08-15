@@ -6,6 +6,7 @@ import unittest
 from tendertrace.config import Settings
 from tendertrace.scheduling.ingest_subscriptions import IngestSubscription
 from tendertrace.scheduling.scheduler import (
+    schedule_feishu_lead_import,
     schedule_ingest_pool,
     schedule_ingest_subscription,
     schedule_subscription,
@@ -84,6 +85,29 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(len(scheduler.jobs), 1)
         self.assertEqual(scheduler.jobs[0]["kwargs"]["id"], "ingest_subscription:ingest-1")
         self.assertEqual(scheduler.jobs[0]["kwargs"]["kwargs"]["subscription_id"], "ingest-1")
+
+    def test_feishu_lead_import_registers_single_coalesced_job(self) -> None:
+        scheduler = FakeScheduler()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_FEISHU_APP_ID=cli_test\n"
+                "TENDERTRACE_FEISHU_APP_SECRET=secret\n"
+                "TENDERTRACE_FEISHU_BITABLE_APP_TOKEN=base_test\n"
+                "TENDERTRACE_FEISHU_BITABLE_TABLE_ID=tbl_test\n"
+                "TENDERTRACE_FEISHU_LEAD_IMPORT_ENABLED=true\n"
+                "TENDERTRACE_FEISHU_LEAD_IMPORT_CRON=*/10 * * * *\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        schedule_feishu_lead_import(scheduler, settings)
+
+        job = scheduler.jobs[0]["kwargs"]
+        self.assertEqual(job["id"], "feishu:partner-leads")
+        self.assertTrue(job["replace_existing"])
+        self.assertTrue(job["coalesce"])
+        self.assertEqual(job["max_instances"], 1)
 
 
 if __name__ == "__main__":

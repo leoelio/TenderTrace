@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
@@ -23,6 +24,7 @@ PARTNER_LEAD_READY_STATES = frozenset({"伙伴提交", "待导入"})
 class FeishuLeadImportResult:
     status: str
     dry_run: bool
+    run_id: str = ""
     scanned_count: int = 0
     candidate_count: int = 0
     imported_count: int = 0
@@ -36,6 +38,27 @@ class FeishuLeadImportResult:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class FeishuLeadImportRun:
+    id: str
+    mode: str
+    status: str
+    scanned_count: int
+    candidate_count: int
+    imported_count: int
+    existing_count: int
+    skipped_count: int
+    updated_count: int
+    invalid_count: int
+    message: str
+    started_at: str
+    finished_at: str
+    duration_ms: int
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
 def import_partner_leads(
     settings: Settings,
     *,
@@ -43,16 +66,26 @@ def import_partner_leads(
     http_client_factory=httpx.Client,
 ) -> FeishuLeadImportResult:
     init_db(settings)
+    run_id = str(uuid4())
+    started_at = datetime.now().astimezone()
+
+    def finish(result: FeishuLeadImportResult) -> FeishuLeadImportResult:
+        _record_import_run(settings, result, started_at=started_at)
+        return result
+
     try:
         records = list_feishu_bitable_records(
             settings,
             http_client_factory=http_client_factory,
         )
     except Exception as exc:
-        return FeishuLeadImportResult(
-            status="failed",
-            dry_run=dry_run,
-            message=f"{type(exc).__name__}: {exc}",
+        return finish(
+            FeishuLeadImportResult(
+                status="failed",
+                dry_run=dry_run,
+                run_id=run_id,
+                message=f"{type(exc).__name__}: {exc}",
+            )
         )
 
     candidates: list[tuple[str, Notice]] = []
@@ -80,15 +113,18 @@ def import_partner_leads(
     existing_ids = _existing_notice_ids(settings, [record_id for record_id, _ in candidates])
     new_candidates = [item for item in candidates if item[0] not in existing_ids]
     if dry_run:
-        return FeishuLeadImportResult(
-            status="preview",
-            dry_run=True,
-            scanned_count=len(records),
-            candidate_count=len(candidates),
-            existing_count=len(existing_ids),
-            skipped_count=skipped,
-            invalid_records=tuple(invalid),
-            message="preview completed without writing local or Feishu data",
+        return finish(
+            FeishuLeadImportResult(
+                status="preview",
+                dry_run=True,
+                run_id=run_id,
+                scanned_count=len(records),
+                candidate_count=len(candidates),
+                existing_count=len(existing_ids),
+                skipped_count=skipped,
+                invalid_records=tuple(invalid),
+                message="preview completed without writing local or Feishu data",
+            )
         )
 
     if new_candidates:
@@ -113,29 +149,94 @@ def import_partner_leads(
             http_client_factory=http_client_factory,
         )
     except Exception as exc:
-        return FeishuLeadImportResult(
-            status="partial" if new_candidates else "failed",
+        return finish(
+            FeishuLeadImportResult(
+                status="partial" if new_candidates else "failed",
+                dry_run=False,
+                run_id=run_id,
+                scanned_count=len(records),
+                candidate_count=len(candidates),
+                imported_count=len(new_candidates),
+                existing_count=len(existing_ids),
+                skipped_count=skipped,
+                invalid_records=tuple(invalid),
+                message=(
+                    "local import completed but Feishu update failed: "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            )
+        )
+    return finish(
+        FeishuLeadImportResult(
+            status="imported",
             dry_run=False,
+            run_id=run_id,
             scanned_count=len(records),
             candidate_count=len(candidates),
             imported_count=len(new_candidates),
             existing_count=len(existing_ids),
             skipped_count=skipped,
+            updated_count=updated_count,
             invalid_records=tuple(invalid),
-            message=f"local import completed but Feishu update failed: {type(exc).__name__}: {exc}",
+            message="partner leads are searchable in the local notice library",
         )
-    return FeishuLeadImportResult(
-        status="imported",
-        dry_run=False,
-        scanned_count=len(records),
-        candidate_count=len(candidates),
-        imported_count=len(new_candidates),
-        existing_count=len(existing_ids),
-        skipped_count=skipped,
-        updated_count=updated_count,
-        invalid_records=tuple(invalid),
-        message="partner leads are searchable in the local notice library",
     )
+
+
+def list_feishu_lead_import_runs(
+    settings: Settings,
+    *,
+    limit: int = 20,
+) -> list[FeishuLeadImportRun]:
+    init_db(settings)
+    safe_limit = min(max(int(limit), 1), 100)
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM feishu_lead_import_runs
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+    return [FeishuLeadImportRun(**dict(row)) for row in rows]
+
+
+def _record_import_run(
+    settings: Settings,
+    result: FeishuLeadImportResult,
+    *,
+    started_at: datetime,
+) -> None:
+    finished_at = datetime.now().astimezone()
+    duration_ms = max(0, int((finished_at - started_at).total_seconds() * 1000))
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO feishu_lead_import_runs(
+                id, mode, status, scanned_count, candidate_count, imported_count,
+                existing_count, skipped_count, updated_count, invalid_count,
+                message, started_at, finished_at, duration_ms
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                result.run_id,
+                "preview" if result.dry_run else "import",
+                result.status,
+                result.scanned_count,
+                result.candidate_count,
+                result.imported_count,
+                result.existing_count,
+                result.skipped_count,
+                result.updated_count,
+                len(result.invalid_records),
+                result.message,
+                started_at.isoformat(timespec="milliseconds"),
+                finished_at.isoformat(timespec="milliseconds"),
+                duration_ms,
+            ),
+        )
 
 
 def _is_partner_candidate(fields: dict[str, Any]) -> bool:

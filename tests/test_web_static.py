@@ -66,6 +66,7 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn('id="importFeishuLeadsButton"', html)
         self.assertIn("/api/integrations/feishu/bitable/import-leads", js)
         self.assertIn("importFeishuPartnerLeads", js)
+        self.assertIn("partnerLeadImport.last_run", js)
         self.assertIn('id="mobileNavButton"', html)
         self.assertIn("data-example-query", html)
         self.assertIn('id="refreshMemoryButton"', html)
