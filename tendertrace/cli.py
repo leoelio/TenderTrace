@@ -22,6 +22,7 @@ from tendertrace.integrations.feishu import (
     feishu_status,
 )
 from tendertrace.integrations.feishu_leads import import_partner_leads
+from tendertrace.integrations.feishu_bot import start_feishu_bot_listener
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.llm.gateway import model_status
@@ -124,6 +125,18 @@ def cmd_feishu_list_chats(args: argparse.Namespace) -> int:
         print(f"feishu error: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_feishu_bot_listen(_: argparse.Namespace) -> int:
+    settings = _settings()
+    try:
+        start_feishu_bot_listener(settings)
+    except KeyboardInterrupt:
+        return 0
+    except (FeishuError, RuntimeError) as exc:
+        print(f"feishu bot error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -566,6 +579,10 @@ def build_parser() -> argparse.ArgumentParser:
     feishu_chats.add_argument("--page-size", type=int, default=20)
     feishu_chats.add_argument("--page-token", default=None)
     feishu_chats.set_defaults(func=cmd_feishu_list_chats)
+    sub.add_parser(
+        "feishu-bot-listen",
+        help="Receive Feishu text commands through the official long connection.",
+    ).set_defaults(func=cmd_feishu_bot_listen)
     sub.add_parser("health", help="Print local database health.").set_defaults(func=cmd_health)
     acceptance = sub.add_parser(
         "acceptance-check",

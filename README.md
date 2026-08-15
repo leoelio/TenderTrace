@@ -37,6 +37,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经预检后进入本地公告库、FTS 和证据链；系统核验公网原文、保存内容哈希与正文摘录，并回写稳定指纹、入库及核验状态。系统自身同步记录不会循环导入。
 - 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作回写本地状态流、多维表格与审计事件。
+- 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
 - 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
@@ -269,6 +270,7 @@ python -m tendertrace model-doctor
 python -m tendertrace feishu-status
 python -m tendertrace feishu-list-chats --page-size 20
 python -m tendertrace feishu-send-text --text "TenderTrace 飞书联调消息"
+python -m tendertrace feishu-bot-listen
 ```
 
 生成用户记忆周报与画像快照：
@@ -318,10 +320,16 @@ python -m tendertrace embed-notices
 - `POST /api/opportunities/send-feishu`：发送可操作机会卡片，并按需创建幂等任务与截止日程。
 - `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
 - `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态并同步多维表格。
+- `POST /api/integrations/feishu/events`：接收飞书消息事件，校验令牌、去重后异步执行自然语言查询或创建订阅。
+- `GET /api/integrations/feishu/message-events`：查看飞书会话指令的运行、订阅、失败与恢复审计。
 
 设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232025`，需要先在应用后台启用机器人能力并发布新版本；若返回 `232034`，需要确认当前租户已经安装已发布应用。
 
 机会协同使用公告 ID 生成任务 `client_token` 与日程 `idempotency_key`，重复同步不会重复创建任务或日程。启用截止日程需配置 `FEISHU_CALENDAR_ID`；启用卡片动作需配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，并在飞书开发者后台把可公网访问的 `/api/integrations/feishu/callback` 注册为回调地址。本地 `127.0.0.1` 不能直接接收飞书云端回调。
+
+飞书会话也可以直接作为 TenderTrace 的自然语言入口。为自建应用启用机器人能力并订阅 `im.message.receive_v1` 后，安装可选依赖 `python -m pip install -e .[feishu]`，运行 `python -m tendertrace feishu-bot-listen` 即可通过官方长连接接收消息，无需把本地服务暴露到公网。即时问题会运行检索、生成 Word 并回传原会话；带发送时间或频率的问题会创建绑定原会话的增量订阅。事件先写入 `feishu_message_events`，以 `event_id` 和 `message_id` 双重去重，进程重启时会恢复未处理或超时任务。启用 `TENDERTRACE_SCHEDULER_ENABLED` 时，该 CLI 同时承担订阅调度；同一数据库只能运行一个启用调度器的进程。
+
+生产环境也可使用未加密的 HTTP 事件订阅：配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，将可公网访问的 `/api/integrations/feishu/events` 设置为请求地址。该入口只接受令牌校验通过的事件并立即返回，实际检索在线程池执行。需要事件加密时应使用已经支持加密处理的官方长连接模式。长连接和 HTTP 回调只选择一种，避免同一事件产生无意义的重复投递；即使同时收到，持久化幂等键也会阻止重复运行。
 
 多维表格服务端同步还需要具体 Base 文档的 `app_token` 与数据表的 `table_id`。二者可以从实际多维表格 URL 获取，不能使用应用 App ID 或记录视图的 `blk_...` BlockTypeID 替代：
 
@@ -464,6 +472,7 @@ The current architecture is local-first: background ingestion continuously store
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
 - Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, callback-driven sales stages, and an auditable local event stream.
+- Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
 - Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
@@ -657,6 +666,7 @@ Check Feishu integration status and send a test message:
 python -m tendertrace feishu-status
 python -m tendertrace feishu-list-chats --page-size 20
 python -m tendertrace feishu-send-text --text "TenderTrace Feishu smoke message"
+python -m tendertrace feishu-bot-listen
 ```
 
 Build and persist a user-memory weekly profile snapshot:
@@ -708,10 +718,16 @@ Available Web APIs:
 - `POST /api/opportunities/send-feishu`: send an actionable opportunity card and optionally create an idempotent task and deadline event.
 - `GET /api/opportunities/{notice_id}/workflow`: inspect the owner, sales stage, and Feishu artifact state.
 - `POST /api/integrations/feishu/callback`: verify card callbacks, advance the opportunity stage, and update Bitable.
+- `POST /api/integrations/feishu/events`: verify, deduplicate, and asynchronously execute inbound Feishu text commands.
+- `GET /api/integrations/feishu/message-events`: inspect inbound run, subscription, failure, and recovery audits.
 
 The Feishu connection center can select a default chat from the bot's visible chats. Queries and subscriptions can opt into automatic Word delivery, while every success or failure is written to the local delivery ledger. Error `232025` means bot capability must be enabled and a new app version published; error `232034` means the published app is not installed in the current tenant.
 
 Task `client_token` and calendar `idempotency_key` values are derived from the notice ID, so repeated synchronization does not duplicate those artifacts. Set `FEISHU_CALENDAR_ID` to enable deadline events. Set `FEISHU_CALLBACK_VERIFICATION_TOKEN` and register the publicly reachable `/api/integrations/feishu/callback` endpoint in Feishu Developer Console to enable card actions; a local `127.0.0.1` URL is not reachable from Feishu Cloud.
+
+Feishu conversations can also be the native natural-language entry point. Enable the bot capability, subscribe to `im.message.receive_v1`, install the optional dependency with `python -m pip install -e .[feishu]`, then run `python -m tendertrace feishu-bot-listen`. The official long connection does not require exposing the local service. Immediate questions run retrieval, generate Word, and deliver it to the originating chat; questions containing a delivery time or cadence create an incremental subscription bound to that chat. Every event is persisted and deduplicated by both event and message ID, and unfinished or stale work is recovered after restart. When `TENDERTRACE_SCHEDULER_ENABLED` is enabled, this CLI also owns subscription scheduling; only one scheduler-enabled process may use a given database.
+
+For unencrypted production HTTP event delivery, configure `FEISHU_CALLBACK_VERIFICATION_TOKEN` and register the publicly reachable `/api/integrations/feishu/events` URL. The endpoint acknowledges verified events immediately and executes work in a bounded thread pool. Use the official long connection when encrypted event transport is required. Use either long connection or HTTP delivery; the durable idempotency ledger still prevents duplicate execution if both transports receive the same event.
 
 Server-side Bitable sync also requires the target Base document's `app_token` and table `table_id`. Extract both from the actual Base URL; neither the application App ID nor the record-view `blk_...` BlockTypeID can replace them.
 

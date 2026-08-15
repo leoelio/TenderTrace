@@ -30,7 +30,8 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("opportunity_workflows", health["tables"])
         self.assertIn("opportunity_events", health["tables"])
         self.assertIn("feishu_lead_import_runs", health["tables"])
-        self.assertIn(15, health["schema_versions"])
+        self.assertIn("feishu_message_events", health["tables"])
+        self.assertIn(16, health["schema_versions"])
 
 
 if __name__ == "__main__":

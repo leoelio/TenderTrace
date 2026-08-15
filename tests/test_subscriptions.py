@@ -2,12 +2,14 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from tendertrace.adapters.ccgp import Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
 from tendertrace.runlog import get_run, list_outbox_messages
+from tendertrace.runner import RunOnceResult
 from tendertrace.scheduling.subscriptions import (
     create_subscription,
     list_subscriptions,
@@ -113,6 +115,35 @@ class SubscriptionTests(unittest.TestCase):
             subscription.bidql["_runtime"],
             {"max_pages": 3, "max_results": 8, "model_strategy": "hybrid"},
         )
+
+    def test_subscription_preserves_feishu_origin_chat_for_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            subscription = create_subscription(
+                settings,
+                query="最近一个月上海服务器招标，每天9点发送给我",
+                now=datetime(2026, 7, 6, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+                delivery_channels=("web", "outbox", "feishu"),
+                feishu_receive_id="oc_origin",
+                feishu_receive_id_type="chat_id",
+            )
+            with patch(
+                "tendertrace.scheduling.subscriptions.run_once",
+                return_value=RunOnceResult(
+                    run_id="run-origin",
+                    status="finished",
+                    notice_count=0,
+                    docx_path="report.docx",
+                    outbox_path="outbox/report.docx",
+                    trace_events=1,
+                ),
+            ) as mocked:
+                run_subscription(settings, subscription_id=subscription.id)
+
+        runtime = subscription.bidql["_runtime"]
+        self.assertEqual(runtime["feishu_receive_id"], "oc_origin")
+        self.assertEqual(mocked.call_args.kwargs["feishu_receive_id"], "oc_origin")
+        self.assertEqual(mocked.call_args.kwargs["feishu_receive_id_type"], "chat_id")
 
 
 if __name__ == "__main__":

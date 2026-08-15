@@ -39,6 +39,8 @@ def create_subscription(
     schedule_override: dict[str, Any] | None = None,
     model_strategy: str | None = None,
     delivery_channels: list[str] | tuple[str, ...] | None = None,
+    feishu_receive_id: str | None = None,
+    feishu_receive_id_type: str | None = None,
 ) -> Subscription:
     init_db(settings)
     bidql = compile_intent(query, now=now)
@@ -53,6 +55,9 @@ def create_subscription(
         runtime["model_strategy"] = model_strategy
     if delivery_channels is not None:
         runtime["delivery_channels"] = _normalize_delivery_channels(delivery_channels)
+    if feishu_receive_id:
+        runtime["feishu_receive_id"] = feishu_receive_id
+        runtime["feishu_receive_id_type"] = feishu_receive_id_type or "chat_id"
     bidql["_runtime"] = runtime
     subscription_id = str(uuid4())
     with connection(settings) as conn:
@@ -135,6 +140,8 @@ def run_subscription(
         incremental=True,
         model_strategy=model_strategy,
         delivery_channels=delivery_channels,
+        feishu_receive_id=str(runtime.get("feishu_receive_id") or "") or None,
+        feishu_receive_id_type=str(runtime.get("feishu_receive_id_type") or "") or None,
     )
     with connection(settings) as conn:
         conn.execute(

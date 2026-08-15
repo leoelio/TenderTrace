@@ -112,6 +112,8 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("renderGeneratedAdvice", js)
         self.assertIn("renderSmartStart", js)
         self.assertIn("renderFeishuOverview", js)
+        self.assertIn("会话自然语言指令", js)
+        self.assertIn("conversation_commands", js)
         self.assertIn("applyExampleQuery", js)
         self.assertIn("normalizeWorkbenchLayout", js)
         self.assertIn("source-health-grid", js)

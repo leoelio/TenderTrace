@@ -1,0 +1,373 @@
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass
+import importlib.util
+import json
+from typing import Any, Callable
+
+from tendertrace.config import Settings
+from tendertrace.db import connection, init_db
+from tendertrace.integrations.feishu import FeishuClient, FeishuError, feishu_status
+from tendertrace.intent import compile_intent
+from tendertrace.runner import RunOnceResult, run_once
+from tendertrace.scheduling.scheduler import schedule_subscription, start_subscription_scheduler
+from tendertrace.scheduling.subscriptions import Subscription, create_subscription
+
+
+@dataclass(frozen=True)
+class FeishuMessageEvent:
+    event_id: str
+    message_id: str
+    chat_id: str
+    chat_type: str
+    sender_open_id: str
+    query: str
+    command_kind: str
+    status: str
+    run_id: str = ""
+    subscription_id: str = ""
+    error: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        return asdict(self)
+
+
+def accept_feishu_message_event(
+    settings: Settings,
+    payload: dict[str, Any],
+) -> FeishuMessageEvent:
+    init_db(settings)
+    parsed = _parse_message_event(payload)
+    with connection(settings) as conn:
+        inserted = conn.execute(
+            """
+            INSERT OR IGNORE INTO feishu_message_events(
+                event_id, message_id, chat_id, chat_type, sender_open_id,
+                query, command_kind, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                parsed.event_id,
+                parsed.message_id,
+                parsed.chat_id,
+                parsed.chat_type,
+                parsed.sender_open_id,
+                parsed.query,
+                parsed.command_kind,
+                parsed.status,
+            ),
+        ).rowcount
+        row = conn.execute(
+            """
+            SELECT * FROM feishu_message_events
+            WHERE event_id = ? OR message_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (parsed.event_id, parsed.message_id),
+        ).fetchone()
+    if row is None:
+        raise RuntimeError("Feishu message event was not persisted")
+    event = _from_row(row)
+    if not inserted and event.status not in {"completed", "failed", "ignored"}:
+        return FeishuMessageEvent(**{**event.to_dict(), "status": "duplicate"})
+    return event
+
+
+def process_feishu_message_event(
+    settings: Settings,
+    event_id: str,
+    *,
+    scheduler=None,
+    client: FeishuClient | None = None,
+    run_func: Callable[..., RunOnceResult] = run_once,
+    subscription_creator: Callable[..., Subscription] = create_subscription,
+) -> FeishuMessageEvent:
+    event = get_feishu_message_event(settings, event_id)
+    if event is None:
+        raise ValueError("Feishu message event not found")
+    if not _claim_event(settings, event_id):
+        return event
+    feishu = client or FeishuClient(settings)
+    try:
+        bidql = compile_intent(event.query)
+        schedule = bidql.get("schedule") if isinstance(bidql.get("schedule"), dict) else {}
+        if str(schedule.get("kind") or "immediate") == "immediate":
+            result = run_func(
+                settings=settings,
+                query=event.query,
+                max_pages=1,
+                max_results=10,
+                delivery_channels=("web", "outbox", "feishu"),
+                feishu_receive_id=event.chat_id,
+                feishu_receive_id_type="chat_id",
+            )
+            _update_event(
+                settings,
+                event_id,
+                status="completed",
+                command_kind="run",
+                run_id=result.run_id,
+            )
+            feishu.reply_text(
+                event.message_id,
+                f"检索完成：共 {result.notice_count} 条，Word 报告已发送到当前会话。",
+            )
+        else:
+            subscription = subscription_creator(
+                settings,
+                query=event.query,
+                max_pages=1,
+                max_results=10,
+                delivery_channels=("web", "outbox", "feishu"),
+                feishu_receive_id=event.chat_id,
+                feishu_receive_id_type="chat_id",
+            )
+            if scheduler is not None:
+                schedule_subscription(scheduler, settings, subscription)
+            _update_event(
+                settings,
+                event_id,
+                status="completed",
+                command_kind="subscription",
+                subscription_id=subscription.id,
+            )
+            feishu.reply_text(
+                event.message_id,
+                (
+                    f"订阅已创建：{subscription.schedule_kind}，后续增量报告将发送到当前会话。"
+                    if scheduler is not None
+                    else "订阅已保存；调度器当前未运行，启用后将按计划发送到当前会话。"
+                ),
+            )
+    except Exception as exc:
+        _update_event(
+            settings,
+            event_id,
+            status="failed",
+            error=f"{type(exc).__name__}: {exc}"[:1000],
+        )
+        try:
+            feishu.reply_text(
+                event.message_id,
+                f"处理失败，请在 TenderTrace 事件审计中查看事件 {event_id}。",
+            )
+        except Exception:
+            pass
+    updated = get_feishu_message_event(settings, event_id)
+    if updated is None:
+        raise RuntimeError("Feishu message event disappeared after processing")
+    return updated
+
+
+def get_feishu_message_event(
+    settings: Settings,
+    event_id: str,
+) -> FeishuMessageEvent | None:
+    with connection(settings) as conn:
+        row = conn.execute(
+            "SELECT * FROM feishu_message_events WHERE event_id = ?",
+            (event_id,),
+        ).fetchone()
+    return _from_row(row) if row else None
+
+
+def list_feishu_message_events(
+    settings: Settings,
+    *,
+    limit: int = 20,
+) -> list[FeishuMessageEvent]:
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM feishu_message_events
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (max(1, min(int(limit), 100)),),
+        ).fetchall()
+    return [_from_row(row) for row in rows]
+
+
+def pending_feishu_message_event_ids(
+    settings: Settings,
+    *,
+    limit: int = 50,
+) -> list[str]:
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT event_id
+            FROM feishu_message_events
+            WHERE status = 'accepted'
+               OR (status = 'processing' AND updated_at <= datetime('now', '-15 minutes'))
+            ORDER BY created_at
+            LIMIT ?
+            """,
+            (max(1, min(int(limit), 200)),),
+        ).fetchall()
+    return [str(row["event_id"]) for row in rows]
+
+
+def feishu_long_connection_available() -> bool:
+    return importlib.util.find_spec("lark_oapi") is not None
+
+
+def start_feishu_bot_listener(settings: Settings) -> None:
+    if not feishu_status(settings).configured:
+        raise FeishuError("Feishu bot listener requires enabled message-app credentials")
+    try:
+        import lark_oapi as lark
+    except ImportError as exc:
+        raise RuntimeError(
+            "Feishu long connection requires: python -m pip install -e .[feishu]"
+        ) from exc
+
+    init_db(settings)
+    owned_scheduler = start_subscription_scheduler(settings) if settings.scheduler_enabled else None
+    executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="feishu-bot")
+    for event_id in pending_feishu_message_event_ids(settings):
+        executor.submit(
+            process_feishu_message_event,
+            settings,
+            event_id,
+            scheduler=owned_scheduler,
+        )
+
+    def on_message(data) -> None:
+        payload = json.loads(lark.JSON.marshal(data) or "{}")
+        event = accept_feishu_message_event(settings, payload)
+        if event.status == "accepted":
+            executor.submit(
+                process_feishu_message_event,
+                settings,
+                event.event_id,
+                scheduler=owned_scheduler,
+            )
+
+    handler = (
+        lark.EventDispatcherHandler.builder(
+            "",
+            settings.feishu_callback_verification_token(),
+        )
+        .register_p2_im_message_receive_v1(on_message)
+        .build()
+    )
+    client = lark.ws.Client(
+        settings.feishu_message_app_id(),
+        settings.feishu_message_app_secret(),
+        event_handler=handler,
+        domain=settings.feishu_base_url,
+        log_level=lark.LogLevel.INFO,
+    )
+    try:
+        client.start()
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+        if owned_scheduler is not None:
+            owned_scheduler.shutdown(wait=False)
+
+
+def _parse_message_event(payload: dict[str, Any]) -> FeishuMessageEvent:
+    header = payload.get("header") if isinstance(payload.get("header"), dict) else {}
+    event_type = str(header.get("event_type") or "")
+    if event_type not in {"im.message.receive_v1", "p2.im.message.receive_v1"}:
+        raise ValueError(f"unsupported Feishu event type: {event_type}")
+    body = payload.get("event") if isinstance(payload.get("event"), dict) else {}
+    message = body.get("message") if isinstance(body.get("message"), dict) else {}
+    sender = body.get("sender") if isinstance(body.get("sender"), dict) else {}
+    sender_id = sender.get("sender_id") if isinstance(sender.get("sender_id"), dict) else {}
+    message_id = str(message.get("message_id") or "").strip()
+    event_id = str(header.get("event_id") or message_id).strip()
+    chat_id = str(message.get("chat_id") or "").strip()
+    if not event_id or not message_id or not chat_id:
+        raise ValueError("Feishu message event requires event_id, message_id and chat_id")
+    message_type = str(message.get("message_type") or "")
+    sender_type = str(sender.get("sender_type") or "")
+    query = _message_text(message)
+    status = "accepted"
+    if message_type != "text" or sender_type != "user" or not query:
+        status = "ignored"
+    return FeishuMessageEvent(
+        event_id=event_id,
+        message_id=message_id,
+        chat_id=chat_id,
+        chat_type=str(message.get("chat_type") or ""),
+        sender_open_id=str(sender_id.get("open_id") or ""),
+        query=query,
+        command_kind="pending",
+        status=status,
+    )
+
+
+def _message_text(message: dict[str, Any]) -> str:
+    try:
+        content = json.loads(str(message.get("content") or "{}"))
+    except json.JSONDecodeError:
+        return ""
+    text = str(content.get("text") or "").strip() if isinstance(content, dict) else ""
+    mentions = message.get("mentions") if isinstance(message.get("mentions"), list) else []
+    for mention in mentions:
+        if isinstance(mention, dict):
+            key = str(mention.get("key") or "")
+            if key:
+                text = text.replace(key, " ")
+    return " ".join(text.split())[:2000]
+
+
+def _update_event(settings: Settings, event_id: str, **values: str) -> None:
+    allowed = {"status", "command_kind", "run_id", "subscription_id", "error"}
+    changes = {key: value for key, value in values.items() if key in allowed}
+    if not changes:
+        return
+    assignments = ", ".join(f"{key} = ?" for key in changes)
+    with connection(settings) as conn:
+        conn.execute(
+            f"""
+            UPDATE feishu_message_events
+            SET {assignments}, updated_at = datetime('now')
+            WHERE event_id = ?
+            """,
+            (*changes.values(), event_id),
+        )
+
+
+def _claim_event(settings: Settings, event_id: str) -> bool:
+    with connection(settings) as conn:
+        changed = conn.execute(
+            """
+            UPDATE feishu_message_events
+            SET status = 'processing', error = '', updated_at = datetime('now')
+            WHERE event_id = ?
+              AND (
+                    status = 'accepted'
+                    OR (
+                        status = 'processing'
+                        AND updated_at <= datetime('now', '-15 minutes')
+                    )
+              )
+            """,
+            (event_id,),
+        ).rowcount
+    return bool(changed)
+
+
+def _from_row(row) -> FeishuMessageEvent:
+    return FeishuMessageEvent(
+        event_id=str(row["event_id"]),
+        message_id=str(row["message_id"]),
+        chat_id=str(row["chat_id"]),
+        chat_type=str(row["chat_type"] or ""),
+        sender_open_id=str(row["sender_open_id"] or ""),
+        query=str(row["query"] or ""),
+        command_kind=str(row["command_kind"] or ""),
+        status=str(row["status"]),
+        run_id=str(row["run_id"] or ""),
+        subscription_id=str(row["subscription_id"] or ""),
+        error=str(row["error"] or ""),
+        created_at=str(row["created_at"] or ""),
+        updated_at=str(row["updated_at"] or ""),
+    )

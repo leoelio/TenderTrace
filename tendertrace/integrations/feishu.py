@@ -102,6 +102,25 @@ class FeishuClient:
             content=card,
         )
 
+    def reply_text(self, message_id: str, text: str) -> dict[str, Any]:
+        if not message_id.strip():
+            raise FeishuError("message_id is required")
+        if not text.strip():
+            raise FeishuError("text is required")
+        token = self.get_tenant_access_token()
+        response = self._client.post(
+            self._url(f"/open-apis/im/v1/messages/{quote(message_id, safe='')}/reply"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            json={
+                "msg_type": "text",
+                "content": json.dumps({"text": text}, ensure_ascii=False),
+            },
+        )
+        return self._parse_response(response)
+
     def create_task(
         self,
         *,

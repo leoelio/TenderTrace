@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
@@ -33,6 +34,13 @@ from tendertrace.integrations.feishu_opportunity import start_opportunity_collab
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
+)
+from tendertrace.integrations.feishu_bot import (
+    accept_feishu_message_event,
+    feishu_long_connection_available,
+    list_feishu_message_events,
+    pending_feishu_message_event_ids,
+    process_feishu_message_event,
 )
 from tendertrace.intent import compile_intent
 from tendertrace.llm.doctor import model_doctor
@@ -90,17 +98,30 @@ def create_app():
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.scheduler = None
+        app.state.feishu_executor = ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="feishu-bot",
+        )
         if settings.scheduler_enabled:
             app.state.scheduler = start_subscription_scheduler(settings)
+        for event_id in pending_feishu_message_event_ids(settings):
+            app.state.feishu_executor.submit(
+                process_feishu_message_event,
+                settings,
+                event_id,
+                scheduler=app.state.scheduler,
+            )
         try:
             yield
         finally:
             scheduler = app.state.scheduler
             if scheduler is not None:
                 scheduler.shutdown(wait=False)
+            app.state.feishu_executor.shutdown(wait=False, cancel_futures=True)
 
     app = FastAPI(title="TenderTrace", version="0.1.0", lifespan=lifespan)
     app.state.scheduler = None
+    app.state.feishu_executor = None
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=(
@@ -165,6 +186,12 @@ def create_app():
         receiver = load_feishu_receiver(settings)
         lead_import_runs = list_feishu_lead_import_runs(settings, limit=1)
         latest_lead_import = lead_import_runs[0].to_dict() if lead_import_runs else None
+        message_events = list_feishu_message_events(settings, limit=1)
+        latest_message_event = message_events[0].to_dict() if message_events else None
+        long_connection_available = feishu_long_connection_available()
+        webhook_ready = bool(
+            message["configured"] and settings.feishu_callback_verification_token_present
+        )
         bitable_ready = bool(
             settings.feishu_app_id
             and settings.feishu_app_secret_present
@@ -208,6 +235,15 @@ def create_app():
                     "automation_enabled": settings.feishu_lead_import_enabled,
                     "cron": settings.feishu_lead_import_cron,
                     "last_run": latest_lead_import,
+                },
+                "conversation_commands": {
+                    "ready": bool(
+                        message["configured"]
+                        and (long_connection_available or webhook_ready)
+                    ),
+                    "long_connection_available": long_connection_available,
+                    "webhook_ready": webhook_ready,
+                    "last_event": latest_message_event,
                 },
                 "agent_service": {"ready": bool(agent["configured"])},
                 "opportunity_cards": {"ready": bool(message["configured"])},
@@ -447,6 +483,42 @@ def create_app():
             "toast": {"type": "success", "content": f"机会已更新为{workflow.stage_label}"},
             "workflow": workflow.to_dict(),
             "bitable_status": bitable.status,
+        }
+
+    @app.post("/api/integrations/feishu/events")
+    def feishu_message_event(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        expected = settings.feishu_callback_verification_token()
+        if not expected:
+            raise HTTPException(
+                status_code=503,
+                detail="FEISHU_CALLBACK_VERIFICATION_TOKEN is not configured",
+            )
+        supplied = _feishu_callback_token(request)
+        if not supplied or not secrets.compare_digest(supplied, expected):
+            raise HTTPException(status_code=401, detail="invalid Feishu callback token")
+        challenge = str(request.get("challenge") or "")
+        if challenge:
+            return {"challenge": challenge}
+        try:
+            event = accept_feishu_message_event(settings, request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        executor = app.state.feishu_executor
+        if event.status == "accepted" and executor is not None:
+            executor.submit(
+                process_feishu_message_event,
+                settings,
+                event.event_id,
+                scheduler=app.state.scheduler,
+            )
+        return {"code": 0, "status": event.status, "event_id": event.event_id}
+
+    @app.get("/api/integrations/feishu/message-events")
+    def feishu_message_event_history(limit: int = 20) -> dict[str, object]:
+        return {
+            "items": [
+                item.to_dict() for item in list_feishu_message_events(settings, limit=limit)
+            ]
         }
 
     @app.post("/api/runs")
@@ -1362,6 +1434,7 @@ def _requires_api_token(settings: Settings, request) -> bool:
     if not path.startswith("/api/") or path in {
         "/api/health",
         "/api/integrations/feishu/callback",
+        "/api/integrations/feishu/events",
     }:
         return False
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:

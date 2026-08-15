@@ -120,6 +120,46 @@ class FeishuIntegrationTests(unittest.TestCase):
             ],
         )
 
+    def test_reply_text_uses_official_reply_endpoint(self) -> None:
+        old_env = _clear_env(FEISHU_ENV_KEYS)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / ".env.local").write_text(
+                    "FEISHU_ENABLED=true\n"
+                    "FEISHU_APP_ID=cli_test\n"
+                    "FEISHU_APP_SECRET=secret-value\n",
+                    encoding="utf-8",
+                )
+                settings = Settings.load(root)
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    if request.url.path.endswith("/tenant_access_token/internal"):
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "tenant_access_token": "t-token"},
+                        )
+                    self.assertEqual(
+                        request.url.path,
+                        "/open-apis/im/v1/messages/om_origin/reply",
+                    )
+                    payload = json.loads(request.content.decode("utf-8"))
+                    self.assertEqual(payload["msg_type"], "text")
+                    self.assertEqual(json.loads(payload["content"])["text"], "检索已开始")
+                    return httpx.Response(
+                        200,
+                        json={"code": 0, "data": {"message_id": "om_reply"}},
+                    )
+
+                result = FeishuClient(
+                    settings,
+                    client=httpx.Client(transport=httpx.MockTransport(handler)),
+                ).reply_text("om_origin", "检索已开始")
+        finally:
+            _restore_env(old_env)
+
+        self.assertEqual(result["data"]["message_id"], "om_reply")
+
     def test_card_task_and_calendar_use_official_endpoints(self) -> None:
         old_env = _clear_env(FEISHU_ENV_KEYS)
         try:

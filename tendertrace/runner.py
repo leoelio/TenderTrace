@@ -73,6 +73,8 @@ def run_once(
     model_gateway: ModelGateway | None = None,
     model_strategy: str | None = None,
     delivery_channels: tuple[str, ...] | list[str] | None = None,
+    feishu_receive_id: str | None = None,
+    feishu_receive_id_type: str | None = None,
     run_id: str | None = None,
 ) -> RunOnceResult:
     init_db(settings)
@@ -308,6 +310,8 @@ def run_once(
                 docx_path=outbox_path,
                 run_id=state.run_id,
                 subscription_id=subscription_id,
+                receive_id=feishu_receive_id,
+                receive_id_type=feishu_receive_id_type,
             ).to_dict()
         else:
             feishu_message_result = {

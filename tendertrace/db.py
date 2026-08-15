@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 DDL = (
@@ -349,6 +349,23 @@ DDL = (
         duration_ms INTEGER NOT NULL DEFAULT 0
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS feishu_message_events (
+        event_id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL UNIQUE,
+        chat_id TEXT NOT NULL,
+        chat_type TEXT NOT NULL DEFAULT '',
+        sender_open_id TEXT NOT NULL DEFAULT '',
+        query TEXT NOT NULL DEFAULT '',
+        command_kind TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        run_id TEXT,
+        subscription_id TEXT,
+        error TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
 )
 
 
@@ -389,6 +406,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_opportunity_workflows_stage ON opportunity_workflows(stage, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_events_notice ON opportunity_events(notice_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
 )
 
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
