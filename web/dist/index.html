@@ -372,6 +372,45 @@
             </div>
             <div id="opportunityDetailContent" class="opportunity-detail-content"></div>
           </dialog>
+          <dialog id="opportunityOwnerDialog" class="owner-assignment-dialog" aria-labelledby="opportunityOwnerTitle">
+            <form id="opportunityOwnerForm" class="owner-assignment-form">
+              <div class="owner-assignment-heading">
+                <div>
+                  <span>机会协同</span>
+                  <h2 id="opportunityOwnerTitle">分配机会负责人</h2>
+                  <small id="opportunityOwnerProject">-</small>
+                </div>
+                <button id="closeOpportunityOwnerButton" class="icon-close-button" type="button" aria-label="关闭负责人分配">×</button>
+              </div>
+              <div class="owner-assignment-body">
+                <label>
+                  <span>飞书成员</span>
+                  <select id="opportunityOwnerSelect">
+                    <option value="">正在读取通讯录</option>
+                  </select>
+                </label>
+                <label>
+                  <span>负责人姓名</span>
+                  <input id="opportunityOwnerName" maxlength="100" autocomplete="off" required />
+                </label>
+                <p id="opportunityOwnerStatus" class="owner-directory-status">正在读取应用授权范围</p>
+                <div class="owner-sync-options" role="group" aria-label="协同同步范围">
+                  <label>
+                    <input id="opportunityCreateTask" type="checkbox" checked />
+                    <span>飞书任务</span>
+                  </label>
+                  <label>
+                    <input id="opportunityCreateCalendar" type="checkbox" checked />
+                    <span>截止日程</span>
+                  </label>
+                </div>
+              </div>
+              <div class="owner-assignment-actions">
+                <button id="cancelOpportunityOwnerButton" class="ghost-button" type="button">取消</button>
+                <button id="submitOpportunityOwnerButton" class="primary-button" type="submit">分配并同步</button>
+              </div>
+            </form>
+          </dialog>
         </section>
 
         <section id="historyView" class="view">

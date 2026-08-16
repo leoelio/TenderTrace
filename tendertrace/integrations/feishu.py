@@ -167,6 +167,127 @@ class FeishuClient:
         )
         return self._parse_response(response)
 
+    def add_task_members(
+        self,
+        task_guid: str,
+        *,
+        assignee_open_ids: list[str],
+    ) -> dict[str, Any]:
+        if not task_guid.strip():
+            raise FeishuError("task_guid is required")
+        member_ids = list(
+            dict.fromkeys(value.strip() for value in assignee_open_ids if value.strip())
+        )
+        if not member_ids:
+            raise FeishuError("at least one task assignee is required")
+        token = self.get_tenant_access_token()
+        response = self._client.post(
+            self._url(
+                f"/open-apis/task/v2/tasks/{quote(task_guid, safe='')}/add_members"
+            ),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            params={"user_id_type": "open_id"},
+            json={
+                "members": [
+                    {"type": "user", "id": value, "role": "assignee"}
+                    for value in member_ids
+                ]
+            },
+        )
+        return self._parse_response(response)
+
+    def list_authorized_users(self, *, limit: int = 100) -> dict[str, Any]:
+        safe_limit = min(max(int(limit), 1), 200)
+        token = self.get_tenant_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        user_ids: list[str] = []
+        department_ids: list[str] = []
+        page_token = ""
+        while len(user_ids) + len(department_ids) < 1000:
+            params: dict[str, object] = {
+                "user_id_type": "open_id",
+                "department_id_type": "open_department_id",
+                "page_size": 100,
+            }
+            if page_token:
+                params["page_token"] = page_token
+            payload = self._parse_response(
+                self._client.get(
+                    self._url("/open-apis/contact/v3/scopes"),
+                    headers=headers,
+                    params=params,
+                )
+            )
+            data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+            user_ids.extend(str(value) for value in data.get("user_ids") or [] if value)
+            department_ids.extend(
+                str(value) for value in data.get("department_ids") or [] if value
+            )
+            if not data.get("has_more"):
+                break
+            page_token = str(data.get("page_token") or "")
+            if not page_token:
+                break
+
+        users_by_id: dict[str, dict[str, Any]] = {}
+        for department_id in self._authorized_departments(
+            department_ids,
+            headers=headers,
+        ):
+            for user in self._department_users(department_id, headers=headers):
+                open_id = str(user.get("open_id") or "")
+                if open_id:
+                    users_by_id[open_id] = user
+                if len(users_by_id) >= safe_limit:
+                    break
+            if len(users_by_id) >= safe_limit:
+                break
+
+        unresolved_ids = [
+            value
+            for value in dict.fromkeys(user_ids)
+            if value not in users_by_id
+        ][:safe_limit]
+        for offset in range(0, len(unresolved_ids), 50):
+            chunk = unresolved_ids[offset : offset + 50]
+            params: list[tuple[str, str]] = [
+                ("user_ids", value) for value in chunk
+            ] + [
+                ("user_id_type", "open_id"),
+                ("department_id_type", "open_department_id"),
+            ]
+            payload = self._parse_response(
+                self._client.get(
+                    self._url("/open-apis/contact/v3/users/batch"),
+                    headers=headers,
+                    params=params,
+                )
+            )
+            data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+            for user in data.get("items") or []:
+                if not isinstance(user, dict):
+                    continue
+                open_id = str(user.get("open_id") or "")
+                if open_id:
+                    users_by_id[open_id] = user
+
+        items = [
+            self._directory_user(user)
+            for user in users_by_id.values()
+            if self._active_user(user)
+        ]
+        items.sort(key=lambda item: (str(item["name"]).casefold(), str(item["open_id"])))
+        return {
+            "status": "ready",
+            "items": items[:safe_limit],
+            "authorized_user_count": len(set(user_ids)),
+            "authorized_department_count": len(set(department_ids)),
+            "returned_count": min(len(items), safe_limit),
+        }
+
     def create_calendar_event(
         self,
         *,
@@ -292,6 +413,97 @@ class FeishuClient:
         payload = self._parse_response(response)
         data = payload.get("data")
         return data if isinstance(data, dict) else {"items": []}
+
+    def _authorized_departments(
+        self,
+        department_ids: list[str],
+        *,
+        headers: dict[str, str],
+    ) -> list[str]:
+        resolved = list(dict.fromkeys(department_ids))
+        for root_id in list(resolved):
+            page_token = ""
+            while True:
+                params: dict[str, object] = {
+                    "department_id_type": "open_department_id",
+                    "user_id_type": "open_id",
+                    "fetch_child": True,
+                    "page_size": 100,
+                }
+                if page_token:
+                    params["page_token"] = page_token
+                payload = self._parse_response(
+                    self._client.get(
+                        self._url(
+                            "/open-apis/contact/v3/departments/"
+                            f"{quote(root_id, safe='')}/children"
+                        ),
+                        headers=headers,
+                        params=params,
+                    )
+                )
+                data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+                for item in data.get("items") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    department_id = str(
+                        item.get("open_department_id") or item.get("department_id") or ""
+                    )
+                    if department_id and department_id not in resolved:
+                        resolved.append(department_id)
+                if not data.get("has_more"):
+                    break
+                page_token = str(data.get("page_token") or "")
+                if not page_token:
+                    break
+        return resolved[:1000]
+
+    def _department_users(
+        self,
+        department_id: str,
+        *,
+        headers: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        users: list[dict[str, Any]] = []
+        page_token = ""
+        while True:
+            params: dict[str, object] = {
+                "department_id": department_id,
+                "department_id_type": "open_department_id",
+                "user_id_type": "open_id",
+                "page_size": 100,
+            }
+            if page_token:
+                params["page_token"] = page_token
+            payload = self._parse_response(
+                self._client.get(
+                    self._url("/open-apis/contact/v3/users/find_by_department"),
+                    headers=headers,
+                    params=params,
+                )
+            )
+            data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+            users.extend(item for item in data.get("items") or [] if isinstance(item, dict))
+            if not data.get("has_more"):
+                return users
+            page_token = str(data.get("page_token") or "")
+            if not page_token:
+                return users
+
+    @staticmethod
+    def _active_user(user: dict[str, Any]) -> bool:
+        status = user.get("status") if isinstance(user.get("status"), dict) else {}
+        return not bool(status.get("is_resigned")) and status.get("is_activated") is not False
+
+    @staticmethod
+    def _directory_user(user: dict[str, Any]) -> dict[str, Any]:
+        avatar = user.get("avatar") if isinstance(user.get("avatar"), dict) else {}
+        return {
+            "open_id": str(user.get("open_id") or ""),
+            "name": str(user.get("name") or user.get("en_name") or "未命名成员"),
+            "department_ids": [str(value) for value in user.get("department_ids") or []],
+            "avatar_url": str(avatar.get("avatar_72") or ""),
+        }
 
     def _require_credentials(self) -> None:
         if not self.settings.feishu_enabled:

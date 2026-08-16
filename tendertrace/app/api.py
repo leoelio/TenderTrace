@@ -334,6 +334,13 @@ def create_app():
         except FeishuError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/integrations/feishu/users")
+    def feishu_users(limit: int = 100) -> dict[str, object]:
+        try:
+            return FeishuClient(settings).list_authorized_users(limit=limit)
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/integrations/feishu/receiver")
     def save_feishu_receiver_api(request: dict[str, object] = Body(...)) -> dict[str, object]:
         try:

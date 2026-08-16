@@ -34,6 +34,10 @@ class _FakeFeishuClient:
         self.calls.append("card")
         return {"data": {"message_id": "message-id"}}
 
+    def add_task_members(self, *_: object, **__: object) -> dict:
+        self.calls.append("assign")
+        return {"data": {}}
+
 
 class _BitableResult:
     status = "sent"
@@ -125,6 +129,7 @@ class OpportunityWorkflowTests(unittest.TestCase):
 
         self.assertEqual(client.calls, ["task", "calendar", "card", "card"])
         self.assertEqual(first.task_guid, "task-guid")
+        self.assertTrue(first.task_assigned)
         self.assertEqual(first.event_id, "event-id")
         self.assertEqual(first.workflow.owner_name, "张三")
         self.assertEqual(second.workflow.feishu_message_id, "message-id")
@@ -152,6 +157,34 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertEqual(result.task_guid, "task-guid")
         self.assertEqual(result.message_id, "")
         self.assertEqual(result.workflow.feishu_task_status, "open")
+        self.assertFalse(result.task_assigned)
+
+    def test_existing_unassigned_task_is_assigned_when_owner_is_selected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            update_workflow(settings, "notice-1", feishu_task_guid="task-guid")
+            client = _FakeFeishuClient()
+            opportunity = {
+                "notice_id": "notice-1",
+                "title": "服务器采购项目",
+                "source_url": "https://example.com/notice-1",
+            }
+
+            result = start_opportunity_collaboration(
+                settings,
+                opportunity,
+                owner_open_id="ou_owner",
+                owner_name="张三",
+                create_calendar_event=False,
+                client=client,
+                bitable_updater=lambda *args, **kwargs: _BitableResult(),
+            )
+
+        self.assertEqual(client.calls, ["assign"])
+        self.assertTrue(result.task_assigned)
+        self.assertEqual(result.workflow.owner_open_id, "ou_owner")
+        self.assertEqual(result.workflow.owner_name, "张三")
 
     def test_go_decision_is_required_before_bid_preparation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

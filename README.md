@@ -345,10 +345,13 @@ python -m tendertrace embed-notices
 - `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态或回写建议反馈，并同步相关业务状态。
 - `POST /api/integrations/feishu/events`：接收飞书消息事件，校验令牌、去重后异步执行自然语言查询或创建订阅。
 - `GET /api/integrations/feishu/message-events`：查看飞书会话指令的运行、订阅、失败与恢复审计。
+- `GET /api/integrations/feishu/users`：仅返回应用通讯录授权范围内可分配的成员，不返回手机号、邮箱等敏感字段。
 
 设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232025`，需要先在应用后台启用机器人能力并发布新版本；若返回 `232034`，需要确认当前租户已经安装已发布应用。
 
 机会协同使用公告 ID 生成任务 `client_token` 与日程 `idempotency_key`，重复同步不会重复创建任务或日程。启用截止日程需配置 `FEISHU_CALENDAR_ID`；启用卡片动作需配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，并在飞书开发者后台把可公网访问的 `/api/integrations/feishu/callback` 注册为回调地址。本地 `127.0.0.1` 不能直接接收飞书云端回调。
+
+机会页分配负责人时会读取飞书应用当前获授权的通讯录成员。应用需要开通通讯录基本信息读取权限并配置可访问的数据范围；选择成员后，新任务会直接设置 `assignee`，已有未指派任务会通过 Task v2 成员接口补充负责人，同时回写本地 workflow 与多维表格。通讯录不可用时界面会明确降级为仅记录负责人姓名，任务保持未指派，不会伪造成员绑定。
 
 机会经营晨报默认关闭自动发送。设置 `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` 汇总本地真实机会与来源健康记录并投递到默认会话；Web 机会情报页也可手动触发。卡片中的认领、确认、Go 和投标准备动作复用同一套状态图、资格门禁和回调审计，不维护第二份流程状态。
 
@@ -770,10 +773,13 @@ Available Web APIs:
 - `POST /api/integrations/feishu/callback`: verify card callbacks, then advance opportunity state or persist recommendation feedback through the shared business workflow.
 - `POST /api/integrations/feishu/events`: verify, deduplicate, and asynchronously execute inbound Feishu text commands.
 - `GET /api/integrations/feishu/message-events`: inspect inbound run, subscription, failure, and recovery audits.
+- `GET /api/integrations/feishu/users`: list only assignable users inside the app's authorized contact scope; mobile numbers and email addresses are not returned.
 
 The Feishu connection center can select a default chat from the bot's visible chats. Queries and subscriptions can opt into automatic Word delivery, while every success or failure is written to the local delivery ledger. Error `232025` means bot capability must be enabled and a new app version published; error `232034` means the published app is not installed in the current tenant.
 
 Task `client_token` and calendar `idempotency_key` values are derived from the notice ID, so repeated synchronization does not duplicate those artifacts. Set `FEISHU_CALENDAR_ID` to enable deadline events. Set `FEISHU_CALLBACK_VERIFICATION_TOKEN` and register the publicly reachable `/api/integrations/feishu/callback` endpoint in Feishu Developer Console to enable card actions; a local `127.0.0.1` URL is not reachable from Feishu Cloud.
+
+The Opportunity view resolves owners from the Feishu app's authorized contact scope. Grant basic contact read permission and configure the app's contact data scope. A selected member becomes the task `assignee`; an existing unassigned Task v2 task receives the member without creating a duplicate, and the owner is synchronized to the local workflow and Bitable. If the directory is unavailable, the UI explicitly falls back to recording the owner's name only and leaves the task unassigned.
 
 Scheduled opportunity briefings are disabled by default. Set `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` and configure `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` to deliver a state-deduplicated weekday briefing to the default chat. The Web Opportunity Intelligence view can also trigger it manually. Claim, qualify, Go, and bid-preparation buttons reuse the same workflow graph, qualification gates, callback handler, and audit stream as the Web UI.
 

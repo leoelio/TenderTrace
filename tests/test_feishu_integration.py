@@ -241,6 +241,160 @@ class FeishuIntegrationTests(unittest.TestCase):
         self.assertEqual(event["data"]["event"]["event_id"], "event-id")
         self.assertIn("/open-apis/task/v2/tasks", seen)
 
+    def test_authorized_directory_and_task_assignment_use_official_endpoints(self) -> None:
+        old_env = _clear_env(FEISHU_ENV_KEYS)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / ".env.local").write_text(
+                    "FEISHU_ENABLED=true\n"
+                    "FEISHU_APP_ID=cli_test\n"
+                    "FEISHU_APP_SECRET=secret-value\n",
+                    encoding="utf-8",
+                )
+                settings = Settings.load(root)
+                seen: list[str] = []
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    seen.append(request.url.path)
+                    if request.url.path.endswith("/tenant_access_token/internal"):
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "tenant_access_token": "t-token"},
+                        )
+                    if request.url.path.endswith("/contact/v3/scopes"):
+                        self.assertEqual(request.url.params["user_id_type"], "open_id")
+                        return httpx.Response(
+                            200,
+                            json={
+                                "code": 0,
+                                "data": {
+                                    "user_ids": ["ou_owner"],
+                                    "department_ids": [],
+                                    "has_more": False,
+                                },
+                            },
+                        )
+                    if request.url.path.endswith("/contact/v3/users/batch"):
+                        self.assertEqual(request.url.params.get_list("user_ids"), ["ou_owner"])
+                        return httpx.Response(
+                            200,
+                            json={
+                                "code": 0,
+                                "data": {
+                                    "items": [
+                                        {
+                                            "open_id": "ou_owner",
+                                            "name": "张三",
+                                            "email": "private@example.com",
+                                            "department_ids": ["od_sales"],
+                                            "status": {
+                                                "is_activated": True,
+                                                "is_resigned": False,
+                                            },
+                                        }
+                                    ]
+                                },
+                            },
+                        )
+                    if request.url.path.endswith("/task/v2/tasks/task-guid/add_members"):
+                        body = json.loads(request.content.decode("utf-8"))
+                        self.assertEqual(
+                            body["members"],
+                            [{"type": "user", "id": "ou_owner", "role": "assignee"}],
+                        )
+                        return httpx.Response(200, json={"code": 0, "data": {}})
+                    return httpx.Response(404, json={"code": 404, "msg": "unexpected"})
+
+                client = FeishuClient(
+                    settings,
+                    client=httpx.Client(transport=httpx.MockTransport(handler)),
+                )
+                directory = client.list_authorized_users()
+                assigned = client.add_task_members(
+                    "task-guid",
+                    assignee_open_ids=["ou_owner", "ou_owner"],
+                )
+        finally:
+            _restore_env(old_env)
+
+        self.assertEqual(directory["returned_count"], 1)
+        self.assertEqual(directory["items"][0]["name"], "张三")
+        self.assertNotIn("email", directory["items"][0])
+        self.assertEqual(assigned["code"], 0)
+        self.assertIn("/open-apis/contact/v3/scopes", seen)
+        self.assertIn("/open-apis/task/v2/tasks/task-guid/add_members", seen)
+
+    def test_authorized_directory_expands_department_scope(self) -> None:
+        old_env = _clear_env(FEISHU_ENV_KEYS)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / ".env.local").write_text(
+                    "FEISHU_ENABLED=true\n"
+                    "FEISHU_APP_ID=cli_test\n"
+                    "FEISHU_APP_SECRET=secret-value\n",
+                    encoding="utf-8",
+                )
+                settings = Settings.load(root)
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    path = request.url.path
+                    if path.endswith("/tenant_access_token/internal"):
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "tenant_access_token": "t-token"},
+                        )
+                    if path.endswith("/contact/v3/scopes"):
+                        return httpx.Response(
+                            200,
+                            json={
+                                "code": 0,
+                                "data": {
+                                    "user_ids": [],
+                                    "department_ids": ["od_sales"],
+                                    "has_more": False,
+                                },
+                            },
+                        )
+                    if path.endswith("/departments/od_sales/children"):
+                        return httpx.Response(
+                            200,
+                            json={
+                                "code": 0,
+                                "data": {
+                                    "items": [{"open_department_id": "od_enterprise"}],
+                                    "has_more": False,
+                                },
+                            },
+                        )
+                    if path.endswith("/users/find_by_department"):
+                        department_id = request.url.params["department_id"]
+                        items = (
+                            [{"open_id": "ou_sales", "name": "销售负责人"}]
+                            if department_id == "od_sales"
+                            else [{"open_id": "ou_solution", "name": "解决方案经理"}]
+                        )
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "data": {"items": items, "has_more": False}},
+                        )
+                    return httpx.Response(404, json={"code": 404, "msg": "unexpected"})
+
+                directory = FeishuClient(
+                    settings,
+                    client=httpx.Client(transport=httpx.MockTransport(handler)),
+                ).list_authorized_users()
+        finally:
+            _restore_env(old_env)
+
+        self.assertEqual(directory["authorized_department_count"], 1)
+        self.assertEqual(directory["returned_count"], 2)
+        self.assertEqual(
+            {item["open_id"] for item in directory["items"]},
+            {"ou_sales", "ou_solution"},
+        )
+
     def test_disabled_client_does_not_call_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

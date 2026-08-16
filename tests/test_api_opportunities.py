@@ -90,6 +90,14 @@ class OpportunityApiTests(unittest.TestCase):
                             "failures": [],
                         },
                     ),
+                ), patch.object(
+                    api_module.FeishuClient,
+                    "list_authorized_users",
+                    return_value={
+                        "status": "ready",
+                        "items": [{"open_id": "ou_owner", "name": "测试负责人"}],
+                        "returned_count": 1,
+                    },
                 ):
                     client = TestClient(api_module.create_app())
                     fact_payload = {
@@ -129,6 +137,7 @@ class OpportunityApiTests(unittest.TestCase):
                         "/api/opportunities/tasks/sync",
                         json={"limit": 100},
                     )
+                    users = client.get("/api/integrations/feishu/users?limit=20")
                     escalation = client.post(
                         "/api/opportunities/escalations/send-feishu",
                         json={},
@@ -169,6 +178,8 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 409)
         self.assertEqual(task_sync.status_code, 200)
         self.assertEqual(task_sync.json()["completed_count"], 1)
+        self.assertEqual(users.status_code, 200)
+        self.assertEqual(users.json()["items"][0]["open_id"], "ou_owner")
         self.assertIn("当前阶段", blocked.json()["detail"]["reasons"][0])
         self.assertEqual(escalation.status_code, 200)
         self.assertEqual(escalation.json()["status"], "skipped")

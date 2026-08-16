@@ -5071,6 +5071,7 @@ body::before {
 .panel,
 .topbar-popover,
 .opportunity-detail-dialog,
+.owner-assignment-dialog,
 .toast,
 .app-footer {
   border-color: var(--glass-border);
@@ -5256,10 +5257,141 @@ body.theme-dark tbody tr {
   .panel,
   .topbar-popover,
   .opportunity-detail-dialog,
+  .owner-assignment-dialog,
   .toast,
   .app-footer {
     background: var(--surface-solid);
   }
+}
+
+.owner-assignment-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--ink);
+}
+
+.owner-assignment-dialog::backdrop {
+  background: rgba(21, 31, 45, 0.28);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.owner-assignment-form {
+  display: grid;
+}
+
+.owner-assignment-heading,
+.owner-assignment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.owner-assignment-heading {
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.owner-assignment-heading > div {
+  min-width: 0;
+}
+
+.owner-assignment-heading span,
+.owner-assignment-heading small,
+.owner-assignment-body label > span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-assignment-heading h2 {
+  margin: 3px 0;
+  font-size: 18px;
+}
+
+.owner-assignment-heading small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-assignment-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.owner-assignment-body label {
+  display: grid;
+  gap: 6px;
+}
+
+.owner-assignment-body select,
+.owner-assignment-body input[type="text"],
+.owner-assignment-body input:not([type]) {
+  width: 100%;
+  min-height: 40px;
+}
+
+.owner-directory-status {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-sync-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.owner-sync-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.owner-sync-options input[type="checkbox"] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  accent-color: var(--brand);
+}
+
+.owner-sync-options label > span {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+body.theme-dark .owner-assignment-heading,
+body.theme-dark .owner-sync-options label,
+body.theme-dark .owner-assignment-actions {
+  background: rgba(24, 31, 43, 0.58);
+}
+
+.owner-assignment-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--line-soft);
+  background: rgba(247, 249, 252, 0.52);
+}
+
+.owner-assignment-actions .primary-button {
+  width: auto;
+  min-height: 38px;
+  padding: 0 18px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5292,9 +5424,14 @@ body.theme-dark tbody tr {
 
   .panel,
   .topbar-popover,
-  .opportunity-detail-dialog {
+  .opportunity-detail-dialog,
+  .owner-assignment-dialog {
     backdrop-filter: saturate(130%) blur(18px);
     -webkit-backdrop-filter: saturate(130%) blur(18px);
+  }
+
+  .owner-sync-options {
+    grid-template-columns: 1fr;
   }
 
   .opportunity-panel .panel-heading .action-group > * {

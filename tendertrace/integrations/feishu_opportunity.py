@@ -18,6 +18,7 @@ class CollaborationResult:
     workflow: OpportunityWorkflow
     message_id: str
     task_guid: str
+    task_assigned: bool
     event_id: str
     bitable_status: str
 
@@ -26,6 +27,7 @@ class CollaborationResult:
             "workflow": self.workflow.to_dict(),
             "message_id": self.message_id,
             "task_guid": self.task_guid,
+            "task_assigned": self.task_assigned,
             "event_id": self.event_id,
             "bitable_status": self.bitable_status,
         }
@@ -53,6 +55,7 @@ def start_opportunity_collaboration(
     due_at = _deadline(opportunity, settings.timezone)
     task_guid = workflow.feishu_task_guid
     task_created = False
+    task_assigned = bool(task_guid and workflow.owner_open_id)
     event_id = workflow.feishu_event_id
     card_workflow = replace(
         workflow,
@@ -77,6 +80,13 @@ def start_opportunity_collaboration(
         )
         task_guid = _nested_string(task, "data", "task", "guid")
         task_created = bool(task_guid)
+        task_assigned = bool(task_guid and owner_open_id)
+    elif task_guid and owner_open_id and owner_open_id != workflow.owner_open_id:
+        feishu.add_task_members(
+            task_guid,
+            assignee_open_ids=[owner_open_id],
+        )
+        task_assigned = True
 
     if create_calendar_event and settings.feishu_calendar_id and due_at and not event_id:
         event = feishu.create_calendar_event(
@@ -131,6 +141,7 @@ def start_opportunity_collaboration(
         workflow=workflow,
         message_id=message_id,
         task_guid=task_guid,
+        task_assigned=task_assigned,
         event_id=event_id,
         bitable_status=bitable.status,
     )

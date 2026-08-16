@@ -13,6 +13,7 @@ const state = {
   opportunities: [],
   opportunitySummaryData: {},
   opportunityVisible: 20,
+  pendingOpportunityId: "",
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
@@ -108,6 +109,17 @@ const el = {
   opportunityDetailDialog: document.querySelector("#opportunityDetailDialog"),
   opportunityDetailTitle: document.querySelector("#opportunityDetailTitle"),
   opportunityDetailContent: document.querySelector("#opportunityDetailContent"),
+  opportunityOwnerDialog: document.querySelector("#opportunityOwnerDialog"),
+  opportunityOwnerForm: document.querySelector("#opportunityOwnerForm"),
+  opportunityOwnerProject: document.querySelector("#opportunityOwnerProject"),
+  opportunityOwnerSelect: document.querySelector("#opportunityOwnerSelect"),
+  opportunityOwnerName: document.querySelector("#opportunityOwnerName"),
+  opportunityOwnerStatus: document.querySelector("#opportunityOwnerStatus"),
+  opportunityCreateTask: document.querySelector("#opportunityCreateTask"),
+  opportunityCreateCalendar: document.querySelector("#opportunityCreateCalendar"),
+  submitOpportunityOwnerButton: document.querySelector("#submitOpportunityOwnerButton"),
+  closeOpportunityOwnerButton: document.querySelector("#closeOpportunityOwnerButton"),
+  cancelOpportunityOwnerButton: document.querySelector("#cancelOpportunityOwnerButton"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
   runSearchInput: document.querySelector("#runSearchInput"),
@@ -1322,7 +1334,7 @@ function renderOpportunities(payload) {
                 ${risks.length ? `<small>${escapeHtml(risks[0])}</small>` : ""}
               </div>
               <div class="opportunity-actions">
-                <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${workflow.feishu_message_id ? "同步协同" : "启动协同"}</button>
+                <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${collaborationButtonLabel(workflow)}</button>
                 <button class="text-link" type="button" data-view-opportunity="${escapeHtml(item.notice_id)}">研判详情</button>
               </div>
             </article>
@@ -1479,7 +1491,7 @@ function openOpportunityDetail(noticeId) {
       ${detailLine("截止日程", workflow.feishu_event_id ? "已创建" : (item.bid_deadline ? "待创建" : "未识别截止时间"))}
     </section>
     <div class="opportunity-detail-footer">
-      <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${workflow.feishu_message_id ? "同步飞书协同" : "启动飞书协同"}</button>
+      <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${collaborationButtonLabel(workflow)}</button>
       ${item.source_url ? `<a class="ghost-button" href="${escapeHtml(item.source_url)}" target="_blank" rel="noreferrer">查看原文</a>` : ""}
     </div>
   `;
@@ -1536,6 +1548,12 @@ function feishuTaskStatusLabel(workflow) {
     completed: "已完成",
     not_created: "待创建",
   }[workflow.feishu_task_status] || "待同步";
+}
+
+function collaborationButtonLabel(workflow) {
+  if (!workflow.owner_name) return "分配负责人";
+  if (!workflow.feishu_task_guid) return "启动协同";
+  return "同步协同";
 }
 
 function decisionSlaLabel(actionState) {
@@ -2377,13 +2395,74 @@ async function sendMemoryWeeklyToFeishu() {
   showToast(result.status === "sent" ? "本周使用周报已发送到飞书" : "周报发送未完成");
 }
 
-async function sendOpportunityToFeishu(noticeId) {
+async function openOpportunityOwnerDialog(noticeId) {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (!item || !el.opportunityOwnerDialog) return;
+  const workflow = item.workflow || {};
+  state.pendingOpportunityId = noticeId;
+  el.opportunityOwnerProject.textContent = item.title || "未命名机会";
+  el.opportunityOwnerName.value = workflow.owner_name || "";
+  el.opportunityOwnerSelect.innerHTML = '<option value="">正在读取通讯录</option>';
+  el.opportunityOwnerStatus.textContent = "正在读取应用授权范围";
+  el.opportunityCreateTask.checked = true;
+  el.opportunityCreateCalendar.checked = Boolean(item.bid_deadline);
+  if (!el.opportunityOwnerDialog.open) el.opportunityOwnerDialog.showModal();
+  try {
+    const directory = await api("/api/integrations/feishu/users?limit=200");
+    if (state.pendingOpportunityId !== noticeId) return;
+    const users = Array.isArray(directory.items) ? directory.items : [];
+    el.opportunityOwnerSelect.innerHTML = [
+      '<option value="">仅记录姓名，不绑定飞书成员</option>',
+      ...users.map(
+        (user) => `<option value="${escapeHtml(user.open_id || "")}" data-owner-name="${escapeHtml(user.name || "")}">${escapeHtml(user.name || "未命名成员")}</option>`,
+      ),
+    ].join("");
+    if (workflow.owner_open_id && users.some((user) => user.open_id === workflow.owner_open_id)) {
+      el.opportunityOwnerSelect.value = workflow.owner_open_id;
+    }
+    el.opportunityOwnerStatus.textContent = users.length
+      ? `可分配 ${users.length} 名授权成员`
+      : "授权范围内暂无成员，可仅记录负责人姓名";
+  } catch (error) {
+    if (state.pendingOpportunityId !== noticeId) return;
+    el.opportunityOwnerSelect.innerHTML = '<option value="">仅记录姓名，不绑定飞书成员</option>';
+    el.opportunityOwnerStatus.textContent = "通讯录暂不可用，任务将保持未指派";
+  }
+}
+
+function closeOpportunityOwnerDialog() {
+  state.pendingOpportunityId = "";
+  el.opportunityOwnerDialog?.close();
+}
+
+async function submitOpportunityOwner(event) {
+  event.preventDefault();
+  const noticeId = state.pendingOpportunityId;
+  const ownerName = el.opportunityOwnerName?.value.trim() || "";
+  if (!noticeId || !ownerName) throw new Error("请填写负责人姓名");
+  if (el.submitOpportunityOwnerButton) el.submitOpportunityOwnerButton.disabled = true;
+  try {
+    await sendOpportunityToFeishu(noticeId, {
+      owner_open_id: el.opportunityOwnerSelect?.value || "",
+      owner_name: ownerName,
+      create_task: Boolean(el.opportunityCreateTask?.checked),
+      create_calendar_event: Boolean(el.opportunityCreateCalendar?.checked),
+    });
+    closeOpportunityOwnerDialog();
+  } finally {
+    if (el.submitOpportunityOwnerButton) el.submitOpportunityOwnerButton.disabled = false;
+  }
+}
+
+async function sendOpportunityToFeishu(noticeId, assignment = {}) {
   const result = await api("/api/opportunities/send-feishu", {
     method: "POST",
     body: JSON.stringify({
       notice_id: noticeId,
-      create_task: true,
-      create_calendar_event: true,
+      owner_open_id: assignment.owner_open_id || "",
+      owner_name: assignment.owner_name || "",
+      create_task: assignment.create_task !== false,
+      create_calendar_event: assignment.create_calendar_event !== false,
     }),
   });
   const item = state.opportunities.find((value) => value.notice_id === noticeId);
@@ -2391,7 +2470,10 @@ async function sendOpportunityToFeishu(noticeId) {
   renderOpportunities({ items: state.opportunities, summary: state.opportunitySummaryData });
   await refreshFeishu();
   const created = [result.task_guid && "任务", result.event_id && "日程"].filter(Boolean).join("与");
-  showToast(["sent", "started"].includes(result.status) ? `飞书协同已启动${created ? `，已关联${created}` : ""}` : "飞书协同未完成");
+  const assignmentText = result.task_guid
+    ? (result.task_assigned ? "，任务已绑定负责人" : "，任务未绑定飞书成员")
+    : "";
+  showToast(["sent", "started"].includes(result.status) ? `协同已更新${created ? `，已关联${created}` : ""}${assignmentText}` : "飞书协同未完成");
 }
 
 async function applyOpportunityAction(noticeId, action) {
@@ -3058,8 +3140,8 @@ function bindEvents() {
     }
     const sendOpportunityTarget = event.target.closest("[data-send-opportunity-feishu]");
     if (sendOpportunityTarget) {
-      sendOpportunityToFeishu(sendOpportunityTarget.dataset.sendOpportunityFeishu).catch(
-        toastError("机会情报发送失败"),
+      openOpportunityOwnerDialog(sendOpportunityTarget.dataset.sendOpportunityFeishu).catch(
+        toastError("负责人目录加载失败"),
       );
       return;
     }
@@ -3117,6 +3199,22 @@ function bindEvents() {
   el.opportunityDetailDialog?.addEventListener("click", (event) => {
     if (event.target === el.opportunityDetailDialog) el.opportunityDetailDialog.close();
   });
+  el.opportunityOwnerDialog?.addEventListener("click", (event) => {
+    if (event.target === el.opportunityOwnerDialog) closeOpportunityOwnerDialog();
+  });
+  el.opportunityOwnerDialog?.addEventListener("close", () => {
+    state.pendingOpportunityId = "";
+  });
+  el.opportunityOwnerSelect?.addEventListener("change", () => {
+    const option = el.opportunityOwnerSelect.selectedOptions?.[0];
+    const ownerName = option?.dataset.ownerName || "";
+    if (ownerName && el.opportunityOwnerName) el.opportunityOwnerName.value = ownerName;
+  });
+  el.opportunityOwnerForm?.addEventListener("submit", (event) =>
+    submitOpportunityOwner(event).catch(toastError("负责人分配失败")),
+  );
+  el.closeOpportunityOwnerButton?.addEventListener("click", closeOpportunityOwnerDialog);
+  el.cancelOpportunityOwnerButton?.addEventListener("click", closeOpportunityOwnerDialog);
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);
   el.queryInput?.addEventListener("input", () => {
