@@ -157,6 +157,16 @@ def create_app():
     def schedule_adaptive_subscription(subscription) -> None:
         schedule_subscription(app.state.scheduler, settings, subscription)
 
+    def send_adaptive_opportunity_briefing(
+        receive_id: str | None,
+        receive_id_type: str | None,
+    ):
+        return send_opportunity_briefing(
+            settings,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=(
@@ -841,10 +851,11 @@ def create_app():
                 request,
                 schedule_ingest=schedule_ingest_callback,
                 schedule_subscription=schedule_user_callback,
+                send_opportunity_briefing=send_adaptive_opportunity_briefing,
             )
         except OpportunityNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except ValueError as exc:
+        except (FeishuError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/integrations/feishu/events")
@@ -1345,8 +1356,9 @@ def create_app():
                 context=context,
                 schedule_ingest=schedule_ingest_callback,
                 schedule_subscription=schedule_user_callback,
+                send_opportunity_briefing=send_adaptive_opportunity_briefing,
             )
-        except ValueError as exc:
+        except (FeishuError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         feedback = result.feedback
         record_activity(

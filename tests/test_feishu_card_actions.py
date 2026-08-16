@@ -191,6 +191,50 @@ class FeishuCardActionTests(unittest.TestCase):
         self.assertEqual(scheduled, [subscriptions[0].id])
         self.assertIn("当前飞书会话", result["toast"]["content"])
 
+    def test_memory_opportunity_advice_sends_briefing_to_current_chat(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_priority_notice(settings)
+            report = build_weekly_report(settings)
+            advice = next(
+                item
+                for item in report["recommendation_plan"]
+                if item["kind"] == "opportunity_followup"
+            )
+            targets: list[tuple[str | None, str | None]] = []
+            payload = {
+                "header": {"event_id": "memory-opportunity-event"},
+                "event": {
+                    "context": {"open_chat_id": "oc_opportunity_team"},
+                    "operator": {
+                        "name": "张三",
+                        "operator_id": {"open_id": "ou_owner"},
+                    },
+                    "action": {
+                        "value": {
+                            "action": "memory_advice_accept",
+                            "advice_id": advice["id"],
+                            "user_id": "admin",
+                        }
+                    },
+                },
+            }
+
+            result = process_feishu_card_action(
+                settings,
+                payload,
+                send_opportunity_briefing=lambda receive_id, receive_id_type: (
+                    targets.append((receive_id, receive_id_type))
+                    or {"status": "sent", "opportunity_count": 1, "reason": ""}
+                ),
+            )
+
+        self.assertEqual(targets, [("oc_opportunity_team", "chat_id")])
+        self.assertEqual(result["automation"]["status"], "sent")
+        self.assertTrue(result["automation"]["receiver_bound"])
+        self.assertIn("当前飞书会话", result["toast"]["content"])
+
 
 def _payload(action: str) -> dict[str, object]:
     return {
@@ -224,6 +268,30 @@ def _insert_notice(settings: Settings) -> None:
                 "2026-08-15",
                 "服务器采购项目，采购人为示例采购人。",
                 '{"bid_deadline":"2026-08-30 17:00"}',
+            ),
+        )
+
+
+def _insert_priority_notice(settings: Settings) -> None:
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO notices(
+                id, source_site, source_url, canonical_url, title, purchaser,
+                publish_time, region, content_text, fields_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "priority-notice",
+                "ccgp",
+                "https://example.com/priority-notice",
+                "https://example.com/priority-notice",
+                "服务器采购优先机会",
+                "示例采购人",
+                "2026-08-16",
+                "上海",
+                "服务器采购项目",
+                '{"opportunity_intelligence":{"level":"A","score":90}}',
             ),
         )
 

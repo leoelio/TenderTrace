@@ -16,6 +16,7 @@ from tendertrace.scheduling.subscriptions import Subscription, ensure_subscripti
 
 IngestScheduler = Callable[[IngestSubscription], None]
 SubscriptionScheduler = Callable[[Subscription], None]
+OpportunityBriefingSender = Callable[[str | None, str | None], object]
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ def apply_memory_advice_feedback(
     now: datetime | str | None = None,
     schedule_ingest: IngestScheduler | None = None,
     schedule_subscription: SubscriptionScheduler | None = None,
+    send_opportunity_briefing: OpportunityBriefingSender | None = None,
 ) -> MemoryAdviceActionResult:
     report = build_weekly_report(settings, user_id=user_id, days=days, now=now)
     advice = _find_advice(report, advice_id)
@@ -53,6 +55,7 @@ def apply_memory_advice_feedback(
         context=context,
         schedule_ingest=schedule_ingest,
         schedule_subscription=schedule_subscription,
+        send_opportunity_briefing=send_opportunity_briefing,
     )
     feedback_context = dict(context or {})
     if advice:
@@ -93,6 +96,7 @@ def _execute_advice(
     context: dict[str, Any] | None,
     schedule_ingest: IngestScheduler | None,
     schedule_subscription: SubscriptionScheduler | None,
+    send_opportunity_briefing: OpportunityBriefingSender | None,
 ) -> dict[str, object]:
     kind = str(advice.get("kind") or "")
     if status.strip().lower() != "accepted":
@@ -104,6 +108,13 @@ def _execute_advice(
             source=source,
             context=context,
             schedule_subscription=schedule_subscription,
+        )
+    if kind in {"opportunity_followup", "opportunity_qualification"}:
+        return _execute_opportunity_advice(
+            advice,
+            source=source,
+            context=context,
+            send_opportunity_briefing=send_opportunity_briefing,
         )
     if kind != "knowledge_base":
         return {"status": "not_applicable", "kind": kind}
@@ -147,6 +158,58 @@ def _execute_knowledge_advice(
         "message": action_text,
         "scheduled": schedule_ingest is not None,
         "subscription": subscription.to_dict(),
+    }
+
+
+def _execute_opportunity_advice(
+    advice: dict[str, object],
+    *,
+    source: str,
+    context: dict[str, Any] | None,
+    send_opportunity_briefing: OpportunityBriefingSender | None,
+) -> dict[str, object]:
+    kind = str(advice.get("kind") or "")
+    if send_opportunity_briefing is None:
+        return {
+            "status": "unavailable",
+            "kind": "opportunity_briefing",
+            "message": "飞书机会简报发送器未启用",
+        }
+    action_context = context or {}
+    receive_id = ""
+    receive_id_type = "chat_id"
+    if source.strip().lower() == "feishu":
+        receive_id = str(action_context.get("feishu_receive_id") or "").strip()
+        receive_id_type = str(
+            action_context.get("feishu_receive_id_type") or "chat_id"
+        ).strip()
+    result = send_opportunity_briefing(
+        receive_id or None,
+        receive_id_type if receive_id else None,
+    )
+    payload = result.to_dict() if hasattr(result, "to_dict") else result
+    briefing = payload if isinstance(payload, dict) else {}
+    delivery_status = str(briefing.get("status") or "unknown")
+    opportunity_count = int(briefing.get("opportunity_count") or 0)
+    reason = str(briefing.get("reason") or "")
+    if delivery_status == "sent":
+        target = "当前飞书会话" if receive_id else "默认飞书协作目标"
+        message = f"已向{target}发送 {opportunity_count} 条机会经营简报"
+    elif delivery_status == "skipped":
+        message = "机会经营简报已发送过或当前没有可用机会"
+    else:
+        message = f"机会经营简报状态：{delivery_status}"
+    return {
+        "status": delivery_status,
+        "kind": "opportunity_briefing",
+        "advice_kind": kind,
+        "message": message,
+        "receiver_bound": bool(receive_id),
+        "briefing": {
+            "status": delivery_status,
+            "opportunity_count": opportunity_count,
+            "reason": reason,
+        },
     }
 
 

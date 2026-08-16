@@ -31,6 +31,8 @@ def send_opportunity_briefing(
     settings: Settings,
     *,
     force: bool = False,
+    receive_id: str | None = None,
+    receive_id_type: str | None = None,
     client: FeishuClient | None = None,
     opportunity_loader: Callable[..., dict[str, object]] = list_opportunities,
     source_health_loader: Callable[..., dict[str, dict[str, object]]] = source_health,
@@ -48,7 +50,19 @@ def send_opportunity_briefing(
         )
     summary = _mapping(payload.get("summary"))
     health = source_health_loader(settings)
-    artifact_key = _artifact_key(settings, opportunities, summary, now=now)
+    target_id, target_type = resolve_feishu_receiver(
+        settings,
+        receive_id=receive_id,
+        receive_id_type=receive_id_type,
+    )
+    artifact_key = _artifact_key(
+        settings,
+        opportunities,
+        summary,
+        now=now,
+        receive_id=target_id,
+        receive_id_type=target_type,
+    )
     if not force and _already_sent(settings, artifact_key):
         return BriefingDeliveryResult(
             status="skipped",
@@ -56,7 +70,6 @@ def send_opportunity_briefing(
             artifact_key=artifact_key,
             reason="same opportunity briefing already sent today",
         )
-    receive_id, receive_id_type = resolve_feishu_receiver(settings)
     feishu = client or FeishuClient(settings)
     try:
         response = feishu.send_card(
@@ -66,8 +79,8 @@ def send_opportunity_briefing(
                 health,
                 now=now or datetime.now(ZoneInfo(settings.timezone)),
             ),
-            receive_id=receive_id,
-            receive_id_type=receive_id_type,
+            receive_id=target_id,
+            receive_id_type=target_type,
         )
         message_id = _nested_string(response, "data", "message_id")
         record_delivery_attempt(
@@ -260,6 +273,8 @@ def _artifact_key(
     summary: dict[str, Any],
     *,
     now: datetime | None,
+    receive_id: str | None,
+    receive_id_type: str | None,
 ) -> str:
     reference = now or datetime.now(ZoneInfo(settings.timezone))
     queue = _mapping(summary.get("action_queue"))
@@ -273,7 +288,10 @@ def _artifact_key(
         for key in ("unowned_priority", "due_soon", "decision_pending", "decision_overdue")
     )
     digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
-    return f"opportunity_briefing:{reference.date().isoformat()}:{digest}"
+    receiver_scope = hashlib.sha256(
+        f"{receive_id_type or ''}:{receive_id or ''}".encode("utf-8")
+    ).hexdigest()[:12]
+    return f"opportunity_briefing:{reference.date().isoformat()}:{receiver_scope}:{digest}"
 
 
 def _already_sent(settings: Settings, artifact_key: str) -> bool:

@@ -27,6 +27,7 @@ def process_feishu_card_action(
     bitable_updater: Callable[..., object] = update_opportunity_workflow_in_bitable,
     schedule_ingest: Callable[[IngestSubscription], None] | None = None,
     schedule_subscription: Callable[[Subscription], None] | None = None,
+    send_opportunity_briefing: Callable[[str | None, str | None], object] | None = None,
 ) -> dict[str, object]:
     event = _mapping(payload.get("event")) or payload
     value = _mapping(_mapping(event.get("action")).get("value"))
@@ -36,6 +37,7 @@ def process_feishu_card_action(
             payload,
             schedule_ingest=schedule_ingest,
             schedule_subscription=schedule_subscription,
+            send_opportunity_briefing=send_opportunity_briefing,
         )
     return process_opportunity_card_action(
         settings,
@@ -128,6 +130,7 @@ def process_memory_advice_card_action(
     *,
     schedule_ingest: Callable[[IngestSubscription], None] | None = None,
     schedule_subscription: Callable[[Subscription], None] | None = None,
+    send_opportunity_briefing: Callable[[str | None, str | None], object] | None = None,
 ) -> dict[str, object]:
     event = _mapping(payload.get("event")) or payload
     value = _mapping(_mapping(event.get("action")).get("value"))
@@ -165,6 +168,7 @@ def process_memory_advice_card_action(
         context=feedback_context,
         schedule_ingest=schedule_ingest,
         schedule_subscription=schedule_subscription,
+        send_opportunity_briefing=send_opportunity_briefing,
     )
     feedback = result.feedback
     record_activity(

@@ -13,6 +13,37 @@ QUERY = "最近1个月苏州充电桩招标信息"
 
 
 class MemoryAdviceActionTests(unittest.TestCase):
+    def test_accepting_opportunity_advice_sends_default_feishu_briefing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_priority_opportunity(settings)
+            report = build_weekly_report(settings, now=NOW)
+            advice = next(
+                item
+                for item in report["recommendation_plan"]
+                if item["kind"] == "opportunity_followup"
+            )
+            targets: list[tuple[str | None, str | None]] = []
+
+            result = apply_memory_advice_feedback(
+                settings,
+                advice_id=str(advice["id"]),
+                status="accepted",
+                now=NOW,
+                send_opportunity_briefing=lambda receive_id, receive_id_type: (
+                    targets.append((receive_id, receive_id_type))
+                    or {"status": "sent", "opportunity_count": 1, "reason": ""}
+                ),
+            )
+
+        self.assertEqual(targets, [(None, None)])
+        self.assertEqual(result.automation["status"], "sent")
+        self.assertEqual(result.automation["kind"], "opportunity_briefing")
+        self.assertFalse(result.automation["receiver_bound"])
+        self.assertNotIn("message_id", result.automation["briefing"])
+        self.assertIn("默认飞书协作目标", result.automation["message"])
+
     def test_accepting_subscription_advice_creates_schedules_and_reuses_user_subscription(
         self,
     ) -> None:
@@ -108,6 +139,30 @@ class MemoryAdviceActionTests(unittest.TestCase):
         self.assertEqual(len(subscriptions), 1)
         self.assertIn("充电桩", subscriptions[0]["topics_json"])
         self.assertIn("苏州", subscriptions[0]["regions_json"])
+
+
+def _insert_priority_opportunity(settings: Settings) -> None:
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO notices(
+                id, source_site, source_url, canonical_url, title, publish_time,
+                region, purchaser, content_text, fields_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "memory-priority-opportunity",
+                "ccgp",
+                "https://example.com/memory-priority-opportunity",
+                "https://example.com/memory-priority-opportunity",
+                "服务器采购优先机会",
+                "2026-08-16",
+                "上海",
+                "示例采购人",
+                "服务器采购项目",
+                '{"opportunity_intelligence":{"level":"A","score":90}}',
+            ),
+        )
 
 
 if __name__ == "__main__":

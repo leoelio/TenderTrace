@@ -18,9 +18,11 @@ from tendertrace.integrations.feishu_briefing import (
 class _FakeClient:
     def __init__(self) -> None:
         self.cards: list[dict[str, object]] = []
+        self.receivers: list[str] = []
 
-    def send_card(self, card, **_):
+    def send_card(self, card, **kwargs):
         self.cards.append(card)
+        self.receivers.append(str(kwargs.get("receive_id") or ""))
         return {"data": {"message_id": f"briefing-{len(self.cards)}"}}
 
 
@@ -59,6 +61,38 @@ class FeishuBriefingTests(unittest.TestCase):
         self.assertEqual(duplicate.status, "skipped")
         self.assertIn("already sent", duplicate.reason)
         self.assertEqual(len(client.cards), 1)
+
+    def test_same_briefing_is_delivered_once_per_receiver(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            client = _FakeClient()
+            now = datetime(2026, 8, 16, 8, 45, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+            first = send_opportunity_briefing(
+                settings,
+                receive_id="oc_team_a",
+                receive_id_type="chat_id",
+                client=client,
+                opportunity_loader=_opportunity_payload,
+                source_health_loader=_source_health,
+                now=now,
+            )
+            second = send_opportunity_briefing(
+                settings,
+                receive_id="oc_team_b",
+                receive_id_type="chat_id",
+                client=client,
+                opportunity_loader=_opportunity_payload,
+                source_health_loader=_source_health,
+                now=now,
+            )
+
+        self.assertEqual(first.status, "sent")
+        self.assertEqual(second.status, "sent")
+        self.assertNotEqual(first.artifact_key, second.artifact_key)
+        self.assertNotIn("oc_team_a", first.artifact_key)
+        self.assertEqual(client.receivers, ["oc_team_a", "oc_team_b"])
 
     def test_empty_opportunity_pool_skips_before_receiver_resolution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

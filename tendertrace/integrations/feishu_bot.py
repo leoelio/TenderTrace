@@ -13,6 +13,7 @@ from tendertrace.integrations.feishu_card_actions import (
     callback_response_payload,
     process_feishu_card_action,
 )
+from tendertrace.integrations.feishu_briefing import send_opportunity_briefing
 from tendertrace.intent import compile_intent
 from tendertrace.runner import RunOnceResult, run_once
 from tendertrace.scheduling.scheduler import (
@@ -244,6 +245,13 @@ def start_feishu_bot_listener(settings: Settings) -> None:
     def schedule_user_callback(subscription) -> None:
         if owned_scheduler is not None:
             schedule_subscription(owned_scheduler, settings, subscription)
+
+    def send_briefing_callback(receive_id: str | None, receive_id_type: str | None):
+        return send_opportunity_briefing(
+            settings,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
     executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="feishu-bot")
     for event_id in pending_feishu_message_event_ids(settings):
         executor.submit(
@@ -276,6 +284,7 @@ def start_feishu_bot_listener(settings: Settings) -> None:
                 payload,
                 schedule_ingest=(schedule_ingest_callback if owned_scheduler is not None else None),
                 schedule_subscription=(schedule_user_callback if owned_scheduler is not None else None),
+                send_opportunity_briefing=send_briefing_callback,
             )
             response = callback_response_payload(result)
         except (FeishuError, ValueError) as exc:

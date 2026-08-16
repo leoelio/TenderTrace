@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P35</strong> · Executable Memory Advice · Feishu-bound Subscriptions · Enterprise Glass UI
+  <strong>Current stage: P36</strong> · Opportunity Advice Automation · Chat-scoped Briefings · Enterprise Glass UI
 </p>
 
 ---
@@ -43,7 +43,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 事实核验闭环：分析人员可在 Web 补充采购主体、项目编号、预算、截止时间和地区，并附原文链接与证据摘录；系统保留原始公告，以可审计覆盖层重算完整度、机会等级与销售准入，再同步飞书多维表格。
 - 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分和需求覆盖形成可解释门禁；阈值由运行配置管理，只有阶段与资料条件同时满足才允许推进。
 - 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；策略制定阶段按独立阶段时钟执行决策 SLA，超时进入管理升级队列，可手动或定时发送幂等飞书摘要。
-- 机会经营晨报：把机会等级、负责人缺口、资格门禁、截止时间、决策 SLA、市场信号和来源健康合并成可操作飞书卡片；支持工作日自动发送、同日状态去重和卡片内直接推进机会。
+- 机会经营晨报：把机会等级、负责人缺口、资格门禁、截止时间、决策 SLA、市场信号和来源健康合并成可操作飞书卡片；支持工作日自动发送、按接收会话独立去重和卡片内直接推进机会。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
 - 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
 - 来源 SLO 闭环：依据登录态、真实运行可靠度和最近成功时间识别异常；Web 可发送去重飞书告警，也可一键创建带负责人和处置 SLA 的 Task v2 任务。事件进入本地处置台账，只有飞书任务完成且来源真实恢复才关闭。
@@ -58,6 +58,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 模型增强：支持规则模式、本地 Ollama 模式、OpenAI 兼容云端模式。
 - Agent 评测：覆盖 RAG、Agent、Harness、Recall Proxy、金标 Recall@K；人工金标未完成时固定标记“未就绪”，代理分不替代严格召回验收。
 - 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议；采纳知识库建议会把核心区域/主题转成幂等 APScheduler 采集订阅，采纳高频查询建议会创建每日 09:00 的增量用户订阅，并在 Web 与飞书展示真实执行结果。
+- 机会建议自动化：采纳 A 级跟进或 B 级确认建议会发送真实机会经营简报；飞书卡片操作绑定当前群聊，Web 操作使用默认协作目标，重复采纳由会话级投递账本去重。
 - 飞书原会话订阅：用户在周报卡片中采纳高频查询建议时，订阅自动绑定卡片所在群聊，后续 Word 依赖 `sent_history` 仅向该会话推送新增内容；相同查询、计划、渠道和接收目标会复用同一订阅。
 - 可选向量检索：安装 `.[vector]` 后可用 BGE 类模型生成本地向量，与 FTS 做 RRF 融合。
 
@@ -470,8 +471,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P35
-- 286 unit tests pass, including 426 subtests.
+- Current stage: P36
+- 289 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -523,7 +524,7 @@ The current architecture is local-first: background ingestion continuously store
 - Auditable fact verification for purchaser, project number, budget, deadline, and region. Evidence-backed overlays preserve the raw notice, recompute opportunity quality and qualification gates, and synchronize the resulting fields to Feishu Bitable.
 - Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
 - Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. A stage-specific decision clock drives SLA escalation queues and deduplicated manual or scheduled Feishu summaries.
-- Actionable Feishu opportunity briefings that combine grade, owner gaps, qualification gates, deadlines, decision SLA, market signals, and source health, with weekday automation, daily state deduplication, and in-card workflow actions.
+- Actionable Feishu opportunity briefings that combine grade, owner gaps, qualification gates, deadlines, decision SLA, market signals, and source health, with weekday automation, receiver-scoped daily deduplication, and in-card workflow actions.
 - A source SLO workflow derived from login state, observed reliability, and last-success freshness, with deduplicated alerts, Task v2 incidents, owner assignment, a configurable SLA, and evidence-based closure only after both task completion and real source recovery.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
 - Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
@@ -538,6 +539,7 @@ The current architecture is local-first: background ingestion continuously store
 - Rule-only, local Ollama, and OpenAI-compatible cloud model enhancement modes.
 - Agent evaluation covering RAG, agent execution, intent harness, recall proxy, and gold Recall@K; evaluation stays incomplete until the manual gold set is fully annotated.
 - User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then converts accepted topic/region advice into idempotent APScheduler ingestion plans and accepted high-frequency queries into daily 09:00 incremental user subscriptions.
+- Accepted A-grade follow-up and B-grade qualification advice sends a real opportunity briefing. Feishu card actions bind it to the current chat, Web actions use the configured collaboration target, and the delivery ledger deduplicates each receiver independently.
 - Feishu-origin subscriptions bind to the card's current chat and deliver only new notices through `sent_history`; the same query, schedule, channels, and receiver reuse one semantic subscription.
 - Optional vector retrieval via `sentence-transformers`, fused with FTS by RRF.
 
@@ -907,8 +909,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P35
-- 286 unit tests pass, including 426 subtests.
+- Current stage: P36
+- 289 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
