@@ -114,6 +114,8 @@ class Settings:
     feishu_default_receive_id_type: str
     feishu_calendar_id: str
     feishu_callback_verification_token_present: bool
+    feishu_task_sync_enabled: bool
+    feishu_task_sync_cron: str
     feishu_agent_enabled: bool
     feishu_agent_base_url: str
     feishu_agent_app_id_present: bool
@@ -236,6 +238,13 @@ class Settings:
             "chat_id",
         ).strip() or "chat_id"
         _validate_feishu_receive_id_type(feishu_receive_id_type)
+        feishu_task_sync_enabled = _parse_bool(
+            _first_value("TENDERTRACE_FEISHU_TASK_SYNC_ENABLED", env_files, "false")
+        )
+        if feishu_task_sync_enabled and not feishu_enabled:
+            raise ConfigError(
+                "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true requires FEISHU_ENABLED=true"
+            )
         feishu_agent_enabled = _parse_bool(
             _first_value("FEISHU_AGENT_ENABLED", env_files, "false")
         )
@@ -335,6 +344,10 @@ class Settings:
             feishu_calendar_id=_first_value("FEISHU_CALENDAR_ID", env_files, ""),
             feishu_callback_verification_token_present=_bool_secret_present(
                 _first_value("FEISHU_CALLBACK_VERIFICATION_TOKEN", env_files, "")
+            ),
+            feishu_task_sync_enabled=feishu_task_sync_enabled,
+            feishu_task_sync_cron=_first_value(
+                "TENDERTRACE_FEISHU_TASK_SYNC_CRON", env_files, "*/10 * * * *"
             ),
             feishu_agent_enabled=feishu_agent_enabled,
             feishu_agent_base_url=_first_value(
@@ -496,6 +509,8 @@ class Settings:
             "feishu_callback_verification_token_configured": (
                 self.feishu_callback_verification_token_present
             ),
+            "feishu_task_sync_enabled": self.feishu_task_sync_enabled,
+            "feishu_task_sync_cron": self.feishu_task_sync_cron,
             "feishu_agent_enabled": self.feishu_agent_enabled,
             "feishu_agent_base_url": self.feishu_agent_base_url,
             "feishu_agent_app_id_configured": self.feishu_agent_app_id_present,

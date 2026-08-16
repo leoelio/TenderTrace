@@ -129,6 +129,30 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertEqual(first.workflow.owner_name, "张三")
         self.assertEqual(second.workflow.feishu_message_id, "message-id")
 
+    def test_collaboration_can_create_task_without_message_receiver(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            client = _FakeFeishuClient()
+            opportunity = {
+                "notice_id": "notice-1",
+                "title": "服务器采购项目",
+                "source_url": "https://example.com/notice-1",
+            }
+
+            result = start_opportunity_collaboration(
+                settings,
+                opportunity,
+                create_calendar_event=False,
+                client=client,
+                bitable_updater=lambda *args, **kwargs: _BitableResult(),
+            )
+
+        self.assertEqual(client.calls, ["task"])
+        self.assertEqual(result.task_guid, "task-guid")
+        self.assertEqual(result.message_id, "")
+        self.assertEqual(result.workflow.feishu_task_status, "open")
+
     def test_go_decision_is_required_before_bid_preparation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))

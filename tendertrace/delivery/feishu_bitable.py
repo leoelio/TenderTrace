@@ -53,6 +53,9 @@ REQUIRED_FIELDS = (
     "协同状态",
     "下一步行动",
     "飞书任务ID",
+    "飞书任务状态",
+    "飞书任务完成时间",
+    "飞书任务同步时间",
     "飞书日程ID",
     "协同更新时间",
     "资格评分",
@@ -283,7 +286,10 @@ def update_opportunity_workflow_in_bitable(
                     app_token=settings.feishu_bitable_app_token,
                     table_id=settings.feishu_bitable_table_id,
                 )
-            record_id = _existing_records_by_notice_id(settings, client, token).get(notice_id)
+            record_id = _record_id_for_notice(
+                _existing_records_by_notice_id(settings, client, token),
+                notice_id,
+            )
             if not record_id:
                 return FeishuBitableResult(
                     status="skipped",
@@ -342,7 +348,10 @@ def update_opportunity_facts_in_bitable(
                     app_token=settings.feishu_bitable_app_token,
                     table_id=settings.feishu_bitable_table_id,
                 )
-            record_id = _existing_records_by_notice_id(settings, client, token).get(notice_id)
+            record_id = _record_id_for_notice(
+                _existing_records_by_notice_id(settings, client, token),
+                notice_id,
+            )
             if not record_id:
                 return FeishuBitableResult(
                     status="skipped",
@@ -584,6 +593,13 @@ def _existing_records_by_notice_id(
             return existing
 
 
+def _record_id_for_notice(existing: dict[str, str], notice_id: str) -> str | None:
+    record_id = existing.get(notice_id)
+    if record_id or ":" not in notice_id:
+        return record_id
+    return existing.get(notice_id.split(":", 1)[1])
+
+
 def _batch_create_records(
     settings: Settings,
     client: httpx.Client,
@@ -817,6 +833,9 @@ def _workflow_fields(workflow: dict[str, object]) -> dict[str, object]:
         "协同状态": str(workflow.get("stage_label") or workflow.get("stage") or ""),
         "下一步行动": str(workflow.get("next_action") or ""),
         "飞书任务ID": str(workflow.get("feishu_task_guid") or ""),
+        "飞书任务状态": _task_status_label(workflow.get("feishu_task_status")),
+        "飞书任务完成时间": str(workflow.get("feishu_task_completed_at") or ""),
+        "飞书任务同步时间": str(workflow.get("feishu_task_synced_at") or ""),
         "飞书日程ID": str(workflow.get("feishu_event_id") or ""),
         "协同更新时间": str(workflow.get("updated_at") or ""),
         "资格评分": str(workflow.get("qualification_score") or 0),
@@ -855,6 +874,15 @@ def _decision_sla_label(value: object) -> str:
         "unknown": "计时起点待确认",
         "not_applicable": "当前阶段不计时",
     }.get(str(value or ""), "当前阶段不计时")
+
+
+def _task_status_label(value: object) -> str:
+    return {
+        "not_created": "待创建",
+        "open": "进行中",
+        "overdue": "已逾期",
+        "completed": "已完成",
+    }.get(str(value or ""), "待同步")
 
 
 def _action_texts(intelligence: dict[str, Any]) -> list[str]:

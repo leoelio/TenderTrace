@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 
 DDL = (
@@ -322,6 +322,9 @@ DDL = (
         next_action TEXT,
         due_at TEXT,
         feishu_task_guid TEXT,
+        feishu_task_status TEXT NOT NULL DEFAULT 'not_created',
+        feishu_task_completed_at TEXT,
+        feishu_task_synced_at TEXT,
         feishu_event_id TEXT,
         feishu_message_id TEXT,
         qualification_score INTEGER NOT NULL DEFAULT 0,
@@ -469,6 +472,9 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "decision_by TEXT",
         "decision_at TEXT",
         "stage_changed_at TEXT NOT NULL DEFAULT ''",
+        "feishu_task_status TEXT NOT NULL DEFAULT 'not_created'",
+        "feishu_task_completed_at TEXT",
+        "feishu_task_synced_at TEXT",
     ),
 }
 

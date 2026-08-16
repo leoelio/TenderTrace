@@ -92,6 +92,7 @@ const el = {
   refreshRunsButton: document.querySelector("#refreshRunsButton"),
   refreshEvaluationButton: document.querySelector("#refreshEvaluationButton"),
   refreshOpportunitiesButton: document.querySelector("#refreshOpportunitiesButton"),
+  syncFeishuTasksButton: document.querySelector("#syncFeishuTasksButton"),
   sendOpportunityBriefingButton: document.querySelector("#sendOpportunityBriefingButton"),
   opportunityTopicFilter: document.querySelector("#opportunityTopicFilter"),
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
@@ -1238,7 +1239,7 @@ function renderOpportunities(payload) {
       summaryTile("A 级机会", levels.A ?? 0),
       summaryTile("准入就绪", actionQueue.qualification_ready ?? 0),
       summaryTile("待管理决策", actionQueue.decision_pending ?? 0),
-      summaryTile("SLA 超时", actionQueue.decision_overdue ?? 0),
+      summaryTile("协同逾期", (actionQueue.decision_overdue || 0) + (actionQueue.task_overdue || 0)),
       summaryTile("Go 通过率", actionQueue.go_rate == null ? "-" : `${actionQueue.go_rate}%`),
     ].join("");
     renderOpportunityDecisionBoard(actionQueue);
@@ -1279,7 +1280,9 @@ function renderOpportunities(payload) {
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
           const qualification = item.qualification || {};
           const decision = workflow.decision || "pending";
-          const actionSignal = actionState.decision_sla_status === "overdue"
+          const actionSignal = actionState.feishu_task_overdue
+            ? '<small class="action-signal action-signal-danger">飞书任务已逾期</small>'
+            : actionState.decision_sla_status === "overdue"
             ? `<small class="action-signal action-signal-danger">决策已超时 ${escapeHtml(actionState.decision_wait_hours || 0)} 小时</small>`
             : actionState.decision_sla_status === "due_soon"
               ? `<small class="action-signal">决策剩余 ${escapeHtml(actionState.decision_remaining_hours || 0)} 小时</small>`
@@ -1470,7 +1473,9 @@ function openOpportunityDetail(noticeId) {
       ${detailLine("销售阶段", workflow.stage_label || "线索识别")}
       ${detailLine("机会负责人", workflow.owner_name || "待认领")}
       ${detailLine("下一步行动", workflow.next_action || "启动协同后自动生成")}
-      ${detailLine("任务状态", workflow.feishu_task_guid ? "已创建" : "待创建")}
+      ${detailLine("任务状态", feishuTaskStatusLabel(workflow))}
+      ${workflow.feishu_task_completed_at ? detailLine("完成时间", workflow.feishu_task_completed_at) : ""}
+      ${workflow.feishu_task_synced_at ? detailLine("最近同步", workflow.feishu_task_synced_at) : ""}
       ${detailLine("截止日程", workflow.feishu_event_id ? "已创建" : (item.bid_deadline ? "待创建" : "未识别截止时间"))}
     </section>
     <div class="opportunity-detail-footer">
@@ -1523,6 +1528,16 @@ function decisionLabel(decision) {
   return { go: "Go", hold: "Hold", no_go: "No-Go", pending: "待决策" }[decision] || "待决策";
 }
 
+function feishuTaskStatusLabel(workflow) {
+  if (!workflow.feishu_task_guid) return "待创建";
+  return {
+    open: "进行中",
+    overdue: "已逾期",
+    completed: "已完成",
+    not_created: "待创建",
+  }[workflow.feishu_task_status] || "待同步";
+}
+
 function decisionSlaLabel(actionState) {
   const status = actionState.decision_sla_status;
   if (status === "overdue") return `已超时 · 已等待 ${actionState.decision_wait_hours || 0} 小时`;
@@ -1556,7 +1571,7 @@ function renderOpportunityDecisionBoard(actionQueue) {
         ${decisionPipelineValue("Hold", decisions.hold || 0, "hold")}
         ${decisionPipelineValue("No-Go", decisions.no_go || 0, "no-go")}
       </div>
-      <small>投标准备 ${escapeHtml(stages.bidding || 0)} · 中标 ${escapeHtml(stages.won || 0)} · 赢单率 ${actionQueue.win_rate == null ? "-" : `${escapeHtml(actionQueue.win_rate)}%`}</small>
+      <small>飞书任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)}</small>
     </section>
     <section>
       <span class="decision-board-kicker">SLA 升级队列</span>
@@ -1993,7 +2008,13 @@ function renderFeishuOverview(payload) {
         ? `工作日自动 ${features.opportunity_briefing.cron}`
         : "机会池、负责人、资格门禁、决策时效与来源风险合并推送",
     ],
-    ["销售任务", features.task_sync, "负责人任务与下一步行动"],
+    [
+      "销售任务双向同步",
+      features.task_sync,
+      features.task_sync?.automation_enabled
+        ? `自动 ${features.task_sync.cron} · 完成与逾期状态回写机会台账`
+        : "机会页手动同步，支持完成与逾期状态回写",
+    ],
     ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],
     ["状态回调", features.card_callback, "卡片动作回写台账与审计流"],
     ["智能体服务", features.agent_service, "独立智能体应用"],
@@ -2370,7 +2391,7 @@ async function sendOpportunityToFeishu(noticeId) {
   renderOpportunities({ items: state.opportunities, summary: state.opportunitySummaryData });
   await refreshFeishu();
   const created = [result.task_guid && "任务", result.event_id && "日程"].filter(Boolean).join("与");
-  showToast(result.status === "sent" ? `飞书协同已启动${created ? `，已关联${created}` : ""}` : "飞书协同未完成");
+  showToast(["sent", "started"].includes(result.status) ? `飞书协同已启动${created ? `，已关联${created}` : ""}` : "飞书协同未完成");
 }
 
 async function applyOpportunityAction(noticeId, action) {
@@ -2403,6 +2424,26 @@ async function sendOpportunityBriefing() {
       ? `机会经营晨报已发送，共 ${result.opportunity_count} 条机会`
       : "当前机会池为空，未发送晨报",
   );
+}
+
+async function syncFeishuTasks() {
+  if (el.syncFeishuTasksButton) el.syncFeishuTasksButton.disabled = true;
+  try {
+    const result = await api("/api/opportunities/tasks/sync", {
+      method: "POST",
+      body: JSON.stringify({ limit: 200 }),
+    });
+    await Promise.all([refreshOpportunities(), refreshFeishu()]);
+    if (!result.scanned_count) {
+      showToast("当前没有已关联的飞书任务");
+      return;
+    }
+    showToast(
+      `已同步 ${result.scanned_count} 个任务 · 完成 ${result.completed_count} · 逾期 ${result.overdue_count} · 表格回写 ${result.bitable_updated_count || 0}${result.failed_count ? ` · 失败 ${result.failed_count}` : ""}`,
+    );
+  } finally {
+    if (el.syncFeishuTasksButton) el.syncFeishuTasksButton.disabled = false;
+  }
 }
 
 async function saveMemoryWeekly() {
@@ -3108,6 +3149,9 @@ function bindEvents() {
   );
   el.sendOpportunityBriefingButton?.addEventListener("click", () =>
     sendOpportunityBriefing().catch(toastError("机会经营晨报发送失败")),
+  );
+  el.syncFeishuTasksButton?.addEventListener("click", () =>
+    syncFeishuTasks().catch(toastError("飞书任务同步失败")),
   );
   el.opportunityLevelFilter?.addEventListener("change", () =>
     refreshOpportunities().catch(toastError("机会情报筛选失败")),

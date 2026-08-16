@@ -75,6 +75,21 @@ class OpportunityApiTests(unittest.TestCase):
                     api_module,
                     "update_opportunity_facts_in_bitable",
                     return_value=SimpleNamespace(status="sent", message=""),
+                ), patch.object(
+                    api_module,
+                    "sync_feishu_tasks",
+                    return_value=SimpleNamespace(
+                        scanned_count=2,
+                        to_dict=lambda: {
+                            "status": "finished",
+                            "scanned_count": 2,
+                            "updated_count": 1,
+                            "completed_count": 1,
+                            "overdue_count": 0,
+                            "failed_count": 0,
+                            "failures": [],
+                        },
+                    ),
                 ):
                     client = TestClient(api_module.create_app())
                     fact_payload = {
@@ -109,6 +124,10 @@ class OpportunityApiTests(unittest.TestCase):
                     blocked = client.post(
                         "/api/opportunities/notice-api-1/actions",
                         json={"action": "prepare_bid", "actor_name": "测试负责人"},
+                    )
+                    task_sync = client.post(
+                        "/api/opportunities/tasks/sync",
+                        json={"limit": 100},
                     )
                     escalation = client.post(
                         "/api/opportunities/escalations/send-feishu",
@@ -148,6 +167,8 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(claimed.json()["workflow"]["stage"], "qualifying")
         self.assertEqual(claimed.json()["workflow"]["owner_name"], "测试负责人")
         self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(task_sync.status_code, 200)
+        self.assertEqual(task_sync.json()["completed_count"], 1)
         self.assertIn("当前阶段", blocked.json()["detail"]["reasons"][0])
         self.assertEqual(escalation.status_code, 200)
         self.assertEqual(escalation.json()["status"], "skipped")

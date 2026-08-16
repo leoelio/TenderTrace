@@ -37,6 +37,7 @@ from tendertrace.integrations.feishu_card_actions import (
 )
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
+from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
@@ -278,7 +279,11 @@ def create_app():
                     "automation_enabled": settings.opportunity_briefing_enabled,
                     "cron": settings.opportunity_briefing_cron,
                 },
-                "task_sync": {"ready": bool(message["configured"])},
+                "task_sync": {
+                    "ready": bool(message["configured"]),
+                    "automation_enabled": settings.feishu_task_sync_enabled,
+                    "cron": settings.feishu_task_sync_cron,
+                },
                 "deadline_calendar": {
                     "ready": bool(message["configured"] and settings.feishu_calendar_id),
                 },
@@ -347,11 +352,16 @@ def create_app():
         text = str(request.get("text") or "").strip()
         if not text:
             raise HTTPException(status_code=400, detail="text is required")
-        receive_id, receive_id_type = resolve_feishu_receiver(
-            settings,
-            receive_id=_optional_string(request.get("receive_id")),
-            receive_id_type=_optional_string(request.get("receive_id_type")),
-        )
+        receive_id = _optional_string(request.get("receive_id"))
+        receive_id_type = _optional_string(request.get("receive_id_type"))
+        if not receive_id:
+            preference = load_feishu_receiver(settings)
+            if preference is not None:
+                receive_id = preference.receive_id
+                receive_id_type = receive_id_type or preference.receive_id_type
+            else:
+                receive_id = settings.feishu_default_receive_id or None
+        receive_id_type = receive_id_type or settings.feishu_default_receive_id_type
         try:
             result = FeishuClient(settings).send_text(
                 text,
@@ -438,6 +448,26 @@ def create_app():
         )
         return result.to_dict()
 
+    @app.post("/api/opportunities/tasks/sync")
+    def sync_opportunity_tasks(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            result = sync_feishu_tasks(
+                settings,
+                limit=int(request.get("limit") or 200),
+            )
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="feishu_task_sync",
+            target="opportunity_tasks",
+            label=f"同步 {result.scanned_count} 个飞书任务",
+            metadata=result.to_dict(),
+        )
+        return result.to_dict()
+
     @app.post("/api/opportunities/send-feishu")
     def send_opportunity_feishu(request: dict[str, object] = Body(...)) -> dict[str, object]:
         notice_id = str(request.get("notice_id") or "").strip()
@@ -468,7 +498,7 @@ def create_app():
                 artifact_type="opportunity",
                 artifact_key=notice_id,
                 status="sent",
-                external_id=result.message_id or None,
+                external_id=result.message_id or result.task_guid or None,
             )
         except (FeishuError, ValueError) as exc:
             attempt = record_delivery_attempt(
@@ -486,7 +516,11 @@ def create_app():
             target=notice_id,
             label=str(opportunity.get("title") or ""),
         )
-        return {"status": "sent", "attempt_id": attempt.id, **result.to_dict()}
+        return {
+            "status": "sent" if result.message_id else "started",
+            "attempt_id": attempt.id,
+            **result.to_dict(),
+        }
 
     @app.get("/api/opportunities/{notice_id}/workflow")
     def opportunity_workflow(notice_id: str) -> dict[str, object]:

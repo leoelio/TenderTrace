@@ -29,6 +29,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.opportunity_escalation_cron, "0 9,14 * * 1-5")
         self.assertFalse(settings.opportunity_briefing_enabled)
         self.assertEqual(settings.opportunity_briefing_cron, "45 8 * * 1-5")
+        self.assertFalse(settings.feishu_task_sync_enabled)
+        self.assertEqual(settings.feishu_task_sync_cron, "*/10 * * * *")
         self.assertFalse(settings.api_token_present)
         self.assertIn("openai_key_configured", settings.safe_summary())
         self.assertIn("openai_api_style", settings.safe_summary())
@@ -58,6 +60,29 @@ class SettingsTests(unittest.TestCase):
 
         self.assertTrue(settings.opportunity_briefing_enabled)
         self.assertEqual(settings.opportunity_briefing_cron, "15 8 * * 1-5")
+
+    def test_feishu_task_sync_requires_enabled_message_app(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
+
+            (root / ".env.local").write_text(
+                "FEISHU_ENABLED=true\n"
+                "FEISHU_APP_ID=cli_test\n"
+                "FEISHU_APP_SECRET=secret\n"
+                "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true\n"
+                "TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/5 * * * *\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        self.assertTrue(settings.feishu_task_sync_enabled)
+        self.assertEqual(settings.feishu_task_sync_cron, "*/5 * * * *")
 
     def test_qualification_policy_is_configurable_and_validated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

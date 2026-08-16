@@ -305,13 +305,16 @@ class FeishuBitableTests(unittest.TestCase):
 
             result = update_opportunity_workflow_in_bitable(
                 settings,
-                notice_id="existing",
+                notice_id="find_tender:existing",
                 workflow={
                     "stage": "qualifying",
                     "stage_label": "机会确认",
                     "owner_name": "张三",
                     "next_action": "确认预算",
                     "feishu_task_guid": "task-guid",
+                    "feishu_task_status": "completed",
+                    "feishu_task_completed_at": "2026-08-15T10:00:00+00:00",
+                    "feishu_task_synced_at": "2026-08-15T10:05:00+00:00",
                     "feishu_event_id": "event-id",
                     "qualification_score": 82,
                     "qualification_status": "ready",
@@ -332,6 +335,8 @@ class FeishuBitableTests(unittest.TestCase):
         fields = FakeFeishuClient.updated_records[0][1]
         self.assertEqual(fields["协同状态"], "机会确认")
         self.assertEqual(fields["机会负责人"], "张三")
+        self.assertEqual(fields["飞书任务状态"], "已完成")
+        self.assertEqual(fields["飞书任务完成时间"], "2026-08-15T10:00:00+00:00")
         self.assertEqual(fields["资格评分"], "82")
         self.assertEqual(fields["准入状态"], "可决策")
         self.assertEqual(fields["投标决策"], "Go")

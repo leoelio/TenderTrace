@@ -499,6 +499,9 @@ def _opportunity_action_state(
         priority += 18
     if workflow.get("feishu_message_id"):
         priority += 4
+    task_status = str(workflow.get("feishu_task_status") or "not_created")
+    if task_status == "overdue" and actionable:
+        priority += 20
     if actionable and not qualification_blocked and decision_required:
         priority += 8
     if decision_sla_status == "due_soon":
@@ -521,6 +524,9 @@ def _opportunity_action_state(
         "decision_wait_hours": decision_wait_hours,
         "decision_remaining_hours": decision_remaining_hours,
         "decision_due_at": decision_due_at.isoformat(timespec="minutes") if decision_due_at else "",
+        "feishu_task_status": task_status,
+        "feishu_task_completed": task_status == "completed",
+        "feishu_task_overdue": task_status == "overdue",
     }
 
 
@@ -538,6 +544,9 @@ def _action_queue_summary(
     qualification_blocked = 0
     decision_pending = 0
     decision_overdue = 0
+    task_open = 0
+    task_completed = 0
+    task_overdue = 0
     decisions = {name: 0 for name in ("go", "hold", "no_go")}
     escalations: list[dict[str, object]] = []
     deadlines: list[tuple[date, dict[str, object]]] = []
@@ -553,6 +562,10 @@ def _action_queue_summary(
         overdue += int(bool(action.get("overdue")))
         if stage != "identified" or workflow.get("feishu_message_id"):
             collaboration_started += 1
+        task_status = str(workflow.get("feishu_task_status") or "not_created")
+        task_open += int(task_status == "open")
+        task_completed += int(task_status == "completed")
+        task_overdue += int(task_status == "overdue")
         qualification = _mapping(item.get("qualification"))
         if qualification.get("status") == "ready":
             qualification_ready += 1
@@ -599,6 +612,9 @@ def _action_queue_summary(
         "qualification_blocked": qualification_blocked,
         "decision_pending": decision_pending,
         "decision_overdue": decision_overdue,
+        "task_open": task_open,
+        "task_completed": task_completed,
+        "task_overdue": task_overdue,
         "decision_sla_hours": decision_sla_hours,
         "decisions": decisions,
         "go_rate": round(decisions["go"] / closed_decisions * 100, 1)

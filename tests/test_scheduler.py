@@ -7,6 +7,7 @@ from tendertrace.config import Settings
 from tendertrace.scheduling.ingest_subscriptions import IngestSubscription
 from tendertrace.scheduling.scheduler import (
     schedule_feishu_lead_import,
+    schedule_feishu_task_sync,
     schedule_ingest_pool,
     schedule_ingest_subscription,
     schedule_opportunity_briefing,
@@ -142,6 +143,27 @@ class SchedulerTests(unittest.TestCase):
 
         job = scheduler.jobs[0]["kwargs"]
         self.assertEqual(job["id"], "feishu:opportunity-briefing")
+        self.assertTrue(job["replace_existing"])
+        self.assertTrue(job["coalesce"])
+
+    def test_feishu_task_sync_registers_configured_cron_job(self) -> None:
+        scheduler = FakeScheduler()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "FEISHU_ENABLED=true\n"
+                "FEISHU_APP_ID=cli_test\n"
+                "FEISHU_APP_SECRET=secret\n"
+                "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true\n"
+                "TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/5 * * * *\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        schedule_feishu_task_sync(scheduler, settings)
+
+        job = scheduler.jobs[0]["kwargs"]
+        self.assertEqual(job["id"], "feishu:task-sync")
         self.assertTrue(job["replace_existing"])
         self.assertTrue(job["coalesce"])
 

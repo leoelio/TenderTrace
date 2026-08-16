@@ -8,6 +8,7 @@ from tendertrace.ingest import run_ingest_cycle
 from tendertrace.integrations.feishu_briefing import send_opportunity_briefing
 from tendertrace.integrations.feishu_escalation import send_opportunity_escalation_summary
 from tendertrace.integrations.feishu_leads import import_partner_leads
+from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
 from tendertrace.scheduling.ingest_subscriptions import (
     IngestSubscription,
     list_ingest_subscriptions,
@@ -39,6 +40,8 @@ def start_subscription_scheduler(settings: Settings):
         schedule_opportunity_escalation(scheduler, settings)
     if settings.opportunity_briefing_enabled:
         schedule_opportunity_briefing(scheduler, settings)
+    if settings.feishu_task_sync_enabled:
+        schedule_feishu_task_sync(scheduler, settings)
     scheduler.start()
     return scheduler
 
@@ -144,6 +147,25 @@ def schedule_opportunity_briefing(scheduler, settings: Settings) -> None:
             timezone=settings.timezone,
         ),
         id="feishu:opportunity-briefing",
+        kwargs={"settings": settings},
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
+def schedule_feishu_task_sync(scheduler, settings: Settings) -> None:
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError as exc:
+        raise RuntimeError("APScheduler is not installed. Run: python -m pip install -e .[dev]") from exc
+    scheduler.add_job(
+        sync_feishu_tasks,
+        trigger=CronTrigger.from_crontab(
+            settings.feishu_task_sync_cron,
+            timezone=settings.timezone,
+        ),
+        id="feishu:task-sync",
         kwargs={"settings": settings},
         replace_existing=True,
         coalesce=True,

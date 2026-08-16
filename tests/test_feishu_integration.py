@@ -27,6 +27,8 @@ FEISHU_ENV_KEYS = (
     "FEISHU_DEFAULT_RECEIVE_ID_TYPE",
     "FEISHU_CALENDAR_ID",
     "FEISHU_CALLBACK_VERIFICATION_TOKEN",
+    "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED",
+    "TENDERTRACE_FEISHU_TASK_SYNC_CRON",
     "FEISHU_AGENT_ENABLED",
     "FEISHU_AGENT_BASE_URL",
     "FEISHU_AGENT_APP_ID",
@@ -160,7 +162,7 @@ class FeishuIntegrationTests(unittest.TestCase):
 
         self.assertEqual(result["data"]["message_id"], "om_reply")
 
-    def test_card_task_and_calendar_use_official_endpoints(self) -> None:
+    def test_card_task_read_and_calendar_use_official_endpoints(self) -> None:
         old_env = _clear_env(FEISHU_ENV_KEYS)
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -182,7 +184,7 @@ class FeishuIntegrationTests(unittest.TestCase):
                             200,
                             json={"code": 0, "tenant_access_token": "t-token"},
                         )
-                    payload = json.loads(request.content.decode("utf-8"))
+                    payload = json.loads(request.content.decode("utf-8")) if request.content else {}
                     if request.url.path.endswith("/im/v1/messages"):
                         self.assertEqual(payload["msg_type"], "interactive")
                         self.assertEqual(json.loads(payload["content"])["header"]["template"], "blue")
@@ -195,6 +197,13 @@ class FeishuIntegrationTests(unittest.TestCase):
                         return httpx.Response(
                             200,
                             json={"code": 0, "data": {"task": {"guid": "task-guid"}}},
+                        )
+                    if request.url.path.endswith("/task/v2/tasks/task-guid"):
+                        self.assertEqual(request.method, "GET")
+                        self.assertEqual(request.url.params["user_id_type"], "open_id")
+                        return httpx.Response(
+                            200,
+                            json={"code": 0, "data": {"task": {"guid": "task-guid", "completed_at": "0"}}},
                         )
                     if request.url.path.endswith("/calendar/v4/calendars/primary/events"):
                         self.assertEqual(request.url.params["idempotency_key"], "calendar-token")
@@ -214,6 +223,7 @@ class FeishuIntegrationTests(unittest.TestCase):
                     description="核对预算",
                     client_token="task-token",
                 )
+                fetched_task = client.get_task("task-guid")
                 event = client.create_calendar_event(
                     calendar_id="primary",
                     summary="投标截止",
@@ -227,6 +237,7 @@ class FeishuIntegrationTests(unittest.TestCase):
 
         self.assertEqual(card["data"]["message_id"], "om-card")
         self.assertEqual(task["data"]["task"]["guid"], "task-guid")
+        self.assertEqual(fetched_task["data"]["task"]["completed_at"], "0")
         self.assertEqual(event["data"]["event"]["event_id"], "event-id")
         self.assertIn("/open-apis/task/v2/tasks", seen)
 

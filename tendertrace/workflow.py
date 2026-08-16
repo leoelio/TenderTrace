@@ -66,6 +66,9 @@ class OpportunityWorkflow:
     next_action: str
     due_at: str
     feishu_task_guid: str
+    feishu_task_status: str
+    feishu_task_completed_at: str
+    feishu_task_synced_at: str
     feishu_event_id: str
     feishu_message_id: str
     qualification_score: int
@@ -129,6 +132,9 @@ def update_workflow(
     next_action: str | None = None,
     due_at: str | None = None,
     feishu_task_guid: str | None = None,
+    feishu_task_status: str | None = None,
+    feishu_task_completed_at: str | None = None,
+    feishu_task_synced_at: str | None = None,
     feishu_event_id: str | None = None,
     feishu_message_id: str | None = None,
     qualification_score: int | None = None,
@@ -151,6 +157,19 @@ def update_workflow(
         "due_at": current.due_at if due_at is None else due_at,
         "feishu_task_guid": (
             current.feishu_task_guid if feishu_task_guid is None else feishu_task_guid
+        ),
+        "feishu_task_status": (
+            current.feishu_task_status if feishu_task_status is None else feishu_task_status
+        ),
+        "feishu_task_completed_at": (
+            current.feishu_task_completed_at
+            if feishu_task_completed_at is None
+            else feishu_task_completed_at
+        ),
+        "feishu_task_synced_at": (
+            current.feishu_task_synced_at
+            if feishu_task_synced_at is None
+            else feishu_task_synced_at
         ),
         "feishu_event_id": (
             current.feishu_event_id if feishu_event_id is None else feishu_event_id
@@ -186,7 +205,9 @@ def update_workflow(
             """
             UPDATE opportunity_workflows
             SET stage = ?, owner_open_id = ?, owner_name = ?, next_action = ?, due_at = ?,
-                feishu_task_guid = ?, feishu_event_id = ?, feishu_message_id = ?,
+                feishu_task_guid = ?, feishu_task_status = ?,
+                feishu_task_completed_at = ?, feishu_task_synced_at = ?,
+                feishu_event_id = ?, feishu_message_id = ?,
                 qualification_score = ?, qualification_status = ?, decision = ?,
                 decision_reason = ?, decision_by = ?, decision_at = ?,
                 stage_changed_at = ?, updated_by = ?, updated_at = datetime('now')
@@ -284,6 +305,9 @@ def _from_row(row: Any) -> OpportunityWorkflow:
         next_action=str(row["next_action"] or ""),
         due_at=str(row["due_at"] or ""),
         feishu_task_guid=str(row["feishu_task_guid"] or ""),
+        feishu_task_status=str(row["feishu_task_status"] or "not_created"),
+        feishu_task_completed_at=str(row["feishu_task_completed_at"] or ""),
+        feishu_task_synced_at=str(row["feishu_task_synced_at"] or ""),
         feishu_event_id=str(row["feishu_event_id"] or ""),
         feishu_message_id=str(row["feishu_message_id"] or ""),
         qualification_score=int(row["qualification_score"] or 0),
@@ -308,6 +332,9 @@ def _default_workflow(notice_id: str) -> OpportunityWorkflow:
         next_action="",
         due_at="",
         feishu_task_guid="",
+        feishu_task_status="not_created",
+        feishu_task_completed_at="",
+        feishu_task_synced_at="",
         feishu_event_id="",
         feishu_message_id="",
         qualification_score=0,

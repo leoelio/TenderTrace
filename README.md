@@ -187,6 +187,8 @@ TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
 TENDERTRACE_OPPORTUNITY_ESCALATION_CRON=0 9,14 * * 1-5
 TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=false
 TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=45 8 * * 1-5
+TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=false
+TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/10 * * * *
 
 # 可选飞书消息/群聊接口。
 FEISHU_ENABLED=false
@@ -349,6 +351,8 @@ python -m tendertrace embed-notices
 机会协同使用公告 ID 生成任务 `client_token` 与日程 `idempotency_key`，重复同步不会重复创建任务或日程。启用截止日程需配置 `FEISHU_CALENDAR_ID`；启用卡片动作需配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，并在飞书开发者后台把可公网访问的 `/api/integrations/feishu/callback` 注册为回调地址。本地 `127.0.0.1` 不能直接接收飞书云端回调。
 
 机会经营晨报默认关闭自动发送。设置 `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` 汇总本地真实机会与来源健康记录并投递到默认会话；Web 机会情报页也可手动触发。卡片中的认领、确认、Go 和投标准备动作复用同一套状态图、资格门禁和回调审计，不维护第二份流程状态。
+
+飞书任务状态支持双向回收。机会页的“同步任务状态”会读取已关联任务的完成时间与截止时间，识别进行中、已完成和已逾期状态，并幂等回写本地 workflow、审计事件和多维表格。设置 `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_FEISHU_TASK_SYNC_CRON` 自动执行；启用前需为应用开通任务读取或任务读写权限。
 
 飞书会话也可以直接作为 TenderTrace 的自然语言入口。为自建应用启用机器人能力并订阅 `im.message.receive_v1` 与 `card.action.trigger` 后，安装可选依赖 `python -m pip install -e .[feishu]`，运行 `python -m tendertrace feishu-bot-listen` 即可通过官方长连接接收消息和机会卡片动作，无需把本地服务暴露到公网。即时问题会运行检索、生成 Word 并回传原会话；带发送时间或频率的问题会创建绑定原会话的增量订阅。事件先写入 `feishu_message_events`，以 `event_id` 和 `message_id` 双重去重，进程重启时会恢复未处理或超时任务。启用 `TENDERTRACE_SCHEDULER_ENABLED` 时，该 CLI 同时承担订阅调度；同一数据库只能运行一个启用调度器的进程。
 
@@ -637,6 +641,8 @@ TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
 TENDERTRACE_OPPORTUNITY_ESCALATION_CRON=0 9,14 * * 1-5
 TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=false
 TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=45 8 * * 1-5
+TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=false
+TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/10 * * * *
 ```
 
 Model modes:
@@ -770,6 +776,8 @@ The Feishu connection center can select a default chat from the bot's visible ch
 Task `client_token` and calendar `idempotency_key` values are derived from the notice ID, so repeated synchronization does not duplicate those artifacts. Set `FEISHU_CALENDAR_ID` to enable deadline events. Set `FEISHU_CALLBACK_VERIFICATION_TOKEN` and register the publicly reachable `/api/integrations/feishu/callback` endpoint in Feishu Developer Console to enable card actions; a local `127.0.0.1` URL is not reachable from Feishu Cloud.
 
 Scheduled opportunity briefings are disabled by default. Set `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` and configure `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` to deliver a state-deduplicated weekday briefing to the default chat. The Web Opportunity Intelligence view can also trigger it manually. Claim, qualify, Go, and bid-preparation buttons reuse the same workflow graph, qualification gates, callback handler, and audit stream as the Web UI.
+
+Feishu task status can be synchronized back into TenderTrace. The Opportunity Intelligence view reads completion and due timestamps for linked tasks, classifies them as open, completed, or overdue, and idempotently updates the local workflow, audit ledger, and Bitable record. Enable scheduled synchronization with `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true` and `TENDERTRACE_FEISHU_TASK_SYNC_CRON`; the Feishu app needs task read or task write permission.
 
 Feishu conversations can also be the native natural-language entry point. Enable the bot capability, subscribe to `im.message.receive_v1`, install the optional dependency with `python -m pip install -e .[feishu]`, then run `python -m tendertrace feishu-bot-listen`. The official long connection does not require exposing the local service. Immediate questions run retrieval, generate Word, and deliver it to the originating chat; questions containing a delivery time or cadence create an incremental subscription bound to that chat. Every event is persisted and deduplicated by both event and message ID, and unfinished or stale work is recovered after restart. When `TENDERTRACE_SCHEDULER_ENABLED` is enabled, this CLI also owns subscription scheduling; only one scheduler-enabled process may use a given database.
 

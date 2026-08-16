@@ -35,8 +35,8 @@ def start_opportunity_collaboration(
     settings: Settings,
     opportunity: dict[str, Any],
     *,
-    receive_id: str,
-    receive_id_type: str,
+    receive_id: str = "",
+    receive_id_type: str = "chat_id",
     owner_open_id: str = "",
     owner_name: str = "",
     create_task: bool = True,
@@ -52,6 +52,7 @@ def start_opportunity_collaboration(
     next_action = _next_action(opportunity)
     due_at = _deadline(opportunity, settings.timezone)
     task_guid = workflow.feishu_task_guid
+    task_created = False
     event_id = workflow.feishu_event_id
     card_workflow = replace(
         workflow,
@@ -75,6 +76,7 @@ def start_opportunity_collaboration(
             assignee_open_id=owner_open_id,
         )
         task_guid = _nested_string(task, "data", "task", "guid")
+        task_created = bool(task_guid)
 
     if create_calendar_event and settings.feishu_calendar_id and due_at and not event_id:
         event = feishu.create_calendar_event(
@@ -87,17 +89,19 @@ def start_opportunity_collaboration(
         )
         event_id = _nested_string(event, "data", "event", "event_id")
 
-    card_response = feishu.send_card(
-        build_opportunity_card(
-            opportunity,
-            card_workflow,
-            next_action=next_action,
-            qualification=qualification,
-        ),
-        receive_id=receive_id,
-        receive_id_type=receive_id_type,
-    )
-    message_id = _nested_string(card_response, "data", "message_id")
+    message_id = workflow.feishu_message_id
+    if receive_id:
+        card_response = feishu.send_card(
+            build_opportunity_card(
+                opportunity,
+                card_workflow,
+                next_action=next_action,
+                qualification=qualification,
+            ),
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
+        message_id = _nested_string(card_response, "data", "message_id")
     workflow = update_workflow(
         settings,
         notice_id,
@@ -106,6 +110,12 @@ def start_opportunity_collaboration(
         next_action=next_action,
         due_at=due_at.isoformat(timespec="minutes") if due_at else "",
         feishu_task_guid=task_guid,
+        feishu_task_status="open" if task_created else None,
+        feishu_task_synced_at=(
+            datetime.now().astimezone().isoformat(timespec="seconds")
+            if task_created
+            else None
+        ),
         feishu_event_id=event_id,
         feishu_message_id=message_id,
         qualification_score=int(qualification.get("score") or 0),
