@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P34</strong> · Adaptive Knowledge Collection · Feishu Action Loop · Enterprise Glass UI
+  <strong>Current stage: P35</strong> · Executable Memory Advice · Feishu-bound Subscriptions · Enterprise Glass UI
 </p>
 
 ---
@@ -57,7 +57,8 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - Word 报告：输出标题、发布时间、来源链接、核心内容、附件链接、多源覆盖和抓取健康。
 - 模型增强：支持规则模式、本地 Ollama 模式、OpenAI 兼容云端模式。
 - Agent 评测：覆盖 RAG、Agent、Harness、Recall Proxy、金标 Recall@K；人工金标未完成时固定标记“未就绪”，代理分不替代严格召回验收。
-- 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议；采纳知识库建议会把核心区域/主题转成幂等 APScheduler 采集订阅，并在 Web 与飞书展示真实执行结果和覆盖状态。
+- 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议；采纳知识库建议会把核心区域/主题转成幂等 APScheduler 采集订阅，采纳高频查询建议会创建每日 09:00 的增量用户订阅，并在 Web 与飞书展示真实执行结果。
+- 飞书原会话订阅：用户在周报卡片中采纳高频查询建议时，订阅自动绑定卡片所在群聊，后续 Word 依赖 `sent_history` 仅向该会话推送新增内容；相同查询、计划、渠道和接收目标会复用同一订阅。
 - 可选向量检索：安装 `.[vector]` 后可用 BGE 类模型生成本地向量，与 FTS 做 RRF 融合。
 
 ## 技术栈
@@ -340,7 +341,7 @@ python -m tendertrace embed-notices
 - `POST /api/integrations/feishu/bitable/import-leads`：预检或导入伙伴提交的多维表格线索。
 - `GET /api/integrations/feishu/bitable/import-runs`：查看伙伴线索同步运行审计。
 - `POST /api/outbox/{filename}/send-feishu`：上传并发送指定 Word 报告。
-- `POST /api/memory/advice/{advice_id}/feedback`：采纳、完成或忽略动态建议，并写入用户记忆反馈账本。
+- `POST /api/memory/advice/{advice_id}/feedback`：采纳、完成或忽略动态建议；可执行建议会创建或复用后台采集/用户增量订阅，并把自动化结果写入反馈账本。
 - `POST /api/memory/weekly/send-feishu`：发送最近一周的交互式使用与机会周报，可在卡片内处理建议。
 - `POST /api/opportunities/send-feishu`：发送可操作机会卡片，并按需创建幂等任务与截止日程。
 - `GET /api/opportunities/{notice_id}/workflow`：读取机会负责人、销售阶段和飞书协同状态。
@@ -469,8 +470,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P34
-- 283 unit tests pass, including 426 subtests.
+- Current stage: P35
+- 286 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -515,7 +516,7 @@ The current architecture is local-first: background ingestion continuously store
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
-- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream. Knowledge-base advice in weekly cards can create and schedule adaptive background ingestion directly.
+- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream. Weekly-card advice can create adaptive ingestion or bind a daily incremental report subscription to the chat where the action occurred.
 - A unified Feishu delivery target picker that combines bot-visible chats and authorized directory members; reports, weekly digests, operations briefings, and source alerts reuse the selected target.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
@@ -536,7 +537,8 @@ The current architecture is local-first: background ingestion continuously store
 - Word report generation with title, publish time, source link, core content, and attachment links.
 - Rule-only, local Ollama, and OpenAI-compatible cloud model enhancement modes.
 - Agent evaluation covering RAG, agent execution, intent harness, recall proxy, and gold Recall@K; evaluation stays incomplete until the manual gold set is fully annotated.
-- User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then converts accepted topic/region advice into idempotent APScheduler ingestion plans with visible execution and coverage state in both Web and Feishu.
+- User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then converts accepted topic/region advice into idempotent APScheduler ingestion plans and accepted high-frequency queries into daily 09:00 incremental user subscriptions.
+- Feishu-origin subscriptions bind to the card's current chat and deliver only new notices through `sent_history`; the same query, schedule, channels, and receiver reuse one semantic subscription.
 - Optional vector retrieval via `sentence-transformers`, fused with FTS by RRF.
 
 ## Tech Stack
@@ -905,8 +907,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P34
-- 283 unit tests pass, including 426 subtests.
+- Current stage: P35
+- 286 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

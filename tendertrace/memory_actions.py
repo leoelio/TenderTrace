@@ -11,9 +11,11 @@ from tendertrace.scheduling.ingest_subscriptions import (
     IngestSubscription,
     ensure_ingest_subscription,
 )
+from tendertrace.scheduling.subscriptions import Subscription, ensure_subscription
 
 
 IngestScheduler = Callable[[IngestSubscription], None]
+SubscriptionScheduler = Callable[[Subscription], None]
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,7 @@ def apply_memory_advice_feedback(
     days: int = 7,
     now: datetime | str | None = None,
     schedule_ingest: IngestScheduler | None = None,
+    schedule_subscription: SubscriptionScheduler | None = None,
 ) -> MemoryAdviceActionResult:
     report = build_weekly_report(settings, user_id=user_id, days=days, now=now)
     advice = _find_advice(report, advice_id)
@@ -46,7 +49,10 @@ def apply_memory_advice_feedback(
         settings,
         advice,
         status=status,
+        source=source,
+        context=context,
         schedule_ingest=schedule_ingest,
+        schedule_subscription=schedule_subscription,
     )
     feedback_context = dict(context or {})
     if advice:
@@ -83,11 +89,37 @@ def _execute_advice(
     advice: dict[str, object],
     *,
     status: str,
+    source: str,
+    context: dict[str, Any] | None,
     schedule_ingest: IngestScheduler | None,
+    schedule_subscription: SubscriptionScheduler | None,
 ) -> dict[str, object]:
     kind = str(advice.get("kind") or "")
-    if status.strip().lower() != "accepted" or kind != "knowledge_base":
+    if status.strip().lower() != "accepted":
         return {"status": "not_applicable", "kind": kind}
+    if kind == "subscription":
+        return _execute_subscription_advice(
+            settings,
+            advice,
+            source=source,
+            context=context,
+            schedule_subscription=schedule_subscription,
+        )
+    if kind != "knowledge_base":
+        return {"status": "not_applicable", "kind": kind}
+    return _execute_knowledge_advice(
+        settings,
+        advice,
+        schedule_ingest=schedule_ingest,
+    )
+
+
+def _execute_knowledge_advice(
+    settings: Settings,
+    advice: dict[str, object],
+    *,
+    schedule_ingest: IngestScheduler | None,
+) -> dict[str, object]:
     evidence = advice.get("evidence") if isinstance(advice.get("evidence"), dict) else {}
     topic = str(evidence.get("topic") or "").strip()
     region = str(evidence.get("region") or "").strip()
@@ -114,5 +146,59 @@ def _execute_advice(
         "kind": "ingest_subscription",
         "message": action_text,
         "scheduled": schedule_ingest is not None,
+        "subscription": subscription.to_dict(),
+    }
+
+
+def _execute_subscription_advice(
+    settings: Settings,
+    advice: dict[str, object],
+    *,
+    source: str,
+    context: dict[str, Any] | None,
+    schedule_subscription: SubscriptionScheduler | None,
+) -> dict[str, object]:
+    evidence = advice.get("evidence") if isinstance(advice.get("evidence"), dict) else {}
+    query = str(evidence.get("query") or "").strip()
+    if not query:
+        raise ValueError("subscription advice is missing query evidence")
+    action_context = context or {}
+    receive_id = ""
+    receive_id_type = "chat_id"
+    delivery_channels = ["web", "outbox"]
+    if source.strip().lower() == "feishu":
+        receive_id = str(action_context.get("feishu_receive_id") or "").strip()
+        receive_id_type = str(
+            action_context.get("feishu_receive_id_type") or "chat_id"
+        ).strip()
+        if receive_id:
+            delivery_channels.append("feishu")
+    subscription, created = ensure_subscription(
+        settings,
+        query=query,
+        schedule_override={
+            "kind": "recurring",
+            "frequency": "daily",
+            "time": "09:00",
+        },
+        delivery_channels=delivery_channels,
+        feishu_receive_id=receive_id or None,
+        feishu_receive_id_type=receive_id_type,
+    )
+    if schedule_subscription is not None:
+        schedule_subscription(subscription)
+    action_text = "已创建每日 09:00 增量订阅" if created else "已复用每日 09:00 增量订阅"
+    if receive_id:
+        action_text = f"{action_text}，后续 Word 将推送到当前飞书会话"
+    elif source.strip().lower() == "feishu":
+        action_text = f"{action_text}；未识别当前飞书会话，仅写入 Web outbox"
+    if schedule_subscription is None:
+        action_text = f"{action_text}；调度器未启用，启用后生效"
+    return {
+        "status": "created" if created else "reused",
+        "kind": "user_subscription",
+        "message": action_text,
+        "scheduled": schedule_subscription is not None,
+        "delivery_channels": delivery_channels,
         "subscription": subscription.to_dict(),
     }

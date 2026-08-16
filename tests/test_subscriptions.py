@@ -12,6 +12,7 @@ from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import RunOnceResult
 from tendertrace.scheduling.subscriptions import (
     create_subscription,
+    ensure_subscription,
     list_subscriptions,
     run_subscription,
 )
@@ -34,6 +35,44 @@ class StableAdapter:
 
 
 class SubscriptionTests(unittest.TestCase):
+    def test_ensure_subscription_reuses_semantic_match_and_separates_receivers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            schedule = {"kind": "recurring", "frequency": "daily", "time": "09:00"}
+            first, first_created = ensure_subscription(
+                settings,
+                query="最近1个月苏州充电桩招标信息",
+                schedule_override=schedule,
+                delivery_channels=("web", "outbox", "feishu"),
+                feishu_receive_id="oc_team_a",
+                feishu_receive_id_type="chat_id",
+            )
+            with connection(settings) as conn:
+                conn.execute("UPDATE subscriptions SET status = 'deleted' WHERE id = ?", (first.id,))
+            reused, reused_created = ensure_subscription(
+                settings,
+                query="  最近1个月苏州充电桩招标信息  ",
+                schedule_override=schedule,
+                delivery_channels=("feishu", "outbox", "web"),
+                feishu_receive_id="oc_team_a",
+                feishu_receive_id_type="chat_id",
+            )
+            other, other_created = ensure_subscription(
+                settings,
+                query="最近1个月苏州充电桩招标信息",
+                schedule_override=schedule,
+                delivery_channels=("web", "outbox", "feishu"),
+                feishu_receive_id="oc_team_b",
+                feishu_receive_id_type="chat_id",
+            )
+
+        self.assertTrue(first_created)
+        self.assertFalse(reused_created)
+        self.assertEqual(reused.id, first.id)
+        self.assertEqual(reused.status, "active")
+        self.assertTrue(other_created)
+        self.assertNotEqual(other.id, first.id)
+
     def test_create_subscription_requires_schedule(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

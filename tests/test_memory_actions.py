@@ -13,6 +13,55 @@ QUERY = "最近1个月苏州充电桩招标信息"
 
 
 class MemoryAdviceActionTests(unittest.TestCase):
+    def test_accepting_subscription_advice_creates_schedules_and_reuses_user_subscription(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            for _ in range(2):
+                record_activity(
+                    settings,
+                    event_type="run_start",
+                    target="web",
+                    label=QUERY,
+                    metadata={"query": QUERY},
+                    created_at=NOW,
+                )
+            report = build_weekly_report(settings, now=NOW)
+            advice = next(
+                item for item in report["recommendation_plan"] if item["kind"] == "subscription"
+            )
+            scheduled: list[str] = []
+
+            first = apply_memory_advice_feedback(
+                settings,
+                advice_id=str(advice["id"]),
+                status="accepted",
+                now=NOW,
+                schedule_subscription=lambda subscription: scheduled.append(subscription.id),
+            )
+            second = apply_memory_advice_feedback(
+                settings,
+                advice_id=str(advice["id"]),
+                status="accepted",
+                now=NOW,
+                schedule_subscription=lambda subscription: scheduled.append(subscription.id),
+            )
+            with connection(settings) as conn:
+                subscriptions = conn.execute(
+                    "SELECT original_query, cron, bidql_json FROM subscriptions"
+                ).fetchall()
+
+        self.assertEqual(first.automation["status"], "created")
+        self.assertEqual(second.automation["status"], "reused")
+        self.assertTrue(first.automation["scheduled"])
+        self.assertEqual(scheduled[0], scheduled[1])
+        self.assertEqual(len(subscriptions), 1)
+        self.assertEqual(subscriptions[0]["original_query"], QUERY)
+        self.assertEqual(subscriptions[0]["cron"], "0 9 * * *")
+        self.assertNotIn("feishu_receive_id", subscriptions[0]["bidql_json"])
+
     def test_accepting_knowledge_advice_creates_schedules_and_reuses_ingest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

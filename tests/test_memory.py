@@ -161,8 +161,22 @@ class MemoryTests(unittest.TestCase):
                         "metadata": {"query": "最近1个月苏州充电桩招标信息"},
                     },
                 )
+                client.post(
+                    "/api/memory/events",
+                    json={
+                        "event_type": "run_start",
+                        "target": "web",
+                        "label": "苏州充电桩",
+                        "metadata": {"query": "最近1个月苏州充电桩招标信息"},
+                    },
+                )
                 report_response = client.get("/api/memory/weekly")
                 advice_id = report_response.json()["recommendation_plan"][0]["id"]
+                subscription_advice_id = next(
+                    item["id"]
+                    for item in report_response.json()["recommendation_plan"]
+                    if item["kind"] == "subscription"
+                )
                 knowledge_advice_id = next(
                     item["id"]
                     for item in report_response.json()["recommendation_plan"]
@@ -172,11 +186,16 @@ class MemoryTests(unittest.TestCase):
                     f"/api/memory/advice/{advice_id}/feedback",
                     json={"status": "completed", "source": "web"},
                 )
+                subscription_automation_response = client.post(
+                    f"/api/memory/advice/{subscription_advice_id}/feedback",
+                    json={"status": "accepted", "source": "web"},
+                )
                 automation_response = client.post(
                     f"/api/memory/advice/{knowledge_advice_id}/feedback",
                     json={"status": "accepted", "source": "web"},
                 )
                 ingest_response = client.get("/api/ingest-subscriptions")
+                subscriptions_response = client.get("/api/subscriptions")
                 save_response = client.post("/api/memory/weekly", json={"days": 7})
                 profile_response = client.get("/api/memory/profile")
             finally:
@@ -196,6 +215,18 @@ class MemoryTests(unittest.TestCase):
             feedback_response.json()["report"]["recommendation_plan"][0]["feedback_status"],
             "completed",
         )
+        self.assertEqual(subscription_automation_response.status_code, 200)
+        self.assertEqual(
+            subscription_automation_response.json()["automation"]["status"],
+            "created",
+        )
+        self.assertFalse(subscription_automation_response.json()["automation"]["scheduled"])
+        self.assertIn(
+            "调度器未启用",
+            subscription_automation_response.json()["automation"]["message"],
+        )
+        self.assertEqual(len(subscriptions_response.json()["items"]), 1)
+        self.assertEqual(subscriptions_response.json()["items"][0]["cron"], "0 9 * * *")
         self.assertEqual(automation_response.status_code, 200)
         self.assertEqual(automation_response.json()["automation"]["status"], "created")
         self.assertFalse(automation_response.json()["automation"]["scheduled"])

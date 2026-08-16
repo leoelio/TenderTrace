@@ -5,6 +5,7 @@ from typing import Any, Callable
 from tendertrace.config import Settings
 from tendertrace.delivery.feishu_bitable import update_opportunity_workflow_in_bitable
 from tendertrace.scheduling.ingest_subscriptions import IngestSubscription
+from tendertrace.scheduling.subscriptions import Subscription
 from tendertrace.integrations.feishu_opportunity import build_opportunity_card
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.memory import (
@@ -25,6 +26,7 @@ def process_feishu_card_action(
     *,
     bitable_updater: Callable[..., object] = update_opportunity_workflow_in_bitable,
     schedule_ingest: Callable[[IngestSubscription], None] | None = None,
+    schedule_subscription: Callable[[Subscription], None] | None = None,
 ) -> dict[str, object]:
     event = _mapping(payload.get("event")) or payload
     value = _mapping(_mapping(event.get("action")).get("value"))
@@ -33,6 +35,7 @@ def process_feishu_card_action(
             settings,
             payload,
             schedule_ingest=schedule_ingest,
+            schedule_subscription=schedule_subscription,
         )
     return process_opportunity_card_action(
         settings,
@@ -124,6 +127,7 @@ def process_memory_advice_card_action(
     payload: dict[str, object],
     *,
     schedule_ingest: Callable[[IngestSubscription], None] | None = None,
+    schedule_subscription: Callable[[Subscription], None] | None = None,
 ) -> dict[str, object]:
     event = _mapping(payload.get("event")) or payload
     value = _mapping(_mapping(event.get("action")).get("value"))
@@ -142,6 +146,15 @@ def process_memory_advice_card_action(
     actor_open_id = str(operator_id.get("open_id") or operator.get("open_id") or "")
     actor_name = str(operator.get("name") or actor_open_id or "飞书用户")
     user_id = str(value.get("user_id") or "admin")
+    event_context = _mapping(event.get("context"))
+    open_chat_id = str(event_context.get("open_chat_id") or "").strip()
+    feedback_context = {
+        "event_id": _event_id(payload),
+        "actor_open_id": actor_open_id,
+    }
+    if open_chat_id:
+        feedback_context["feishu_receive_id"] = open_chat_id
+        feedback_context["feishu_receive_id_type"] = "chat_id"
     result = apply_memory_advice_feedback(
         settings,
         advice_id=advice_id,
@@ -149,8 +162,9 @@ def process_memory_advice_card_action(
         user_id=user_id,
         source="feishu",
         actor=actor_name,
-        context={"event_id": _event_id(payload), "actor_open_id": actor_open_id},
+        context=feedback_context,
         schedule_ingest=schedule_ingest,
+        schedule_subscription=schedule_subscription,
     )
     feedback = result.feedback
     record_activity(

@@ -15,7 +15,11 @@ from tendertrace.integrations.feishu_card_actions import (
 )
 from tendertrace.intent import compile_intent
 from tendertrace.runner import RunOnceResult, run_once
-from tendertrace.scheduling.scheduler import schedule_subscription, start_subscription_scheduler
+from tendertrace.scheduling.scheduler import (
+    schedule_ingest_subscription,
+    schedule_subscription,
+    start_subscription_scheduler,
+)
 from tendertrace.scheduling.subscriptions import Subscription, create_subscription
 
 
@@ -232,6 +236,14 @@ def start_feishu_bot_listener(settings: Settings) -> None:
 
     init_db(settings)
     owned_scheduler = start_subscription_scheduler(settings) if settings.scheduler_enabled else None
+
+    def schedule_ingest_callback(subscription) -> None:
+        if owned_scheduler is not None:
+            schedule_ingest_subscription(owned_scheduler, settings, subscription)
+
+    def schedule_user_callback(subscription) -> None:
+        if owned_scheduler is not None:
+            schedule_subscription(owned_scheduler, settings, subscription)
     executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="feishu-bot")
     for event_id in pending_feishu_message_event_ids(settings):
         executor.submit(
@@ -259,7 +271,12 @@ def start_feishu_bot_listener(settings: Settings) -> None:
 
         payload = json.loads(lark.JSON.marshal(data) or "{}")
         try:
-            result = process_feishu_card_action(settings, payload)
+            result = process_feishu_card_action(
+                settings,
+                payload,
+                schedule_ingest=(schedule_ingest_callback if owned_scheduler is not None else None),
+                schedule_subscription=(schedule_user_callback if owned_scheduler is not None else None),
+            )
             response = callback_response_payload(result)
         except (FeishuError, ValueError) as exc:
             response = {

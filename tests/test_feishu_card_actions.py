@@ -13,6 +13,7 @@ from tendertrace.integrations.feishu_card_actions import (
     process_opportunity_card_action,
 )
 from tendertrace.memory import build_weekly_report, record_activity
+from tendertrace.scheduling.subscriptions import list_subscriptions
 
 
 class FeishuCardActionTests(unittest.TestCase):
@@ -136,6 +137,59 @@ class FeishuCardActionTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(scheduled), 1)
         self.assertIn("后台采集", result["toast"]["content"])
+
+    def test_memory_subscription_advice_binds_current_feishu_chat(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            query = "最近1个月苏州充电桩招标信息"
+            for _ in range(2):
+                record_activity(
+                    settings,
+                    event_type="run_start",
+                    target="feishu",
+                    label=query,
+                    metadata={"query": query},
+                )
+            report = build_weekly_report(settings)
+            advice = next(
+                item for item in report["recommendation_plan"] if item["kind"] == "subscription"
+            )
+            scheduled: list[str] = []
+            payload = {
+                "header": {"event_id": "memory-subscription-event"},
+                "event": {
+                    "context": {"open_chat_id": "oc_sales_team"},
+                    "operator": {
+                        "name": "张三",
+                        "operator_id": {"open_id": "ou_owner"},
+                    },
+                    "action": {
+                        "value": {
+                            "action": "memory_advice_accept",
+                            "advice_id": advice["id"],
+                            "user_id": "admin",
+                        }
+                    },
+                },
+            }
+
+            result = process_feishu_card_action(
+                settings,
+                payload,
+                schedule_subscription=lambda subscription: scheduled.append(subscription.id),
+            )
+            subscriptions = list_subscriptions(settings)
+
+        runtime = subscriptions[0].bidql["_runtime"]
+        self.assertEqual(result["automation"]["status"], "created")
+        self.assertTrue(result["automation"]["scheduled"])
+        self.assertEqual(subscriptions[0].cron, "0 9 * * *")
+        self.assertEqual(runtime["delivery_channels"], ["web", "outbox", "feishu"])
+        self.assertEqual(runtime["feishu_receive_id"], "oc_sales_team")
+        self.assertEqual(runtime["feishu_receive_id_type"], "chat_id")
+        self.assertEqual(scheduled, [subscriptions[0].id])
+        self.assertIn("当前飞书会话", result["toast"]["content"])
 
 
 def _payload(action: str) -> dict[str, object]:
