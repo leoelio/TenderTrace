@@ -16,6 +16,7 @@ from tendertrace.notice_changes import notice_change_summaries
 from tendertrace.notice_change_reviews import change_review_summaries
 from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
 from tendertrace.qualification import assess_qualification, policy_from_settings
+from tendertrace.opportunity_team import team_snapshots
 from tendertrace.retrieval import parse_date
 from tendertrace.source_trust import assess_notice_trust, source_trust_profiles
 from tendertrace.workflow import workflow_action_contract, workflow_snapshots
@@ -317,6 +318,7 @@ def list_opportunities(
     qualification_policy = policy_from_settings(settings)
     reference_time = datetime.now(timezone.utc)
     workflows = workflow_snapshots(settings, [notice_id for notice_id, _notice in rows])
+    teams = team_snapshots(settings, workflows)
     change_summaries = notice_change_summaries(
         settings,
         [notice_id for notice_id, _notice in rows],
@@ -352,6 +354,7 @@ def list_opportunities(
             ),
             "intelligence": intelligence,
             "workflow": workflow,
+            "team": teams[notice_id],
             "change_summary": change_summaries.get(notice_id, {}),
             "change_review": review_summaries.get(notice_id, {}),
         }
@@ -435,6 +438,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     )
     _attach_market_context(intelligence, payload, market)
     workflow = workflow_snapshots(settings, [notice_id])[notice_id]
+    team = team_snapshots(settings, {notice_id: workflow})[notice_id]
     item: dict[str, object] = {
         "notice_id": str(row["id"]),
         "title": notice.title,
@@ -453,6 +457,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         ),
         "intelligence": intelligence,
         "workflow": workflow.to_dict(),
+        "team": team,
     }
     item["change_summary"] = notice_change_summaries(settings, [notice_id]).get(
         notice_id,
@@ -624,6 +629,7 @@ def _action_queue_summary(
     collaboration_started = 0
     qualification_ready = 0
     qualification_blocked = 0
+    team_incomplete = 0
     decision_pending = 0
     decision_overdue = 0
     task_open = 0
@@ -656,6 +662,8 @@ def _action_queue_summary(
         change_review_pending += int(review_pending)
         change_review_overdue += int(review_is_overdue)
         qualification = _mapping(item.get("qualification"))
+        team = _mapping(item.get("team"))
+        team_incomplete += int(team.get("status") == "incomplete")
         if qualification.get("status") == "ready":
             qualification_ready += 1
         else:
@@ -742,6 +750,7 @@ def _action_queue_summary(
         "collaboration_started": collaboration_started,
         "qualification_ready": qualification_ready,
         "qualification_blocked": qualification_blocked,
+        "team_incomplete": team_incomplete,
         "decision_pending": decision_pending,
         "decision_overdue": decision_overdue,
         "task_open": task_open,

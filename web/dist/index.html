@@ -412,6 +412,60 @@
               </div>
             </form>
           </dialog>
+          <dialog id="opportunityTeamDialog" class="owner-assignment-dialog" aria-labelledby="opportunityTeamTitle">
+            <form id="opportunityTeamForm" class="owner-assignment-form">
+              <div class="owner-assignment-heading">
+                <div>
+                  <span>协作团队</span>
+                  <h2 id="opportunityTeamTitle">添加机会成员</h2>
+                  <small id="opportunityTeamProject">-</small>
+                </div>
+                <button id="closeOpportunityTeamButton" class="icon-close-button" type="button" aria-label="关闭团队成员添加">×</button>
+              </div>
+              <div class="owner-assignment-body opportunity-team-form-grid">
+                <label>
+                  <span>飞书成员</span>
+                  <select id="opportunityTeamMemberSelect">
+                    <option value="">正在读取通讯录</option>
+                  </select>
+                </label>
+                <label>
+                  <span>成员姓名</span>
+                  <input id="opportunityTeamMemberName" maxlength="100" autocomplete="off" required />
+                </label>
+                <label>
+                  <span>协作角色</span>
+                  <select id="opportunityTeamRole" required>
+                    <option value="solution">方案技术</option>
+                    <option value="commercial">商务报价</option>
+                    <option value="delivery">交付实施</option>
+                    <option value="legal">法务合规</option>
+                    <option value="partner_lead">伙伴负责人</option>
+                  </select>
+                </label>
+                <label>
+                  <span>成员类型</span>
+                  <select id="opportunityTeamOrganizationType">
+                    <option value="internal">内部团队</option>
+                    <option value="partner">合作伙伴</option>
+                  </select>
+                </label>
+                <label class="team-organization-field">
+                  <span>所属组织</span>
+                  <input id="opportunityTeamOrganizationName" maxlength="120" autocomplete="off" placeholder="伙伴成员必填" />
+                </label>
+                <label class="team-responsibility-field">
+                  <span>责任说明</span>
+                  <input id="opportunityTeamResponsibility" maxlength="500" autocomplete="off" placeholder="例如：确认技术边界与投标参数" />
+                </label>
+                <p id="opportunityTeamStatus" class="owner-directory-status">正在读取应用授权范围</p>
+              </div>
+              <div class="owner-assignment-actions">
+                <button id="cancelOpportunityTeamButton" class="ghost-button" type="button">取消</button>
+                <button id="submitOpportunityTeamButton" class="primary-button" type="submit">添加并同步</button>
+              </div>
+            </form>
+          </dialog>
         </section>
 
         <section id="historyView" class="view">

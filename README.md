@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P45</strong> · Evidence-grade Source Trust · Sales Gate Integration · Enterprise Glass UI
+  <strong>Current stage: P46</strong> · Opportunity Team Governance · Feishu Task Followers · Stage-aware Coverage Gates
 </p>
 
 ---
@@ -40,8 +40,10 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书接收目标：连接中心同时读取机器人可见会话和应用授权通讯录成员，可将群聊或成员设为统一默认目标，报告、周报、经营晨报和来源告警复用该偏好。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
+- 机会团队治理：负责人保持唯一责任人，方案、商务、交付、法务和伙伴负责人作为独立协作角色维护；系统按销售阶段动态计算团队覆盖与角色缺口，低于配置阈值时阻断 Go 决策。
+- 飞书团队协同：内部团队与伙伴成员以 Task v2 `follower` 身份增删，不与 `assignee` 负责人混淆；同步状态、失败原因和审计事件持久化，多维表格同步展示团队、伙伴、覆盖率和缺口。
 - 事实核验闭环：分析人员可在 Web 补充采购主体、项目编号、预算、截止时间和地区，并附原文链接与证据摘录；系统保留原始公告，以可审计覆盖层重算完整度、机会等级与销售准入，再同步飞书多维表格。
-- 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分和需求覆盖形成可解释门禁；阈值由运行配置管理，只有阶段与资料条件同时满足才允许推进。
+- 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分、需求覆盖和阶段团队覆盖形成可解释门禁；阈值由运行配置管理，只有阶段与资料条件同时满足才允许推进。
 - 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；策略制定阶段按独立阶段时钟执行决策 SLA，超时进入管理升级队列，可手动或定时发送幂等飞书摘要。
 - 机会经营晨报：把机会等级、负责人缺口、资格门禁、截止时间、决策 SLA、市场信号和来源健康合并成可操作飞书卡片；支持工作日自动发送、按接收会话独立去重和卡片内直接推进机会。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
@@ -192,6 +194,7 @@ TENDERTRACE_QUALIFICATION_MIN_OPPORTUNITY_SCORE=65
 TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=60
 TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS=55
 TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=40
+TENDERTRACE_QUALIFICATION_MIN_TEAM_COVERAGE=60
 TENDERTRACE_DECISION_SLA_HOURS=24
 TENDERTRACE_CHANGE_REVIEW_SLA_HOURS=8
 TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
@@ -358,6 +361,9 @@ python -m tendertrace embed-notices
 - `GET /api/opportunities/{notice_id}/facts`：读取字段级核验结果与变更审计。
 - `PATCH /api/opportunities/{notice_id}/facts`：提交带来源链接的核验事实，重算机会与准入，并回写飞书台账。
 - `POST /api/opportunities/{notice_id}/actions`：执行带阶段、资格和重大变更复核门禁的认领、复核确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
+- `GET /api/opportunities/{notice_id}/team`：读取阶段感知的机会团队、伙伴、覆盖率和缺口。
+- `POST /api/opportunities/{notice_id}/team`：幂等新增或更新团队成员，并同步飞书 Task 关注人与多维表格。
+- `DELETE /api/opportunities/{notice_id}/team/{member_id}`：审计式移除团队成员，并撤销对应飞书 Task 关注人。
 - `GET /api/opportunities/changes`：读取公告修订账本，可按公告过滤。
 - `POST /api/opportunities/changes/send-feishu`：向机会负责人聚合发送尚未成功投递的公告变更。
 - `POST /api/opportunities/escalations/send-feishu`：发送决策超时与任务逾期的统一管理摘要；同一机会合并风险，并按每日风险集合去重。
@@ -494,8 +500,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P45
-- 308 unit tests pass, including 426 subtests.
+- Current stage: P46
+- 314 automated tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -544,8 +550,10 @@ The current architecture is local-first: background ingestion continuously store
 - A unified Feishu delivery target picker that combines bot-visible chats and authorized directory members; reports, weekly digests, operations briefings, and source alerts reuse the selected target.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
+- Stage-aware opportunity-team governance with one accountable owner plus solution, commercial, delivery, legal, and partner roles. Coverage gaps are persisted, audited, and included in the Go qualification gate.
+- Feishu Task v2 collaboration that keeps the owner as `assignee` and synchronizes internal or partner team members as `follower`; Bitable stores the team roster, partner organizations, coverage, and missing roles.
 - Auditable fact verification for purchaser, project number, budget, deadline, and region. Evidence-backed overlays preserve the raw notice, recompute opportunity quality and qualification gates, and synchronize the resulting fields to Feishu Bitable.
-- Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
+- Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, requirement coverage, and stage-aware team coverage. Stage transitions are rejected until workflow, evidence, and staffing requirements pass.
 - Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. Decision SLA breaches and overdue Task v2 work merge into one opportunity-level management queue and a deduplicated Feishu summary.
 - Actionable Feishu opportunity briefings that combine grade, owner gaps, qualification gates, deadlines, decision SLA, market signals, and source health, with weekday automation, receiver-scoped daily deduplication, and in-card workflow actions.
 - A source SLO workflow derived from login state, observed reliability, and last-success freshness, with deduplicated alerts, Task v2 incidents, owner assignment, a configurable SLA, and evidence-based closure only after both task completion and real source recovery.
@@ -688,6 +696,7 @@ TENDERTRACE_QUALIFICATION_MIN_OPPORTUNITY_SCORE=65
 TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=60
 TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS=55
 TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=40
+TENDERTRACE_QUALIFICATION_MIN_TEAM_COVERAGE=60
 TENDERTRACE_DECISION_SLA_HOURS=24
 TENDERTRACE_CHANGE_REVIEW_SLA_HOURS=8
 TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED=false
@@ -825,6 +834,9 @@ Available Web APIs:
 - `GET /api/opportunities/{notice_id}/facts`: inspect field-level verified facts and their audit history.
 - `PATCH /api/opportunities/{notice_id}/facts`: submit evidence-backed facts, recompute qualification, and synchronize the Bitable record.
 - `POST /api/opportunities/{notice_id}/actions`: execute claim, material-change acknowledgement, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions through shared stage, qualification, and review gates.
+- `GET /api/opportunities/{notice_id}/team`: inspect the stage-aware team roster, partners, coverage, and missing roles.
+- `POST /api/opportunities/{notice_id}/team`: idempotently add or update a member and synchronize Task followers and Bitable.
+- `DELETE /api/opportunities/{notice_id}/team/{member_id}`: audit a member removal and remove the matching Task follower.
 - `GET /api/opportunities/changes`: inspect the durable notice-revision ledger, optionally filtered by notice.
 - `POST /api/opportunities/changes/send-feishu`: deliver pending notice changes to opportunity owners without duplicating successful deliveries.
 - `POST /api/opportunities/escalations/send-feishu`: send a unified decision-overdue and task-overdue management summary, merging risks per opportunity and deduplicating the daily risk set.
@@ -955,8 +967,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P45
-- 308 unit tests pass, including 426 subtests.
+- Current stage: P46
+- 314 automated tests pass.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

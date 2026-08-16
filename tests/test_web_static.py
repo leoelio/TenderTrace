@@ -89,6 +89,8 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn('data-receive-type="open_id"', js)
         self.assertIn("授权成员", js)
         self.assertIn("/send-feishu", js)
+        self.assertIn("/team", js)
+        self.assertIn("opportunity-team-list", css)
         self.assertIn("/api/traces/", js)
         self.assertIn("/api/checkpoints/", js)
         self.assertIn('href="/logo.svg"', html)

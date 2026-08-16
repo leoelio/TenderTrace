@@ -130,6 +130,7 @@ def build_opportunity_briefing_card(
                     f"A 级 {levels.get('A') or 0} 条 · "
                     f"高优先未认领 {action_queue.get('unowned_priority') or 0} 条\n"
                     f"资格可决策 {action_queue.get('qualification_ready') or 0} 条 · "
+                    f"团队待补 {action_queue.get('team_incomplete') or 0} 条 · "
                     f"待管理决策 {action_queue.get('decision_pending') or 0} 条 · "
                     f"决策超时 {action_queue.get('decision_overdue') or 0} 条"
                 ),

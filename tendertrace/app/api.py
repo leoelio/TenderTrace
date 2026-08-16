@@ -15,6 +15,7 @@ from tendertrace.db import connection, database_health, init_db
 from tendertrace.delivery.feishu_bitable import (
     check_feishu_bitable,
     update_opportunity_facts_in_bitable,
+    update_opportunity_team_in_bitable,
     update_opportunity_workflow_in_bitable,
 )
 from tendertrace.delivery.feishu_report import deliver_report_to_feishu
@@ -38,6 +39,7 @@ from tendertrace.integrations.feishu_card_actions import (
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_notice_changes import send_opportunity_change_alerts
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
+from tendertrace.integrations.feishu_team import sync_opportunity_team
 from tendertrace.integrations.feishu_source_alerts import (
     build_source_alert_snapshot,
     create_source_incident_task,
@@ -82,6 +84,7 @@ from tendertrace.opportunity import (
     list_opportunities,
 )
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
+from tendertrace.opportunity_team import remove_team_member, upsert_team_member
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import run_once
 from tendertrace.sanitize import sanitize_for_output, sanitize_stats
@@ -191,7 +194,7 @@ def create_app():
             r"https://(?:[A-Za-z0-9-]+\.)*(?:feishu\.cn|larksuite\.com)"
         ),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-TenderTrace-Token"],
     )
 
@@ -744,6 +747,55 @@ def create_app():
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return get_workflow(settings, notice_id).to_dict()
+
+    @app.get("/api/opportunities/{notice_id}/team")
+    def opportunity_team(notice_id: str) -> dict[str, object]:
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return _mapping_value(opportunity.get("team"))
+
+    @app.post("/api/opportunities/{notice_id}/team")
+    def add_opportunity_team_member(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        try:
+            member = upsert_team_member(
+                settings,
+                notice_id=notice_id,
+                member_name=str(request.get("member_name") or ""),
+                member_open_id=str(request.get("member_open_id") or ""),
+                role=str(request.get("role") or ""),
+                organization_type=str(request.get("organization_type") or "internal"),
+                organization_name=str(request.get("organization_name") or ""),
+                responsibility=str(request.get("responsibility") or ""),
+                actor=str(request.get("actor") or "admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _team_mutation_response(settings, notice_id, member.to_dict(), "added")
+
+    @app.delete("/api/opportunities/{notice_id}/team/{member_id}")
+    def delete_opportunity_team_member(
+        notice_id: str,
+        member_id: str,
+        actor: str = "admin",
+    ) -> dict[str, object]:
+        try:
+            member = remove_team_member(
+                settings,
+                notice_id=notice_id,
+                member_id=member_id,
+                actor=actor,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _team_mutation_response(settings, notice_id, member.to_dict(), "removed")
 
     @app.get("/api/opportunities/{notice_id}/facts")
     def opportunity_facts(notice_id: str) -> dict[str, object]:
@@ -1912,6 +1964,44 @@ def _refresh_qualification(settings: Settings, notice_id: str, workflow):
     opportunity["workflow"] = workflow.to_dict()
     opportunity["qualification"] = qualification
     return workflow, qualification, opportunity
+
+
+def _team_mutation_response(
+    settings: Settings,
+    notice_id: str,
+    member: dict[str, object],
+    action: str,
+) -> dict[str, object]:
+    team_sync = sync_opportunity_team(settings, notice_id)
+    opportunity = get_opportunity(settings, notice_id)
+    if opportunity is None:
+        raise LookupError("opportunity not found after team update")
+    team = _mapping_value(opportunity.get("team"))
+    bitable = update_opportunity_team_in_bitable(
+        settings,
+        notice_id=notice_id,
+        team=team,
+    )
+    record_activity(
+        settings,
+        event_type=f"opportunity_team_member_{action}",
+        target=notice_id,
+        label=str(member.get("member_name") or ""),
+        metadata={
+            "role": str(member.get("role") or ""),
+            "team_sync_status": team_sync.status,
+            "bitable_status": bitable.status,
+        },
+    )
+    return {
+        "status": action,
+        "member": member,
+        "team": team,
+        "qualification": opportunity.get("qualification"),
+        "team_sync": team_sync.to_dict(),
+        "bitable_status": bitable.status,
+        "bitable_message": bitable.message,
+    }
 
 
 def _workflow_sync_payload(workflow, opportunity: dict[str, object]) -> dict[str, object]:

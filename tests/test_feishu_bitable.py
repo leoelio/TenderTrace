@@ -11,6 +11,7 @@ from tendertrace.delivery.feishu_bitable import (
     check_feishu_bitable,
     sync_notices_to_bitable,
     update_opportunity_facts_in_bitable,
+    update_opportunity_team_in_bitable,
     update_opportunity_workflow_in_bitable,
 )
 from tendertrace.integrations.feishu_leads import (
@@ -388,6 +389,41 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["事实核验摘要"], "预算：320 万元")
         self.assertEqual(fields["机会等级"], "A · 优先推进")
         self.assertEqual(fields["准入状态"], "可决策")
+        self.assertNotIn("标题", fields)
+
+    def test_team_update_preserves_notice_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            result = update_opportunity_team_in_bitable(
+                settings,
+                notice_id="existing",
+                team={
+                    "coverage_score": 67,
+                    "missing_roles": ["商务报价"],
+                    "members": [
+                        {
+                            "member_name": "李工",
+                            "role_label": "方案技术",
+                            "organization_type": "internal",
+                        },
+                        {
+                            "member_name": "王经理",
+                            "role_label": "伙伴负责人",
+                            "organization_type": "partner",
+                            "organization_name": "伙伴科技",
+                        },
+                    ],
+                },
+                http_client_factory=FakeFeishuClient,
+            )
+
+        self.assertEqual(result.status, "sent")
+        fields = FakeFeishuClient.updated_records[0][1]
+        self.assertEqual(fields["机会团队"], "李工（方案技术）")
+        self.assertEqual(fields["合作伙伴"], "伙伴科技 · 王经理（伙伴负责人）")
+        self.assertEqual(fields["团队覆盖率"], "67%")
+        self.assertEqual(fields["团队缺口"], "商务报价")
         self.assertNotIn("标题", fields)
 
     def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:

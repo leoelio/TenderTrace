@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from tendertrace.config import Settings
 from tendertrace.delivery.feishu_bitable import update_opportunity_workflow_in_bitable
 from tendertrace.integrations.feishu import FeishuClient
+from tendertrace.integrations.feishu_team import sync_opportunity_team
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.workflow import (
     OpportunityWorkflow,
@@ -26,6 +27,8 @@ class CollaborationResult:
     task_assigned: bool
     event_id: str
     bitable_status: str
+    team_sync_status: str
+    team_synced_count: int
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -35,6 +38,8 @@ class CollaborationResult:
             "task_assigned": self.task_assigned,
             "event_id": self.event_id,
             "bitable_status": self.bitable_status,
+            "team_sync_status": self.team_sync_status,
+            "team_synced_count": self.team_synced_count,
         }
 
 
@@ -137,6 +142,7 @@ def start_opportunity_collaboration(
         qualification_status=str(qualification.get("status") or "pending"),
         updated_by=owner_open_id or "system",
     )
+    team_sync = sync_opportunity_team(settings, notice_id, client=feishu)
     bitable = bitable_updater(
         settings,
         notice_id=notice_id,
@@ -149,6 +155,8 @@ def start_opportunity_collaboration(
         task_assigned=task_assigned,
         event_id=event_id,
         bitable_status=bitable.status,
+        team_sync_status=team_sync.status,
+        team_synced_count=team_sync.added_count,
     )
 
 
@@ -176,6 +184,13 @@ def build_opportunity_card(
         workflow.to_dict(),
     ).to_dict()
     qualification_blockers = _qualification_blockers(qualification)
+    team = _mapping(opportunity.get("team"))
+    missing_team_roles = team.get("missing_roles")
+    team_gap = (
+        "、".join(str(value) for value in missing_team_roles)
+        if isinstance(missing_team_roles, list) and missing_team_roles
+        else "核心角色已覆盖"
+    )
     change_review = _mapping(opportunity.get("change_review"))
     change_review_text = (
         f"待复核 {change_review.get('pending_count') or 0} 条 · "
@@ -201,6 +216,8 @@ def build_opportunity_card(
                         f"**机会等级** {level} · {score} 分   **地区** {region}\n"
                         f"**来源** {source}   **截止时间** {deadline}\n"
                         f"**负责人** {owner}   **阶段** {workflow.stage_label}\n"
+                        f"**协作团队** {team.get('member_count') or 0} 人 · "
+                        f"覆盖 {team.get('coverage_score', 0)}%   **缺口** {team_gap}\n"
                         f"**资格评估** {qualification.get('score', 0)} 分 · "
                         f"{_qualification_status(qualification)}   **投标决策** {decision}"
                     ),

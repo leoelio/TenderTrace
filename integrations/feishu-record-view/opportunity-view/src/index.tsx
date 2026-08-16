@@ -96,6 +96,20 @@ type ChangeReview = {
   acknowledged_at?: string;
 };
 
+type OpportunityTeam = {
+  member_count: number;
+  internal_count: number;
+  partner_count: number;
+  coverage_score: number;
+  missing_roles: string[];
+  members: Array<{
+    member_name: string;
+    role_label: string;
+    organization_type: string;
+    organization_name: string;
+  }>;
+};
+
 type OpportunityWorkspace = {
   opportunity: {
     intelligence?: Intelligence;
@@ -104,6 +118,7 @@ type OpportunityWorkspace = {
     action_state?: Record<string, unknown>;
     action_contract?: ActionContract;
     change_review?: ChangeReview;
+    team?: OpportunityTeam;
   };
 };
 
@@ -298,6 +313,7 @@ function App() {
   const workflow = workspace?.opportunity?.workflow || null;
   const qualification = workspace?.opportunity?.qualification || null;
   const changeReview = workspace?.opportunity?.change_review || null;
+  const team = workspace?.opportunity?.team || null;
   const availableActions = workspace?.opportunity?.action_contract?.actions || [];
   const claimAction = availableActions.find((item) => item.requires_member_identity);
   const directActions = availableActions.filter((item) => !item.requires_member_identity);
@@ -522,7 +538,12 @@ function App() {
                   <div><span>飞书任务</span><strong>{workflow.feishu_task_status || "not_created"}</strong></div>
                   <div><span>投标决策</span><strong>{workflow.decision || "待决策"}</strong></div>
                   <div><span>公告变更</span><strong>{changeReview?.pending_count ? `${changeReview.pending_count} 条待复核${changeReview.overdue ? " · 已逾期" : ""}` : "无待复核变更"}</strong></div>
+                  <div><span>团队覆盖</span><strong>{team ? `${team.coverage_score}% · ${team.member_count} 名成员` : "待配置"}</strong></div>
+                  <div><span>合作伙伴</span><strong>{team?.partner_count ? `${team.partner_count} 名伙伴成员` : "暂无伙伴成员"}</strong></div>
                 </div>
+                {team?.missing_roles?.length ? (
+                  <p className="workflow-reason">当前阶段待补：{team.missing_roles.join("、")}</p>
+                ) : team ? <p className="workflow-reason">当前阶段核心角色已覆盖。</p> : null}
                 {workflow.decision_reason && (
                   <p className="workflow-reason">{workflow.decision_reason}{workflow.decision_by ? ` · ${workflow.decision_by}` : ""}</p>
                 )}

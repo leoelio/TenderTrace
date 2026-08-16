@@ -174,6 +174,7 @@ class FeishuClient:
         task_guid: str,
         *,
         assignee_open_ids: list[str],
+        role: str = "assignee",
     ) -> dict[str, Any]:
         if not task_guid.strip():
             raise FeishuError("task_guid is required")
@@ -181,7 +182,9 @@ class FeishuClient:
             dict.fromkeys(value.strip() for value in assignee_open_ids if value.strip())
         )
         if not member_ids:
-            raise FeishuError("at least one task assignee is required")
+            raise FeishuError("at least one task member is required")
+        if role not in {"assignee", "follower"}:
+            raise FeishuError("task member role must be assignee or follower")
         token = self.get_tenant_access_token()
         response = self._client.post(
             self._url(
@@ -194,7 +197,42 @@ class FeishuClient:
             params={"user_id_type": "open_id"},
             json={
                 "members": [
-                    {"type": "user", "id": value, "role": "assignee"}
+                    {"type": "user", "id": value, "role": role}
+                    for value in member_ids
+                ]
+            },
+        )
+        return self._parse_response(response)
+
+    def remove_task_members(
+        self,
+        task_guid: str,
+        *,
+        member_open_ids: list[str],
+        role: str = "follower",
+    ) -> dict[str, Any]:
+        if not task_guid.strip():
+            raise FeishuError("task_guid is required")
+        member_ids = list(
+            dict.fromkeys(value.strip() for value in member_open_ids if value.strip())
+        )
+        if not member_ids:
+            raise FeishuError("at least one task member is required")
+        if role not in {"assignee", "follower"}:
+            raise FeishuError("task member role must be assignee or follower")
+        token = self.get_tenant_access_token()
+        response = self._client.post(
+            self._url(
+                f"/open-apis/task/v2/tasks/{quote(task_guid, safe='')}/remove_members"
+            ),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            params={"user_id_type": "open_id"},
+            json={
+                "members": [
+                    {"type": "user", "id": value, "role": role}
                     for value in member_ids
                 ]
             },

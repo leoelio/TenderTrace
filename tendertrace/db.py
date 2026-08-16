@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 
 DDL = (
@@ -387,6 +387,30 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS opportunity_team_members (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        member_key TEXT NOT NULL,
+        member_open_id TEXT,
+        member_name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        organization_type TEXT NOT NULL DEFAULT 'internal',
+        organization_name TEXT,
+        responsibility TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        feishu_task_guid TEXT,
+        feishu_task_role TEXT NOT NULL DEFAULT 'follower',
+        feishu_sync_status TEXT NOT NULL DEFAULT 'pending',
+        feishu_sync_error TEXT,
+        feishu_synced_at TEXT,
+        added_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (notice_id, member_key, role),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS opportunity_fact_overrides (
         id TEXT PRIMARY KEY,
         notice_id TEXT NOT NULL,
@@ -504,6 +528,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_status ON delivery_attempts(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_workflows_stage ON opportunity_workflows(stage, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_events_notice ON opportunity_events(notice_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_team_notice ON opportunity_team_members(notice_id, status, role)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_team_sync ON opportunity_team_members(feishu_sync_status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",

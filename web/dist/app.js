@@ -15,6 +15,7 @@ const state = {
   opportunitySummaryData: {},
   opportunityVisible: 20,
   pendingOpportunityId: "",
+  pendingOpportunityTeamId: "",
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
@@ -122,6 +123,19 @@ const el = {
   submitOpportunityOwnerButton: document.querySelector("#submitOpportunityOwnerButton"),
   closeOpportunityOwnerButton: document.querySelector("#closeOpportunityOwnerButton"),
   cancelOpportunityOwnerButton: document.querySelector("#cancelOpportunityOwnerButton"),
+  opportunityTeamDialog: document.querySelector("#opportunityTeamDialog"),
+  opportunityTeamForm: document.querySelector("#opportunityTeamForm"),
+  opportunityTeamProject: document.querySelector("#opportunityTeamProject"),
+  opportunityTeamMemberSelect: document.querySelector("#opportunityTeamMemberSelect"),
+  opportunityTeamMemberName: document.querySelector("#opportunityTeamMemberName"),
+  opportunityTeamRole: document.querySelector("#opportunityTeamRole"),
+  opportunityTeamOrganizationType: document.querySelector("#opportunityTeamOrganizationType"),
+  opportunityTeamOrganizationName: document.querySelector("#opportunityTeamOrganizationName"),
+  opportunityTeamResponsibility: document.querySelector("#opportunityTeamResponsibility"),
+  opportunityTeamStatus: document.querySelector("#opportunityTeamStatus"),
+  submitOpportunityTeamButton: document.querySelector("#submitOpportunityTeamButton"),
+  closeOpportunityTeamButton: document.querySelector("#closeOpportunityTeamButton"),
+  cancelOpportunityTeamButton: document.querySelector("#cancelOpportunityTeamButton"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
   runSearchInput: document.querySelector("#runSearchInput"),
@@ -1322,7 +1336,7 @@ function renderOpportunities(payload) {
     el.opportunitySummary.innerHTML = [
       summaryTile("当前线索", summary.total ?? items.length),
       summaryTile("A 级机会", levels.A ?? 0),
-      summaryTile("待复核变更", actionQueue.change_review_pending ?? 0),
+      summaryTile("团队待补", actionQueue.team_incomplete ?? 0),
       summaryTile("待管理决策", actionQueue.decision_pending ?? 0),
       summaryTile("协同逾期", (actionQueue.decision_overdue || 0) + (actionQueue.task_overdue || 0) + (actionQueue.change_review_overdue || 0)),
       summaryTile("Go 通过率", actionQueue.go_rate == null ? "-" : `${actionQueue.go_rate}%`),
@@ -1460,6 +1474,9 @@ function openOpportunityDetail(noticeId) {
     ? competition.historical_suppliers
     : [];
   const factOverrides = Array.isArray(item.fact_overrides) ? item.fact_overrides : [];
+  const team = item.team || {};
+  const teamMembers = Array.isArray(team.members) ? team.members : [];
+  const missingTeamRoles = Array.isArray(team.missing_roles) ? team.missing_roles : [];
   el.opportunityDetailTitle.textContent = item.title || "机会详情";
   el.opportunityDetailContent.innerHTML = `
     <div class="opportunity-detail-hero">
@@ -1494,6 +1511,26 @@ function openOpportunityDetail(noticeId) {
       </div>
       ${detailLine("权威来源", trust.authority || item.source_site || "来源未分类")}
       ${detailLine("独立来源", `${trust.source_count || 1} 个${trust.source_count >= 2 ? "，已交叉印证" : "，尚无跨源印证"}`)}
+    </section>
+    <section class="opportunity-detail-section opportunity-team-section">
+      <div class="opportunity-detail-section-title">
+        <div>
+          <h3>协作团队</h3>
+          <small>${escapeHtml(team.member_count || 0)} 名成员 · ${escapeHtml(team.partner_count || 0)} 名伙伴</small>
+        </div>
+        <div class="opportunity-team-heading-actions">
+          <span class="team-coverage-state ${missingTeamRoles.length ? "is-incomplete" : "is-ready"}">${escapeHtml(team.coverage_score ?? 0)}% 覆盖</span>
+          <button class="primary-lite-button" type="button" data-add-opportunity-team="${escapeHtml(item.notice_id)}">添加成员</button>
+        </div>
+      </div>
+      ${missingTeamRoles.length ? `<p class="team-coverage-gap">当前阶段待补：${escapeHtml(missingTeamRoles.join("、"))}</p>` : '<p class="team-coverage-gap is-ready">当前阶段核心角色已覆盖。</p>'}
+      <div class="opportunity-team-list">
+        <div class="opportunity-team-member is-owner">
+          <div><strong>${escapeHtml(workflow.owner_name || "待认领")}</strong><span>机会负责人</span></div>
+          <small>${workflow.owner_open_id ? "已绑定飞书成员" : "尚未绑定飞书成员"}</small>
+        </div>
+        ${teamMembers.map(opportunityTeamMemberRow).join("")}
+      </div>
     </section>
     ${Number(changeSummary.count) > 0 ? `
       <section class="opportunity-detail-section opportunity-change-section">
@@ -1647,6 +1684,32 @@ function verifiedFactTag(item) {
 
 function detailMetric(label, value) {
   return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function opportunityTeamMemberRow(member) {
+  const organization = member.organization_type === "partner"
+    ? (member.organization_name || "合作伙伴")
+    : "内部团队";
+  return `
+    <div class="opportunity-team-member">
+      <div>
+        <strong>${escapeHtml(member.member_name || "未命名成员")}</strong>
+        <span>${escapeHtml(member.role_label || member.role || "协作成员")} · ${escapeHtml(organization)}</span>
+        ${member.responsibility ? `<small>${escapeHtml(member.responsibility)}</small>` : ""}
+      </div>
+      <div class="opportunity-team-member-status">
+        <span>${escapeHtml(teamSyncLabel(member.feishu_sync_status, member.member_open_id))}</span>
+        <button class="icon-close-button team-remove-button" type="button" aria-label="移除成员" data-remove-opportunity-team="${escapeHtml(member.id || "")}" data-opportunity-id="${escapeHtml(member.notice_id || "")}">×</button>
+      </div>
+    </div>
+  `;
+}
+
+function teamSyncLabel(status, openId) {
+  if (!openId) return "仅本地记录";
+  if (status === "synced") return "已同步 Task";
+  if (status === "failed") return "同步待重试";
+  return "等待 Task 同步";
 }
 
 function detailLine(label, value) {
@@ -2172,7 +2235,7 @@ function renderSettingsSummary(payload) {
     settingTile(
       "销售准入策略",
       config.qualification_policy
-        ? `机会 ${config.qualification_policy.minimum_opportunity_score} · 可信 ${config.qualification_policy.minimum_credibility} · 完整 ${config.qualification_policy.minimum_completeness} · 覆盖 ${config.qualification_policy.minimum_requirement_coverage}`
+        ? `机会 ${config.qualification_policy.minimum_opportunity_score} · 可信 ${config.qualification_policy.minimum_credibility} · 完整 ${config.qualification_policy.minimum_completeness} · 需求 ${config.qualification_policy.minimum_requirement_coverage} · 团队 ${config.qualification_policy.minimum_team_coverage}`
         : "-",
     ),
     settingTile(
@@ -2758,6 +2821,85 @@ async function sendOpportunityToFeishu(noticeId, assignment = {}) {
     ? (result.task_assigned ? "，任务已绑定负责人" : "，任务未绑定飞书成员")
     : "";
   showToast(["sent", "started"].includes(result.status) ? `协同已更新${created ? `，已关联${created}` : ""}${assignmentText}` : "飞书协同未完成");
+}
+
+async function openOpportunityTeamDialog(noticeId) {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (!item || !el.opportunityTeamDialog) return;
+  state.pendingOpportunityTeamId = noticeId;
+  el.opportunityTeamProject.textContent = item.title || "未命名机会";
+  el.opportunityTeamMemberName.value = "";
+  el.opportunityTeamOrganizationName.value = "";
+  el.opportunityTeamResponsibility.value = "";
+  el.opportunityTeamOrganizationType.value = "internal";
+  el.opportunityTeamMemberSelect.innerHTML = '<option value="">正在读取通讯录</option>';
+  el.opportunityTeamStatus.textContent = "正在读取应用授权范围";
+  if (!el.opportunityTeamDialog.open) el.opportunityTeamDialog.showModal();
+  try {
+    const directory = await api("/api/integrations/feishu/users?limit=200");
+    if (state.pendingOpportunityTeamId !== noticeId) return;
+    const users = Array.isArray(directory.items) ? directory.items : [];
+    el.opportunityTeamMemberSelect.innerHTML = [
+      '<option value="">仅记录姓名，不绑定飞书成员</option>',
+      ...users.map(
+        (user) => `<option value="${escapeHtml(user.open_id || "")}" data-member-name="${escapeHtml(user.name || "")}">${escapeHtml(user.name || "未命名成员")}</option>`,
+      ),
+    ].join("");
+    el.opportunityTeamStatus.textContent = users.length
+      ? `可选择 ${users.length} 名授权成员，添加后作为飞书任务关注人`
+      : "授权范围内暂无成员，可先保留本地团队记录";
+  } catch (error) {
+    if (state.pendingOpportunityTeamId !== noticeId) return;
+    el.opportunityTeamMemberSelect.innerHTML = '<option value="">仅记录姓名，不绑定飞书成员</option>';
+    el.opportunityTeamStatus.textContent = "通讯录暂不可用，可先保留本地团队记录";
+  }
+}
+
+function closeOpportunityTeamDialog() {
+  state.pendingOpportunityTeamId = "";
+  el.opportunityTeamDialog?.close();
+}
+
+async function submitOpportunityTeam(event) {
+  event.preventDefault();
+  const noticeId = state.pendingOpportunityTeamId;
+  const memberName = el.opportunityTeamMemberName?.value.trim() || "";
+  const organizationType = el.opportunityTeamOrganizationType?.value || "internal";
+  const organizationName = el.opportunityTeamOrganizationName?.value.trim() || "";
+  if (!noticeId || !memberName) throw new Error("请填写成员姓名");
+  if (organizationType === "partner" && !organizationName) throw new Error("伙伴成员必须填写所属组织");
+  if (el.submitOpportunityTeamButton) el.submitOpportunityTeamButton.disabled = true;
+  try {
+    await api(`/api/opportunities/${encodeURIComponent(noticeId)}/team`, {
+      method: "POST",
+      body: JSON.stringify({
+        member_open_id: el.opportunityTeamMemberSelect?.value || "",
+        member_name: memberName,
+        role: el.opportunityTeamRole?.value || "solution",
+        organization_type: organizationType,
+        organization_name: organizationName,
+        responsibility: el.opportunityTeamResponsibility?.value.trim() || "",
+        actor: "web:admin",
+      }),
+    });
+    closeOpportunityTeamDialog();
+    await refreshOpportunities();
+    openOpportunityDetail(noticeId);
+    showToast("团队成员已添加，飞书协同状态已刷新");
+  } finally {
+    if (el.submitOpportunityTeamButton) el.submitOpportunityTeamButton.disabled = false;
+  }
+}
+
+async function removeOpportunityTeamMember(noticeId, memberId) {
+  if (!noticeId || !memberId) return;
+  if (!window.confirm("确认移除该协作成员？")) return;
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/team/${encodeURIComponent(memberId)}`, {
+    method: "DELETE",
+  });
+  await refreshOpportunities();
+  openOpportunityDetail(noticeId);
+  showToast("团队成员已移除，飞书协同状态已刷新");
 }
 
 async function applyOpportunityAction(noticeId, action) {
@@ -3477,6 +3619,21 @@ function bindEvents() {
       ).catch(toastError("机会状态更新失败"));
       return;
     }
+    const addOpportunityTeamTarget = event.target.closest("[data-add-opportunity-team]");
+    if (addOpportunityTeamTarget) {
+      openOpportunityTeamDialog(addOpportunityTeamTarget.dataset.addOpportunityTeam).catch(
+        toastError("团队成员目录加载失败"),
+      );
+      return;
+    }
+    const removeOpportunityTeamTarget = event.target.closest("[data-remove-opportunity-team]");
+    if (removeOpportunityTeamTarget) {
+      removeOpportunityTeamMember(
+        removeOpportunityTeamTarget.dataset.opportunityId || "",
+        removeOpportunityTeamTarget.dataset.removeOpportunityTeam,
+      ).catch(toastError("移除团队成员失败"));
+      return;
+    }
     const opportunityEscalationTarget = event.target.closest("[data-send-opportunity-escalations]");
     if (opportunityEscalationTarget) {
       sendOpportunityEscalations().catch(toastError("飞书升级摘要发送失败"));
@@ -3539,6 +3696,26 @@ function bindEvents() {
   );
   el.closeOpportunityOwnerButton?.addEventListener("click", closeOpportunityOwnerDialog);
   el.cancelOpportunityOwnerButton?.addEventListener("click", closeOpportunityOwnerDialog);
+  el.opportunityTeamDialog?.addEventListener("click", (event) => {
+    if (event.target === el.opportunityTeamDialog) closeOpportunityTeamDialog();
+  });
+  el.opportunityTeamDialog?.addEventListener("close", () => {
+    state.pendingOpportunityTeamId = "";
+  });
+  el.opportunityTeamMemberSelect?.addEventListener("change", () => {
+    const option = el.opportunityTeamMemberSelect.selectedOptions?.[0];
+    const memberName = option?.dataset.memberName || "";
+    if (memberName && el.opportunityTeamMemberName) el.opportunityTeamMemberName.value = memberName;
+  });
+  el.opportunityTeamOrganizationType?.addEventListener("change", () => {
+    const partner = el.opportunityTeamOrganizationType.value === "partner";
+    if (el.opportunityTeamOrganizationName) el.opportunityTeamOrganizationName.required = partner;
+  });
+  el.opportunityTeamForm?.addEventListener("submit", (event) =>
+    submitOpportunityTeam(event).catch(toastError("团队成员添加失败")),
+  );
+  el.closeOpportunityTeamButton?.addEventListener("click", closeOpportunityTeamDialog);
+  el.cancelOpportunityTeamButton?.addEventListener("click", closeOpportunityTeamDialog);
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);
   el.queryInput?.addEventListener("input", () => {

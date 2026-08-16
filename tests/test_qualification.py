@@ -74,6 +74,19 @@ class QualificationAssessmentTests(unittest.TestCase):
         self.assertEqual(assessment.status, "blocked")
         self.assertIn("综合机会评分", assessment.blockers["approve_bid"])
 
+    def test_stage_team_gap_blocks_go_decision(self) -> None:
+        opportunity = _opportunity()
+        opportunity["team"] = {"coverage_score": 33}
+
+        assessment = assess_qualification(
+            opportunity,
+            {"owner_name": "张三"},
+            as_of=date(2026, 8, 16),
+        )
+
+        self.assertEqual(assessment.status, "blocked")
+        self.assertIn("核心团队覆盖", assessment.blockers["approve_bid"])
+
 
 def _opportunity() -> dict[str, object]:
     return {

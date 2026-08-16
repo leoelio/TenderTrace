@@ -50,6 +50,10 @@ REQUIRED_FIELDS = (
     "需求待核对",
     "需求优化建议",
     "机会负责人",
+    "机会团队",
+    "合作伙伴",
+    "团队覆盖率",
+    "团队缺口",
     "协同状态",
     "下一步行动",
     "飞书任务ID",
@@ -360,6 +364,62 @@ def update_opportunity_facts_in_bitable(
                     table_id=settings.feishu_bitable_table_id,
                 )
             updated_count = _update_record(settings, client, token, record_id, fact_fields)
+    except Exception as exc:
+        return FeishuBitableResult(
+            status="failed",
+            message=f"{type(exc).__name__}: {exc}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    return FeishuBitableResult(
+        status="sent",
+        record_count=updated_count,
+        updated_count=updated_count,
+        app_token=settings.feishu_bitable_app_token,
+        table_id=settings.feishu_bitable_table_id,
+    )
+
+
+def update_opportunity_team_in_bitable(
+    settings: Settings,
+    *,
+    notice_id: str,
+    team: dict[str, object],
+    http_client_factory=httpx.Client,
+) -> FeishuBitableResult:
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        return FeishuBitableResult(
+            status="skipped",
+            message=f"missing Feishu settings: {', '.join(missing_settings)}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    try:
+        with _client_context(http_client_factory, settings.feishu_timeout) as client:
+            token = _tenant_access_token(settings, client)
+            fields = _list_fields(settings, client, token)
+            team_fields = _opportunity_team_fields(team)
+            missing_fields = [name for name in team_fields if name not in fields]
+            if missing_fields:
+                return FeishuBitableResult(
+                    status="failed",
+                    message=f"missing Feishu fields: {', '.join(missing_fields)}",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            record_id = _record_id_for_notice(
+                _existing_records_by_notice_id(settings, client, token),
+                notice_id,
+            )
+            if not record_id:
+                return FeishuBitableResult(
+                    status="skipped",
+                    message="opportunity has not been synced to Feishu bitable",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            updated_count = _update_record(settings, client, token, record_id, team_fields)
     except Exception as exc:
         return FeishuBitableResult(
             status="failed",
@@ -730,6 +790,10 @@ def _record_fields(
             str(item) for item in requirement_review.get("recommendations") or []
         ),
         "机会负责人": "",
+        "机会团队": "",
+        "合作伙伴": "",
+        "团队覆盖率": "100%",
+        "团队缺口": "",
         "协同状态": "线索识别",
         "下一步行动": "",
         "飞书任务ID": "",
@@ -852,6 +916,29 @@ def _workflow_fields(workflow: dict[str, object]) -> dict[str, object]:
         ),
         "决策等待小时": str(workflow.get("decision_wait_hours") or 0),
         "决策截止时间": str(workflow.get("decision_due_at") or ""),
+    }
+
+
+def _opportunity_team_fields(team: dict[str, object]) -> dict[str, object]:
+    raw_members = team.get("members")
+    members = [item for item in raw_members if isinstance(item, dict)] if isinstance(raw_members, list) else []
+    internal = [
+        f"{item.get('member_name')}（{item.get('role_label')}）"
+        for item in members
+        if item.get("organization_type") != "partner"
+    ]
+    partners = [
+        f"{item.get('organization_name')} · {item.get('member_name')}（{item.get('role_label')}）"
+        for item in members
+        if item.get("organization_type") == "partner"
+    ]
+    missing = team.get("missing_roles")
+    missing_roles = [str(value) for value in missing] if isinstance(missing, list) else []
+    return {
+        "机会团队": "；".join(internal),
+        "合作伙伴": "；".join(partners),
+        "团队覆盖率": f"{int(team.get('coverage_score') or 0)}%",
+        "团队缺口": "、".join(missing_roles),
     }
 
 

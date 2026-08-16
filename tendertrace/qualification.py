@@ -14,6 +14,7 @@ class QualificationPolicy:
     minimum_credibility: int = 60
     minimum_completeness: int = 55
     minimum_requirement_coverage: int = 40
+    minimum_team_coverage: int = 60
 
     def to_dict(self) -> dict[str, int]:
         return asdict(self)
@@ -62,6 +63,7 @@ def policy_from_settings(settings: Settings) -> QualificationPolicy:
         minimum_credibility=settings.qualification_min_credibility,
         minimum_completeness=settings.qualification_min_completeness,
         minimum_requirement_coverage=settings.qualification_min_requirement_coverage,
+        minimum_team_coverage=settings.qualification_min_team_coverage,
     )
 
 
@@ -87,6 +89,8 @@ def assess_qualification(
     credibility = _score(scores.get("credibility"))
     completeness = _score(scores.get("completeness"))
     requirement_coverage = _score(requirement_review.get("coverage_score"))
+    team = _mapping(opportunity.get("team"))
+    team_coverage = _score(team.get("coverage_score")) if team else 100
     gates = (
         _gate(
             "owner",
@@ -143,6 +147,14 @@ def assess_qualification(
             f"{requirement_coverage}/100",
             f"建议至少 {policy.minimum_requirement_coverage}/100",
             (),
+        ),
+        _gate(
+            "team_coverage",
+            "核心团队覆盖",
+            team_coverage >= policy.minimum_team_coverage,
+            f"{team_coverage}/100",
+            f"至少 {policy.minimum_team_coverage}/100",
+            ("approve_bid",),
         ),
     )
     blockers = {

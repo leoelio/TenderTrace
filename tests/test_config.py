@@ -24,6 +24,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.vector_model, "BAAI/bge-small-zh-v1.5")
         self.assertEqual(settings.qualification_min_opportunity_score, 65)
         self.assertEqual(settings.qualification_min_credibility, 60)
+        self.assertEqual(settings.qualification_min_team_coverage, 60)
         self.assertEqual(settings.decision_sla_hours, 24)
         self.assertEqual(settings.change_review_sla_hours, 8)
         self.assertFalse(settings.opportunity_escalation_enabled)
@@ -148,6 +149,7 @@ class SettingsTests(unittest.TestCase):
                 "TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=70\n"
                 "TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS=65\n"
                 "TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=50\n"
+                "TENDERTRACE_QUALIFICATION_MIN_TEAM_COVERAGE=75\n"
                 "TENDERTRACE_DECISION_SLA_HOURS=12\n"
                 "TENDERTRACE_CHANGE_REVIEW_SLA_HOURS=6\n",
                 encoding="utf-8",
@@ -158,6 +160,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.qualification_min_credibility, 70)
         self.assertEqual(settings.qualification_min_completeness, 65)
         self.assertEqual(settings.qualification_min_requirement_coverage, 50)
+        self.assertEqual(settings.qualification_min_team_coverage, 75)
         self.assertEqual(settings.decision_sla_hours, 12)
         self.assertEqual(settings.change_review_sla_hours, 6)
 

@@ -77,6 +77,17 @@ class OpportunityApiTests(unittest.TestCase):
                     return_value=SimpleNamespace(status="sent", message=""),
                 ), patch.object(
                     api_module,
+                    "update_opportunity_team_in_bitable",
+                    return_value=SimpleNamespace(status="sent", message=""),
+                ), patch.object(
+                    api_module,
+                    "sync_opportunity_team",
+                    return_value=SimpleNamespace(
+                        status="pending",
+                        to_dict=lambda: {"status": "pending", "added_count": 0},
+                    ),
+                ), patch.object(
+                    api_module,
                     "sync_feishu_tasks",
                     return_value=SimpleNamespace(
                         scanned_count=2,
@@ -153,6 +164,21 @@ class OpportunityApiTests(unittest.TestCase):
                         "/api/opportunities/notice-api-1/actions",
                         json={"action": "claim", "actor_name": "测试负责人"},
                     )
+                    team_added = client.post(
+                        "/api/opportunities/notice-api-1/team",
+                        json={
+                            "member_open_id": "ou_solution",
+                            "member_name": "方案专家",
+                            "role": "solution",
+                            "organization_type": "internal",
+                            "responsibility": "确认技术边界",
+                        },
+                    )
+                    team_read = client.get("/api/opportunities/notice-api-1/team")
+                    member_id = team_added.json()["member"]["id"]
+                    team_removed = client.delete(
+                        f"/api/opportunities/notice-api-1/team/{member_id}"
+                    )
                     record_view_hold = client.post(
                         "/api/opportunities/notice-api-1/actions",
                         json={
@@ -221,6 +247,12 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertIn("open_id", unsafe_record_view_claim.json()["detail"]["reasons"][0])
         self.assertEqual(claimed.json()["workflow"]["stage"], "qualifying")
         self.assertEqual(claimed.json()["workflow"]["owner_name"], "测试负责人")
+        self.assertEqual(team_added.status_code, 200)
+        self.assertEqual(team_added.json()["team"]["coverage_score"], 100)
+        self.assertEqual(team_added.json()["bitable_status"], "sent")
+        self.assertEqual(team_read.json()["members"][0]["role"], "solution")
+        self.assertEqual(team_removed.status_code, 200)
+        self.assertEqual(team_removed.json()["team"]["member_count"], 0)
         self.assertEqual(record_view_hold.status_code, 200)
         self.assertEqual(record_view_hold.json()["workflow"]["decision"], "hold")
         self.assertEqual(record_view_hold.json()["workflow"]["decision_by"], "飞书分析师")

@@ -302,9 +302,13 @@ class FeishuIntegrationTests(unittest.TestCase):
                         )
                     if request.url.path.endswith("/task/v2/tasks/task-guid/add_members"):
                         body = json.loads(request.content.decode("utf-8"))
+                        self.assertIn(body["members"][0]["role"], {"assignee", "follower"})
+                        return httpx.Response(200, json={"code": 0, "data": {}})
+                    if request.url.path.endswith("/task/v2/tasks/task-guid/remove_members"):
+                        body = json.loads(request.content.decode("utf-8"))
                         self.assertEqual(
                             body["members"],
-                            [{"type": "user", "id": "ou_owner", "role": "assignee"}],
+                            [{"type": "user", "id": "ou_solution", "role": "follower"}],
                         )
                         return httpx.Response(200, json={"code": 0, "data": {}})
                     return httpx.Response(404, json={"code": 404, "msg": "unexpected"})
@@ -318,6 +322,15 @@ class FeishuIntegrationTests(unittest.TestCase):
                     "task-guid",
                     assignee_open_ids=["ou_owner", "ou_owner"],
                 )
+                followed = client.add_task_members(
+                    "task-guid",
+                    assignee_open_ids=["ou_solution"],
+                    role="follower",
+                )
+                removed = client.remove_task_members(
+                    "task-guid",
+                    member_open_ids=["ou_solution"],
+                )
         finally:
             _restore_env(old_env)
 
@@ -325,8 +338,11 @@ class FeishuIntegrationTests(unittest.TestCase):
         self.assertEqual(directory["items"][0]["name"], "张三")
         self.assertNotIn("email", directory["items"][0])
         self.assertEqual(assigned["code"], 0)
+        self.assertEqual(followed["code"], 0)
+        self.assertEqual(removed["code"], 0)
         self.assertIn("/open-apis/contact/v3/scopes", seen)
         self.assertIn("/open-apis/task/v2/tasks/task-guid/add_members", seen)
+        self.assertIn("/open-apis/task/v2/tasks/task-guid/remove_members", seen)
 
     def test_authorized_directory_expands_department_scope(self) -> None:
         old_env = _clear_env(FEISHU_ENV_KEYS)
