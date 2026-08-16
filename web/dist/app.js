@@ -909,16 +909,20 @@ function renderSourceAlerts(payload) {
   const issues = Array.isArray(payload?.issues) ? payload.issues : [];
   const policy = payload?.policy || {};
   const deliveryReady = Boolean(payload?.delivery_ready);
+  const taskReady = Boolean(payload?.task_ready);
+  const taskAssigneeReady = Boolean(payload?.task_assignee_ready);
+  const incidentSlaHours = Number(payload?.incident_sla_hours || 0);
   el.sourceAlertSummary.className = `source-alert-summary ${issues.length ? "is-attention" : "is-healthy"}`;
   el.sourceAlertSummary.innerHTML = `
     <div>
       <span>${issues.length ? "来源 SLO 需要处理" : "来源 SLO 正常"}</span>
       <strong>${escapeHtml(payload?.source_count || 0)} 个来源 · ${escapeHtml(issues.length)} 个异常</strong>
-      <small>可靠度阈值 ${escapeHtml(percent(policy.minimum_reliability || 0))} · 新鲜度 ${escapeHtml(policy.stale_hours || 0)} 小时</small>
+      <small>可靠度阈值 ${escapeHtml(percent(policy.minimum_reliability || 0))} · 新鲜度 ${escapeHtml(policy.stale_hours || 0)} 小时${incidentSlaHours ? ` · 处置 SLA ${escapeHtml(incidentSlaHours)} 小时` : ""}</small>
     </div>
     <div class="source-alert-actions">
       ${issues.slice(0, 3).map((issue) => `<span class="badge badge-${issue.severity === "critical" ? "fail" : "warn"}">${escapeHtml(issue.site)}</span>`).join("")}
-      <button id="sendSourceAlertButton" class="primary-lite-button" type="button" ${issues.length ? "" : "disabled"}>${deliveryReady ? "发送飞书告警" : "配置接收目标"}</button>
+      <button id="createSourceIncidentTaskButton" class="primary-lite-button" type="button" ${issues.length ? "" : "disabled"} title="同一来源状态当天只创建一次">${taskReady ? (taskAssigneeReady ? "创建处置任务" : "创建未指派任务") : "配置飞书任务"}</button>
+      <button id="sendSourceAlertButton" class="ghost-button" type="button" ${issues.length ? "" : "disabled"}>${deliveryReady ? "发送飞书告警" : "配置接收目标"}</button>
     </div>
   `;
   document.querySelector("#sendSourceAlertButton")?.addEventListener("click", () => {
@@ -928,6 +932,14 @@ function renderSourceAlerts(payload) {
       return;
     }
     sendSourceAlertsToFeishu().catch(toastError("来源告警发送失败"));
+  });
+  document.querySelector("#createSourceIncidentTaskButton")?.addEventListener("click", () => {
+    if (!taskReady) {
+      showView("settingsView");
+      showToast("请先完成飞书消息应用配置");
+      return;
+    }
+    createSourceIncidentTask().catch(toastError("来源处置任务创建失败"));
   });
 }
 
@@ -2076,6 +2088,13 @@ function renderFeishuOverview(payload) {
         ? `自动 ${features.source_health_alert.cron} · 可靠度与新鲜度异常去重推送`
         : `手动发送 · 可靠度阈值 ${percent(features.source_health_alert?.minimum_reliability || 0)} · 新鲜度 ${features.source_health_alert?.stale_hours || 0} 小时`,
     ],
+    [
+      "来源异常处置任务",
+      features.source_incident_task,
+      features.source_incident_task?.assigned
+        ? `默认负责人已绑定 · ${features.source_incident_task.sla_hours || 0} 小时处置 SLA · 同日状态去重`
+        : `可创建未指派任务 · ${features.source_incident_task?.sla_hours || 0} 小时处置 SLA`,
+    ],
     ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],
     ["状态回调", features.card_callback, "卡片动作回写台账与审计流"],
     ["智能体服务", features.agent_service, "独立智能体应用"],
@@ -2259,6 +2278,22 @@ async function sendSourceAlertsToFeishu() {
     : result.issue_count
       ? "相同来源状态今天已发送"
       : "当前没有需要发送的来源异常";
+  showToast(message);
+  await Promise.all([refreshSources(), refreshFeishu()]);
+}
+
+async function createSourceIncidentTask() {
+  const result = await api("/api/sources/alerts/create-feishu-task", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const message = result.status === "sent"
+    ? result.assigned
+      ? `已创建并指派 ${result.issue_count} 个来源异常处置任务`
+      : `已创建 ${result.issue_count} 个来源异常处置任务，等待指派负责人`
+    : result.issue_count
+      ? "相同来源状态今天已创建处置任务"
+      : "当前没有需要处置的来源异常";
   showToast(message);
   await Promise.all([refreshSources(), refreshFeishu()]);
 }

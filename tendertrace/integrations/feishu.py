@@ -129,6 +129,7 @@ class FeishuClient:
         client_token: str,
         due_timestamp_ms: str = "",
         assignee_open_id: str = "",
+        reminder_minutes: int = 1440,
     ) -> dict[str, Any]:
         if not summary.strip():
             raise FeishuError("task summary is required")
@@ -140,7 +141,8 @@ class FeishuClient:
         }
         if due_timestamp_ms:
             body["due"] = {"timestamp": due_timestamp_ms, "is_all_day": False}
-            body["reminders"] = [{"relative_fire_minute": 1440}]
+            if reminder_minutes > 0:
+                body["reminders"] = [{"relative_fire_minute": reminder_minutes}]
         if assignee_open_id:
             body["members"] = [
                 {"type": "user", "id": assignee_open_id, "role": "assignee"}

@@ -39,6 +39,7 @@ from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
 from tendertrace.integrations.feishu_source_alerts import (
     build_source_alert_snapshot,
+    create_source_incident_task,
     send_source_health_alert,
 )
 from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
@@ -190,10 +191,16 @@ def create_app():
         snapshot = build_source_alert_snapshot(settings)
         message = feishu_status(settings)
         receiver = load_feishu_receiver(settings)
-        snapshot["delivery_ready"] = bool(
-            message.configured
-            and (receiver is not None or message.default_receive_id_configured)
+        receiver_configured = bool(receiver is not None or message.default_receive_id_configured)
+        receiver_type = (
+            receiver.receive_id_type if receiver is not None else message.default_receive_id_type
         )
+        snapshot["delivery_ready"] = bool(message.configured and receiver_configured)
+        snapshot["task_ready"] = bool(message.configured)
+        snapshot["task_assignee_ready"] = bool(
+            receiver_configured and receiver_type == "open_id"
+        )
+        snapshot["incident_sla_hours"] = settings.source_incident_sla_hours
         return snapshot
 
     @app.post("/api/sources/alerts/send-feishu")
@@ -213,6 +220,26 @@ def create_app():
             target="sources",
             label=f"{result.issue_count} 个来源异常",
             metadata={"status": result.status},
+        )
+        return result.to_dict()
+
+    @app.post("/api/sources/alerts/create-feishu-task")
+    def create_source_incident(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            result = create_source_incident_task(
+                settings,
+                force=bool(request.get("force", False)),
+            )
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="source_health_task_create",
+            target="sources",
+            label=f"{result.issue_count} 个来源异常处置",
+            metadata={"status": result.status, "assigned": result.assigned},
         )
         return result.to_dict()
 
@@ -252,6 +279,11 @@ def create_app():
             and settings.feishu_bitable_table_id
         )
         receiver_configured = bool(receiver or message["default_receive_id_configured"])
+        receiver_type = (
+            receiver.receive_id_type
+            if receiver is not None
+            else str(message["default_receive_id_type"] or "")
+        )
         report_ready = bool(message["configured"] and receiver_configured)
         issues: list[dict[str, str]] = []
         if not message["configured"]:
@@ -325,6 +357,11 @@ def create_app():
                     "cron": settings.source_alert_cron,
                     "minimum_reliability": settings.source_alert_min_reliability,
                     "stale_hours": settings.source_alert_stale_hours,
+                },
+                "source_incident_task": {
+                    "ready": bool(message["configured"]),
+                    "assigned": bool(receiver_configured and receiver_type == "open_id"),
+                    "sla_hours": settings.source_incident_sla_hours,
                 },
                 "deadline_calendar": {
                     "ready": bool(message["configured"] and settings.feishu_calendar_id),

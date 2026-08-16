@@ -194,6 +194,7 @@ class FeishuIntegrationTests(unittest.TestCase):
                         )
                     if request.url.path.endswith("/task/v2/tasks"):
                         self.assertEqual(payload["client_token"], "task-token")
+                        self.assertEqual(payload["reminders"], [{"relative_fire_minute": 60}])
                         return httpx.Response(
                             200,
                             json={"code": 0, "data": {"task": {"guid": "task-guid"}}},
@@ -222,6 +223,8 @@ class FeishuIntegrationTests(unittest.TestCase):
                     summary="跟进机会",
                     description="核对预算",
                     client_token="task-token",
+                    due_timestamp_ms="1786845600000",
+                    reminder_minutes=60,
                 )
                 fetched_task = client.get_task("task-guid")
                 event = client.create_calendar_event(

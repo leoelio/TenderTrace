@@ -35,6 +35,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.source_alert_cron, "15 */2 * * *")
         self.assertEqual(settings.source_alert_min_reliability, 0.75)
         self.assertEqual(settings.source_alert_stale_hours, 24)
+        self.assertEqual(settings.source_incident_sla_hours, 4)
         self.assertFalse(settings.api_token_present)
         self.assertIn("openai_key_configured", settings.safe_summary())
         self.assertIn("openai_api_style", settings.safe_summary())
@@ -58,6 +59,13 @@ class SettingsTests(unittest.TestCase):
             root = Path(tmp)
             (root / ".env.local").write_text(
                 "TENDERTRACE_SOURCE_ALERT_ENABLED=true\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
+
+            (root / ".env.local").write_text(
+                "TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS=0\n",
                 encoding="utf-8",
             )
             with self.assertRaises(ConfigError):

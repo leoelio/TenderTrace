@@ -120,6 +120,7 @@ class Settings:
     source_alert_cron: str
     source_alert_min_reliability: float
     source_alert_stale_hours: int
+    source_incident_sla_hours: int
     feishu_agent_enabled: bool
     feishu_agent_base_url: str
     feishu_agent_app_id_present: bool
@@ -264,6 +265,10 @@ class Settings:
             _first_value("TENDERTRACE_SOURCE_ALERT_STALE_HOURS", env_files, "24"),
             "TENDERTRACE_SOURCE_ALERT_STALE_HOURS",
         )
+        source_incident_sla_hours = _parse_positive_int(
+            _first_value("TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS", env_files, "4"),
+            "TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS",
+        )
         feishu_agent_enabled = _parse_bool(
             _first_value("FEISHU_AGENT_ENABLED", env_files, "false")
         )
@@ -374,6 +379,7 @@ class Settings:
             ),
             source_alert_min_reliability=source_alert_min_reliability,
             source_alert_stale_hours=source_alert_stale_hours,
+            source_incident_sla_hours=source_incident_sla_hours,
             feishu_agent_enabled=feishu_agent_enabled,
             feishu_agent_base_url=_first_value(
                 "FEISHU_AGENT_BASE_URL",
@@ -540,6 +546,7 @@ class Settings:
             "source_alert_cron": self.source_alert_cron,
             "source_alert_min_reliability": self.source_alert_min_reliability,
             "source_alert_stale_hours": self.source_alert_stale_hours,
+            "source_incident_sla_hours": self.source_incident_sla_hours,
             "feishu_agent_enabled": self.feishu_agent_enabled,
             "feishu_agent_base_url": self.feishu_agent_base_url,
             "feishu_agent_app_id_configured": self.feishu_agent_app_id_present,

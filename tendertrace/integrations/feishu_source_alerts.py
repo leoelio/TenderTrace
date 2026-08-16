@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
@@ -20,6 +20,19 @@ class SourceAlertDeliveryResult:
     issue_count: int
     artifact_key: str
     message_id: str = ""
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class SourceIncidentTaskResult:
+    status: str
+    issue_count: int
+    artifact_key: str
+    task_guid: str = ""
+    assigned: bool = False
     reason: str = ""
 
     def to_dict(self) -> dict[str, object]:
@@ -131,6 +144,80 @@ def send_source_health_alert(
         issue_count=len(issue_items),
         artifact_key=artifact_key,
         message_id=message_id,
+    )
+
+
+def create_source_incident_task(
+    settings: Settings,
+    *,
+    force: bool = False,
+    client: FeishuClient | None = None,
+    snapshot_loader: Callable[..., dict[str, object]] = build_source_alert_snapshot,
+    now: datetime | None = None,
+) -> SourceIncidentTaskResult:
+    reference = now or datetime.now(ZoneInfo(settings.timezone))
+    snapshot = snapshot_loader(settings, now=reference)
+    raw_issues = snapshot.get("issues")
+    issues = [item for item in raw_issues or [] if isinstance(item, dict)]
+    if not issues:
+        return SourceIncidentTaskResult(
+            status="skipped",
+            issue_count=0,
+            artifact_key="",
+            reason="all observed sources satisfy the current SLO",
+        )
+    alert_key = _artifact_key(issues, reference)
+    artifact_key = alert_key.replace("source_health:", "source_health_task:", 1)
+    existing_task = _sent_external_id(settings, "source_health_task", artifact_key)
+    if existing_task and not force:
+        return SourceIncidentTaskResult(
+            status="skipped",
+            issue_count=len(issues),
+            artifact_key=artifact_key,
+            task_guid=existing_task,
+            assigned=_default_receiver_is_member(settings),
+            reason="same source incident task already created today",
+        )
+    target_id, target_type = resolve_feishu_receiver(settings)
+    assignee_open_id = str(target_id or "") if target_type == "open_id" else ""
+    due_at = reference + timedelta(hours=settings.source_incident_sla_hours)
+    feishu = client or FeishuClient(settings)
+    try:
+        response = feishu.create_task(
+            summary=_task_summary(issues),
+            description=_task_description(snapshot, issues),
+            client_token=hashlib.sha256(artifact_key.encode("utf-8")).hexdigest(),
+            due_timestamp_ms=str(int(due_at.timestamp() * 1000)),
+            assignee_open_id=assignee_open_id,
+            reminder_minutes=min(60, settings.source_incident_sla_hours * 60),
+        )
+        task_guid = _nested_string(response, "data", "task", "guid")
+        if not task_guid:
+            raise FeishuError("Feishu source incident task response is missing task guid")
+        record_delivery_attempt(
+            settings,
+            channel="feishu",
+            artifact_type="source_health_task",
+            artifact_key=artifact_key,
+            status="sent",
+            external_id=task_guid,
+        )
+    except (FeishuError, ValueError) as exc:
+        record_delivery_attempt(
+            settings,
+            channel="feishu",
+            artifact_type="source_health_task",
+            artifact_key=artifact_key,
+            status="failed",
+            error=str(exc),
+        )
+        raise
+    return SourceIncidentTaskResult(
+        status="sent",
+        issue_count=len(issues),
+        artifact_key=artifact_key,
+        task_guid=task_guid,
+        assigned=bool(assignee_open_id),
     )
 
 
@@ -276,6 +363,32 @@ def _artifact_key(issues: list[object], reference: datetime) -> str:
     return f"source_health:{reference.date().isoformat()}:{digest}"
 
 
+def _task_summary(issues: list[dict[str, object]]) -> str:
+    sites = "、".join(str(item.get("site") or "-") for item in issues[:3])
+    suffix = f" 等 {len(issues)} 个" if len(issues) > 3 else ""
+    return f"处理 TenderTrace 来源异常：{sites}{suffix}"
+
+
+def _task_description(
+    snapshot: dict[str, object],
+    issues: list[dict[str, object]],
+) -> str:
+    lines = [
+        f"检查时间：{snapshot.get('checked_at') or '-'}",
+        f"异常来源：{len(issues)} 个",
+        "",
+    ]
+    for issue in issues[:8]:
+        reasons = "；".join(str(value) for value in issue.get("reasons") or [])
+        lines.append(f"[{issue.get('severity') or 'warning'}] {issue.get('site') or '-'}")
+        lines.append(reasons or "需要检查来源运行状态")
+        if issue.get("route_url"):
+            lines.append(str(issue["route_url"]))
+        lines.append("")
+    lines.append("完成后请在 TenderTrace 数据源页刷新验证来源 SLO。")
+    return "\n".join(lines).strip()
+
+
 def _already_sent(settings: Settings, artifact_key: str) -> bool:
     with connection(settings) as conn:
         row = conn.execute(
@@ -291,6 +404,33 @@ def _already_sent(settings: Settings, artifact_key: str) -> bool:
             (artifact_key,),
         ).fetchone()
     return row is not None
+
+
+def _sent_external_id(
+    settings: Settings,
+    artifact_type: str,
+    artifact_key: str,
+) -> str:
+    with connection(settings) as conn:
+        row = conn.execute(
+            """
+            SELECT external_id
+            FROM delivery_attempts
+            WHERE channel = 'feishu'
+              AND artifact_type = ?
+              AND artifact_key = ?
+              AND status = 'sent'
+              AND COALESCE(external_id, '') <> ''
+            LIMIT 1
+            """,
+            (artifact_type, artifact_key),
+        ).fetchone()
+    return str(row["external_id"] or "") if row is not None else ""
+
+
+def _default_receiver_is_member(settings: Settings) -> bool:
+    _, receive_id_type = resolve_feishu_receiver(settings)
+    return receive_id_type == "open_id"
 
 
 def _parse_datetime(value: str, tzinfo) -> datetime | None:
