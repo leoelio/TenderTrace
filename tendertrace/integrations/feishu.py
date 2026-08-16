@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+from uuid import uuid4
 
 import httpx
 
@@ -453,6 +454,66 @@ class FeishuClient:
         payload = self._parse_response(response)
         data = payload.get("data")
         return data if isinstance(data, dict) else {"items": []}
+
+    def create_chat(
+        self,
+        *,
+        name: str,
+        member_open_ids: list[str] | None = None,
+        description: str = "",
+        client_uuid: str | None = None,
+    ) -> dict[str, Any]:
+        normalized_name = " ".join(name.split())[:100]
+        members = list(
+            dict.fromkeys(value.strip() for value in member_open_ids or [] if value.strip())
+        )
+        if not normalized_name:
+            raise FeishuError("chat name is required")
+        if len(members) > 50:
+            raise FeishuError("Feishu chat creation accepts at most 50 members")
+        token = self.get_tenant_access_token()
+        response = self._client.post(
+            self._url("/open-apis/im/v1/chats"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            params={"user_id_type": "open_id"},
+            json={
+                "name": normalized_name,
+                "description": " ".join(description.split())[:100],
+                "chat_mode": "group",
+                "chat_type": "private",
+                "user_id_list": members,
+                "uuid": client_uuid or str(uuid4()),
+            },
+        )
+        payload = self._parse_response(response)
+        data = payload.get("data")
+        return data if isinstance(data, dict) else {}
+
+    def add_chat_members(self, chat_id: str, member_open_ids: list[str]) -> dict[str, Any]:
+        chat_id = chat_id.strip()
+        members = list(dict.fromkeys(value.strip() for value in member_open_ids if value.strip()))
+        if not chat_id:
+            raise FeishuError("chat_id is required")
+        if not members:
+            raise FeishuError("at least one member open_id is required")
+        if len(members) > 50:
+            raise FeishuError("Feishu member invitation accepts at most 50 members")
+        token = self.get_tenant_access_token()
+        response = self._client.post(
+            self._url(f"/open-apis/im/v1/chats/{quote(chat_id, safe='')}/members"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            params={"member_id_type": "open_id", "succeed_type": 0},
+            json={"id_list": members},
+        )
+        payload = self._parse_response(response)
+        data = payload.get("data")
+        return data if isinstance(data, dict) else {}
 
     def _authorized_departments(
         self,

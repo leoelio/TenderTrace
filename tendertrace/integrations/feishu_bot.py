@@ -16,6 +16,11 @@ from tendertrace.integrations.feishu_card_actions import (
 from tendertrace.integrations.feishu_briefing import send_opportunity_briefing
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
 from tendertrace.intent import compile_intent
+from tendertrace.organization_memory import (
+    ensure_chat_workspace,
+    record_memory,
+    search_memories,
+)
 from tendertrace.runner import RunOnceResult, run_once
 from tendertrace.scheduling.scheduler import (
     schedule_ingest_subscription,
@@ -103,6 +108,53 @@ def process_feishu_message_event(
         return event
     feishu = client or FeishuClient(settings)
     try:
+        organization_command, organization_value = _organization_command(event.query)
+        if organization_command:
+            if event.chat_type != "group":
+                raise ValueError("组织记忆指令仅支持飞书群聊")
+            workspace = ensure_chat_workspace(
+                settings,
+                chat_id=event.chat_id,
+                sender_open_id=event.sender_open_id,
+            )
+            workspace_url = (
+                f"{settings.public_base_url}/?view=organizationView&workspace={workspace.id}"
+            )
+            if organization_command == "organization_record":
+                memory = record_memory(
+                    settings,
+                    workspace_id=workspace.id,
+                    content=organization_value,
+                    source_type="feishu_message",
+                    source_message_id=event.message_id,
+                    sender_open_id=event.sender_open_id,
+                    actor=event.sender_open_id or "feishu",
+                )
+                reply = f"已沉淀为组织记忆：{memory.title}\n回到 TenderTrace：{workspace_url}"
+            else:
+                memories = search_memories(
+                    settings,
+                    workspace_id=workspace.id,
+                    query=organization_value,
+                    limit=5,
+                )
+                if memories:
+                    lines = [f"{index}. {item.title}：{item.content[:120]}" for index, item in enumerate(memories, 1)]
+                    reply = "组织记忆检索结果：\n" + "\n".join(lines)
+                else:
+                    reply = "当前群的组织记忆中没有匹配内容。"
+                reply += f"\n回到 TenderTrace：{workspace_url}"
+            _update_event(
+                settings,
+                event_id,
+                status="completed",
+                command_kind=organization_command,
+            )
+            feishu.reply_text(event.message_id, reply)
+            updated = get_feishu_message_event(settings, event_id)
+            if updated is None:
+                raise RuntimeError("Feishu message event disappeared after processing")
+            return updated
         bidql = compile_intent(event.query)
         schedule = bidql.get("schedule") if isinstance(bidql.get("schedule"), dict) else {}
         if str(schedule.get("kind") or "immediate") == "immediate":
@@ -381,6 +433,26 @@ def _message_text(message: dict[str, Any]) -> str:
             if key:
                 text = text.replace(key, " ")
     return " ".join(text.split())[:2000]
+
+
+def _organization_command(query: str) -> tuple[str, str]:
+    normalized = query.strip()
+    commands = (
+        ("organization_record", ("记录组织记忆", "组织记录", "记录")),
+        ("organization_search", ("查询组织记忆", "组织记忆查询", "查记忆")),
+    )
+    for command, prefixes in commands:
+        for prefix in prefixes:
+            if normalized == prefix:
+                raise ValueError(f"{prefix} 后需要填写内容")
+            for separator in ("：", ":", " "):
+                marker = f"{prefix}{separator}"
+                if normalized.startswith(marker):
+                    value = normalized[len(marker) :].strip()
+                    if not value:
+                        raise ValueError(f"{prefix} 后需要填写内容")
+                    return command, value
+    return "", ""
 
 
 def _update_event(settings: Settings, event_id: str, **values: str) -> None:

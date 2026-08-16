@@ -37,6 +37,7 @@
           <button class="nav-tab" type="button" data-view="sourcesView">数据源</button>
           <button class="nav-tab" type="button" data-view="evaluationView">Agent评测</button>
           <button class="nav-tab" type="button" data-view="memoryView">用户记忆</button>
+          <button class="nav-tab" type="button" data-view="organizationView">组织协作</button>
           <button class="nav-tab" type="button" data-view="settingsView">设置</button>
         </nav>
 
@@ -840,6 +841,186 @@
             </div>
           </section>
         </section>
+
+        <section id="organizationView" class="view">
+          <section class="panel page-panel organization-page">
+            <div class="panel-heading organization-heading">
+              <div>
+                <h1>组织协作</h1>
+                <span class="panel-meta">飞书项目群、共享知识与机会行动</span>
+              </div>
+              <div class="action-group">
+                <button id="inviteOrganizationMembersButton" class="ghost-button" type="button">邀请成员</button>
+                <button id="createOrganizationWorkspaceButton" class="primary-lite-button" type="button">创建项目群</button>
+              </div>
+            </div>
+            <div class="organization-toolbar">
+              <label>
+                协作空间
+                <select id="organizationWorkspaceSelect"></select>
+              </label>
+              <label class="organization-search-field">
+                搜索组织记忆
+                <input id="organizationMemorySearch" type="search" placeholder="客户、竞品、决策或风险" />
+              </label>
+              <label>
+                类型
+                <select id="organizationMemoryTypeFilter">
+                  <option value="">全部</option>
+                  <option value="decision">决策</option>
+                  <option value="customer_signal">客户信号</option>
+                  <option value="competitor">竞争情报</option>
+                  <option value="risk">风险</option>
+                  <option value="lesson">经验</option>
+                  <option value="note">记录</option>
+                </select>
+              </label>
+              <button id="refreshOrganizationButton" class="icon-button bordered-icon-button" type="button" title="刷新组织协作" aria-label="刷新组织协作">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.4 9A7 7 0 0 0 6.2 6.2L4 8"></path><path d="M5.6 15A7 7 0 0 0 17.8 17.8L20 16"></path></svg>
+              </button>
+            </div>
+            <div id="organizationSummary" class="organization-summary empty-state">请选择或创建协作空间</div>
+            <div class="organization-layout">
+              <section class="organization-memory-stream" aria-labelledby="organizationMemoryTitle">
+                <div class="section-heading">
+                  <div>
+                    <h2 id="organizationMemoryTitle">共享知识</h2>
+                    <span id="organizationMemoryMeta">0 条</span>
+                  </div>
+                </div>
+                <div id="organizationMemoryList" class="organization-memory-list empty-state">暂无组织记忆</div>
+              </section>
+              <aside class="organization-compose" aria-labelledby="organizationComposeTitle">
+                <div class="section-heading">
+                  <div>
+                    <h2 id="organizationComposeTitle">沉淀记录</h2>
+                    <span>独立于个人记忆</span>
+                  </div>
+                </div>
+                <form id="organizationMemoryForm" class="organization-memory-form">
+                  <label>
+                    类型
+                    <select id="organizationMemoryType" required>
+                      <option value="note">记录</option>
+                      <option value="decision">决策</option>
+                      <option value="customer_signal">客户信号</option>
+                      <option value="competitor">竞争情报</option>
+                      <option value="risk">风险</option>
+                      <option value="lesson">经验</option>
+                    </select>
+                  </label>
+                  <label>
+                    标题
+                    <input id="organizationMemoryTitleInput" maxlength="180" placeholder="一句话结论" required />
+                  </label>
+                  <label>
+                    内容
+                    <textarea id="organizationMemoryContent" rows="6" maxlength="8000" placeholder="记录事实、判断和后续共识" required></textarea>
+                  </label>
+                  <label>
+                    关联机会 ID
+                    <input id="organizationMemoryNoticeId" maxlength="120" placeholder="可选" />
+                  </label>
+                  <label>
+                    证据链接
+                    <input id="organizationMemoryEvidenceUrl" type="url" maxlength="2000" placeholder="https://" />
+                  </label>
+                  <button id="saveOrganizationMemoryButton" class="primary-button" type="submit">保存到组织记忆</button>
+                </form>
+              </aside>
+            </div>
+          </section>
+        </section>
+
+        <dialog id="organizationGroupDialog" class="owner-assignment-dialog organization-group-dialog">
+          <form id="organizationGroupForm" method="dialog">
+            <div class="dialog-heading">
+              <div>
+                <h2 id="organizationGroupDialogTitle">创建飞书项目群</h2>
+                <p id="organizationGroupDialogMeta">选择授权成员</p>
+              </div>
+              <button id="closeOrganizationGroupButton" class="icon-button" type="button" aria-label="关闭">×</button>
+            </div>
+            <label id="organizationGroupNameField">
+              群名称
+              <input id="organizationGroupName" maxlength="100" required />
+            </label>
+            <label>
+              成员
+              <select id="organizationMemberSelect" multiple size="8"></select>
+            </label>
+            <div id="organizationGroupStatus" class="form-status" aria-live="polite"></div>
+            <div class="dialog-actions">
+              <button id="cancelOrganizationGroupButton" class="ghost-button" type="button">取消</button>
+              <button id="submitOrganizationGroupButton" class="primary-button" type="submit">创建并邀请</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog id="organizationConvertDialog" class="owner-assignment-dialog organization-convert-dialog">
+          <form id="organizationConvertForm" method="dialog">
+            <div class="dialog-heading">
+              <div>
+                <h2>转为机会工作</h2>
+                <p id="organizationConvertMemoryTitle">组织记忆</p>
+              </div>
+              <button id="closeOrganizationConvertButton" class="icon-button" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="organization-convert-grid">
+              <label>
+                目标
+                <select id="organizationConvertTarget">
+                  <option value="relationship_action">客户行动</option>
+                  <option value="opportunity_fact">机会事实</option>
+                </select>
+              </label>
+              <label>
+                机会 ID
+                <input id="organizationConvertNoticeId" required />
+              </label>
+              <label class="organization-action-convert-field organization-convert-wide">
+                行动标题
+                <input id="organizationConvertActionTitle" maxlength="200" />
+              </label>
+              <label class="organization-action-convert-field">
+                截止时间
+                <input id="organizationConvertDueAt" type="datetime-local" />
+              </label>
+              <label class="organization-action-convert-field">
+                优先级
+                <select id="organizationConvertPriority">
+                  <option value="normal">普通</option>
+                  <option value="high">高</option>
+                  <option value="critical">紧急</option>
+                  <option value="low">低</option>
+                </select>
+              </label>
+              <label class="organization-fact-convert-field" hidden>
+                事实字段
+                <select id="organizationConvertFactField">
+                  <option value="purchaser">采购主体</option>
+                  <option value="project_no">项目编号</option>
+                  <option value="budget">预算</option>
+                  <option value="bid_deadline">投标截止</option>
+                  <option value="region">地区</option>
+                </select>
+              </label>
+              <label class="organization-fact-convert-field" hidden>
+                核验值
+                <input id="organizationConvertFactValue" maxlength="500" />
+              </label>
+              <label class="organization-fact-convert-field organization-convert-wide" hidden>
+                证据链接
+                <input id="organizationConvertEvidenceUrl" type="url" maxlength="2000" placeholder="https://" />
+              </label>
+            </div>
+            <div id="organizationConvertStatus" class="form-status" aria-live="polite"></div>
+            <div class="dialog-actions">
+              <button id="cancelOrganizationConvertButton" class="ghost-button" type="button">取消</button>
+              <button class="primary-button" type="submit">确认转换</button>
+            </div>
+          </form>
+        </dialog>
 
         <section id="memoryView" class="view">
           <section class="panel page-panel">

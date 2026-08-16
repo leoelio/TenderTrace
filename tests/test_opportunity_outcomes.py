@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from tendertrace.config import Settings
-from tendertrace.db import connection, database_health, init_db
+from tendertrace.db import SCHEMA_VERSION, connection, database_health, init_db
 from tendertrace.opportunity_outcomes import (
     get_outcome,
     outcome_snapshots,
@@ -101,7 +101,7 @@ class OpportunityOutcomeTests(unittest.TestCase):
             settings = _settings(Path(tmp))
             health = database_health(settings)
 
-        self.assertIn(28, health["schema_versions"])
+        self.assertIn(SCHEMA_VERSION, health["schema_versions"])
         self.assertIn("opportunity_outcomes", health["tables"])
 
     def test_outcome_is_exposed_and_reused_by_market_learning(self) -> None:

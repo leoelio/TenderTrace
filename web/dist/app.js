@@ -10,6 +10,11 @@ const state = {
   sourceAlerts: null,
   evaluation: null,
   memory: null,
+  organizationWorkspaces: [],
+  organizationMemories: [],
+  organizationWorkspaceId: "",
+  organizationGroupMode: "create",
+  organizationConvertMemoryId: "",
   feishu: null,
   opportunities: [],
   opportunitySummaryData: {},
@@ -225,6 +230,46 @@ const el = {
   memorySuggestions: document.querySelector("#memorySuggestions"),
   memoryEvents: document.querySelector("#memoryEvents"),
   memoryAnalysis: document.querySelector("#memoryAnalysis"),
+  organizationWorkspaceSelect: document.querySelector("#organizationWorkspaceSelect"),
+  organizationMemorySearch: document.querySelector("#organizationMemorySearch"),
+  organizationMemoryTypeFilter: document.querySelector("#organizationMemoryTypeFilter"),
+  organizationSummary: document.querySelector("#organizationSummary"),
+  organizationMemoryMeta: document.querySelector("#organizationMemoryMeta"),
+  organizationMemoryList: document.querySelector("#organizationMemoryList"),
+  organizationMemoryForm: document.querySelector("#organizationMemoryForm"),
+  organizationMemoryType: document.querySelector("#organizationMemoryType"),
+  organizationMemoryTitleInput: document.querySelector("#organizationMemoryTitleInput"),
+  organizationMemoryContent: document.querySelector("#organizationMemoryContent"),
+  organizationMemoryNoticeId: document.querySelector("#organizationMemoryNoticeId"),
+  organizationMemoryEvidenceUrl: document.querySelector("#organizationMemoryEvidenceUrl"),
+  refreshOrganizationButton: document.querySelector("#refreshOrganizationButton"),
+  createOrganizationWorkspaceButton: document.querySelector("#createOrganizationWorkspaceButton"),
+  inviteOrganizationMembersButton: document.querySelector("#inviteOrganizationMembersButton"),
+  organizationGroupDialog: document.querySelector("#organizationGroupDialog"),
+  organizationGroupForm: document.querySelector("#organizationGroupForm"),
+  organizationGroupDialogTitle: document.querySelector("#organizationGroupDialogTitle"),
+  organizationGroupDialogMeta: document.querySelector("#organizationGroupDialogMeta"),
+  organizationGroupNameField: document.querySelector("#organizationGroupNameField"),
+  organizationGroupName: document.querySelector("#organizationGroupName"),
+  organizationMemberSelect: document.querySelector("#organizationMemberSelect"),
+  organizationGroupStatus: document.querySelector("#organizationGroupStatus"),
+  submitOrganizationGroupButton: document.querySelector("#submitOrganizationGroupButton"),
+  closeOrganizationGroupButton: document.querySelector("#closeOrganizationGroupButton"),
+  cancelOrganizationGroupButton: document.querySelector("#cancelOrganizationGroupButton"),
+  organizationConvertDialog: document.querySelector("#organizationConvertDialog"),
+  organizationConvertForm: document.querySelector("#organizationConvertForm"),
+  organizationConvertMemoryTitle: document.querySelector("#organizationConvertMemoryTitle"),
+  organizationConvertTarget: document.querySelector("#organizationConvertTarget"),
+  organizationConvertNoticeId: document.querySelector("#organizationConvertNoticeId"),
+  organizationConvertActionTitle: document.querySelector("#organizationConvertActionTitle"),
+  organizationConvertDueAt: document.querySelector("#organizationConvertDueAt"),
+  organizationConvertPriority: document.querySelector("#organizationConvertPriority"),
+  organizationConvertFactField: document.querySelector("#organizationConvertFactField"),
+  organizationConvertFactValue: document.querySelector("#organizationConvertFactValue"),
+  organizationConvertEvidenceUrl: document.querySelector("#organizationConvertEvidenceUrl"),
+  organizationConvertStatus: document.querySelector("#organizationConvertStatus"),
+  closeOrganizationConvertButton: document.querySelector("#closeOrganizationConvertButton"),
+  cancelOrganizationConvertButton: document.querySelector("#cancelOrganizationConvertButton"),
   settingsSummary: document.querySelector("#settingsSummary"),
   feishuCenterMeta: document.querySelector("#feishuCenterMeta"),
   feishuFeatureList: document.querySelector("#feishuFeatureList"),
@@ -486,6 +531,9 @@ function showView(viewId) {
   if (viewId === "memoryView") {
     trackActivity("weekly_report_view", { target: "memoryView", label: "用户记忆" });
     refreshMemoryWeekly().catch(toastError("用户记忆加载失败"));
+  }
+  if (viewId === "organizationView") {
+    refreshOrganizationWorkspaces().catch(toastError("组织协作加载失败"));
   }
   if (viewId === "settingsView") refreshSettings().catch(toastError("设置加载失败"));
 }
@@ -2779,6 +2827,255 @@ function opportunityPageSize() {
   return window.innerWidth <= 700 ? 6 : 20;
 }
 
+async function refreshOrganizationWorkspaces() {
+  const payload = await api("/api/organization/workspaces");
+  state.organizationWorkspaces = payload.items || [];
+  const requested = new URLSearchParams(window.location.search).get("workspace") || "";
+  const current = state.organizationWorkspaceId || requested;
+  state.organizationWorkspaceId = state.organizationWorkspaces.some((item) => item.id === current)
+    ? current
+    : state.organizationWorkspaces[0]?.id || "";
+  renderOrganizationWorkspaceOptions();
+  renderOrganizationSummary();
+  await refreshOrganizationMemories();
+}
+
+function renderOrganizationWorkspaceOptions() {
+  if (!el.organizationWorkspaceSelect) return;
+  if (!state.organizationWorkspaces.length) {
+    el.organizationWorkspaceSelect.innerHTML = '<option value="">暂无协作空间</option>';
+    el.organizationWorkspaceSelect.disabled = true;
+    return;
+  }
+  el.organizationWorkspaceSelect.disabled = false;
+  el.organizationWorkspaceSelect.innerHTML = state.organizationWorkspaces
+    .map(
+      (item) =>
+        `<option value="${escapeHtml(item.id)}" ${item.id === state.organizationWorkspaceId ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
+    )
+    .join("");
+}
+
+function renderOrganizationSummary() {
+  if (!el.organizationSummary) return;
+  const workspace = state.organizationWorkspaces.find(
+    (item) => item.id === state.organizationWorkspaceId,
+  );
+  if (!workspace) {
+    el.organizationSummary.className = "organization-summary empty-state";
+    el.organizationSummary.textContent = "请选择或创建协作空间";
+    return;
+  }
+  el.organizationSummary.className = "organization-summary";
+  el.organizationSummary.innerHTML = `
+    <div><span>当前空间</span><strong>${escapeHtml(workspace.name)}</strong></div>
+    <div><span>协作成员</span><strong>${Number(workspace.member_count || 0)}</strong></div>
+    <div><span>共享知识</span><strong>${Number(workspace.memory_count || 0)}</strong></div>
+    <div><span>连接状态</span><strong class="organization-online">飞书已连接</strong></div>`;
+}
+
+async function refreshOrganizationMemories() {
+  if (!state.organizationWorkspaceId) {
+    state.organizationMemories = [];
+    renderOrganizationMemories();
+    return;
+  }
+  const params = new URLSearchParams();
+  const query = el.organizationMemorySearch?.value.trim() || "";
+  const memoryType = el.organizationMemoryTypeFilter?.value || "";
+  if (query) params.set("query", query);
+  if (memoryType) params.set("memory_type", memoryType);
+  const payload = await api(
+    `/api/organization/workspaces/${encodeURIComponent(state.organizationWorkspaceId)}/memories?${params}`,
+  );
+  state.organizationMemories = payload.items || [];
+  renderOrganizationMemories();
+}
+
+function renderOrganizationMemories() {
+  if (!el.organizationMemoryList) return;
+  const items = state.organizationMemories;
+  if (el.organizationMemoryMeta) el.organizationMemoryMeta.textContent = `${items.length} 条`;
+  if (!items.length) {
+    el.organizationMemoryList.className = "organization-memory-list empty-state";
+    el.organizationMemoryList.textContent = state.organizationWorkspaceId
+      ? "当前筛选条件下暂无组织记忆"
+      : "请先创建飞书项目群";
+    return;
+  }
+  const labels = {
+    note: "记录",
+    decision: "决策",
+    customer_signal: "客户信号",
+    competitor: "竞争情报",
+    risk: "风险",
+    lesson: "经验",
+  };
+  el.organizationMemoryList.className = "organization-memory-list";
+  el.organizationMemoryList.innerHTML = items
+    .map(
+      (item) => `
+        <article class="organization-memory-row">
+          <div class="organization-memory-row-head">
+            <span class="badge badge-muted">${escapeHtml(labels[item.memory_type] || item.memory_type)}</span>
+            <time>${escapeHtml(item.created_at || "")}</time>
+          </div>
+          <h3>${escapeHtml(item.title)}</h3>
+          <p>${escapeHtml(item.content)}</p>
+          <div class="organization-memory-evidence">
+            <span>${item.source_type === "feishu_message" ? "飞书群消息" : "网页记录"}</span>
+            ${item.related_notice_id ? `<span>机会 ${escapeHtml(item.related_notice_id)}</span>` : ""}
+            ${item.evidence_url ? `<a href="${escapeHtml(item.evidence_url)}" target="_blank" rel="noreferrer">查看证据</a>` : ""}
+            <button class="text-button" type="button" data-convert-organization-memory="${escapeHtml(item.id)}">转为机会工作</button>
+          </div>
+        </article>`,
+    )
+    .join("");
+}
+
+async function saveOrganizationMemory(event) {
+  event.preventDefault();
+  if (!state.organizationWorkspaceId) throw new Error("请先创建或选择协作空间");
+  await api(
+    `/api/organization/workspaces/${encodeURIComponent(state.organizationWorkspaceId)}/memories`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        memory_type: el.organizationMemoryType?.value || "note",
+        title: el.organizationMemoryTitleInput?.value.trim() || "",
+        content: el.organizationMemoryContent?.value.trim() || "",
+        related_notice_id: el.organizationMemoryNoticeId?.value.trim() || "",
+        evidence_url: el.organizationMemoryEvidenceUrl?.value.trim() || "",
+      }),
+    },
+  );
+  el.organizationMemoryForm?.reset();
+  showToast("组织记忆已保存");
+  await refreshOrganizationWorkspaces();
+}
+
+async function openOrganizationGroupDialog(mode) {
+  if (mode === "invite" && !state.organizationWorkspaceId) {
+    throw new Error("请先选择协作空间");
+  }
+  state.organizationGroupMode = mode;
+  const payload = await api("/api/integrations/feishu/users?limit=100");
+  const users = payload.items || [];
+  if (el.organizationMemberSelect) {
+    el.organizationMemberSelect.innerHTML = users
+      .map(
+        (user) =>
+          `<option value="${escapeHtml(user.open_id)}" data-name="${escapeHtml(user.name)}">${escapeHtml(user.name)}</option>`,
+      )
+      .join("");
+  }
+  const creating = mode === "create";
+  if (el.organizationGroupDialogTitle) {
+    el.organizationGroupDialogTitle.textContent = creating ? "创建飞书项目群" : "邀请协作成员";
+  }
+  if (el.organizationGroupDialogMeta) {
+    el.organizationGroupDialogMeta.textContent = creating ? "机器人将自动加入项目群" : "成员将同步到当前协作空间";
+  }
+  if (el.organizationGroupNameField) el.organizationGroupNameField.hidden = !creating;
+  if (el.organizationGroupName) el.organizationGroupName.required = creating;
+  if (el.submitOrganizationGroupButton) {
+    el.submitOrganizationGroupButton.textContent = creating ? "创建并邀请" : "确认邀请";
+  }
+  if (el.organizationGroupStatus) el.organizationGroupStatus.textContent = "";
+  el.organizationGroupDialog?.showModal();
+}
+
+function closeOrganizationGroupDialog() {
+  el.organizationGroupDialog?.close();
+  el.organizationGroupForm?.reset();
+}
+
+async function submitOrganizationGroup(event) {
+  event.preventDefault();
+  const members = [...(el.organizationMemberSelect?.selectedOptions || [])].map((option) => ({
+    open_id: option.value,
+    name: option.dataset.name || option.textContent || "",
+    role: "member",
+  }));
+  if (!members.length) throw new Error("请至少选择一名成员");
+  if (el.organizationGroupStatus) el.organizationGroupStatus.textContent = "正在同步飞书...";
+  if (state.organizationGroupMode === "create") {
+    const result = await api("/api/organization/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: el.organizationGroupName?.value.trim() || "", members }),
+    });
+    state.organizationWorkspaceId = result.workspace.id;
+  } else {
+    await api(
+      `/api/organization/workspaces/${encodeURIComponent(state.organizationWorkspaceId)}/members`,
+      { method: "POST", body: JSON.stringify({ members }) },
+    );
+  }
+  closeOrganizationGroupDialog();
+  showToast(state.organizationGroupMode === "create" ? "飞书项目群已创建" : "成员邀请已发送");
+  await refreshOrganizationWorkspaces();
+}
+
+function openOrganizationConvertDialog(memoryId) {
+  const memory = state.organizationMemories.find((item) => item.id === memoryId);
+  if (!memory) throw new Error("组织记忆不存在或已刷新");
+  state.organizationConvertMemoryId = memory.id;
+  el.organizationConvertForm?.reset();
+  if (el.organizationConvertMemoryTitle) el.organizationConvertMemoryTitle.textContent = memory.title;
+  if (el.organizationConvertNoticeId) el.organizationConvertNoticeId.value = memory.related_notice_id || "";
+  if (el.organizationConvertActionTitle) el.organizationConvertActionTitle.value = memory.title;
+  if (el.organizationConvertEvidenceUrl) el.organizationConvertEvidenceUrl.value = memory.evidence_url || "";
+  if (el.organizationConvertStatus) el.organizationConvertStatus.textContent = "";
+  syncOrganizationConvertFields();
+  el.organizationConvertDialog?.showModal();
+}
+
+function syncOrganizationConvertFields() {
+  const factMode = el.organizationConvertTarget?.value === "opportunity_fact";
+  document.querySelectorAll(".organization-fact-convert-field").forEach((field) => {
+    field.hidden = !factMode;
+  });
+  document.querySelectorAll(".organization-action-convert-field").forEach((field) => {
+    field.hidden = factMode;
+  });
+  if (el.organizationConvertFactValue) el.organizationConvertFactValue.required = factMode;
+  if (el.organizationConvertEvidenceUrl) el.organizationConvertEvidenceUrl.required = factMode;
+  if (el.organizationConvertActionTitle) el.organizationConvertActionTitle.required = !factMode;
+  if (el.organizationConvertDueAt) el.organizationConvertDueAt.required = !factMode;
+}
+
+function closeOrganizationConvertDialog() {
+  el.organizationConvertDialog?.close();
+  state.organizationConvertMemoryId = "";
+}
+
+async function submitOrganizationConversion(event) {
+  event.preventDefault();
+  const targetType = el.organizationConvertTarget?.value || "relationship_action";
+  const body = {
+    target_type: targetType,
+    notice_id: el.organizationConvertNoticeId?.value.trim() || "",
+  };
+  if (targetType === "opportunity_fact") {
+    body.facts = {
+      [el.organizationConvertFactField?.value || "purchaser"]:
+        el.organizationConvertFactValue?.value.trim() || "",
+    };
+    body.evidence_url = el.organizationConvertEvidenceUrl?.value.trim() || "";
+  } else {
+    body.title = el.organizationConvertActionTitle?.value.trim() || "";
+    body.due_at = el.organizationConvertDueAt?.value || "";
+    body.priority = el.organizationConvertPriority?.value || "normal";
+  }
+  if (el.organizationConvertStatus) el.organizationConvertStatus.textContent = "正在写入机会台账...";
+  await api(
+    `/api/organization/workspaces/${encodeURIComponent(state.organizationWorkspaceId)}/memories/${encodeURIComponent(state.organizationConvertMemoryId)}/convert`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+  closeOrganizationConvertDialog();
+  showToast(targetType === "opportunity_fact" ? "机会事实已核验" : "机会行动已创建");
+}
+
 async function refreshMemoryWeekly() {
   state.memory = await api("/api/memory/weekly");
   renderMemory(state.memory);
@@ -4097,6 +4394,19 @@ function bindEvents() {
       refreshAll().catch(toastError("刷新失败"));
       return;
     }
+    const convertOrganizationMemoryTarget = event.target.closest(
+      "[data-convert-organization-memory]",
+    );
+    if (convertOrganizationMemoryTarget) {
+      try {
+        openOrganizationConvertDialog(
+          convertOrganizationMemoryTarget.dataset.convertOrganizationMemory,
+        );
+      } catch (error) {
+        toastError("组织记忆转换失败")(error);
+      }
+      return;
+    }
     const deleteOutboxTarget = event.target.closest("[data-delete-outbox-name]");
     if (deleteOutboxTarget) {
       deleteOutboxFile(deleteOutboxTarget.dataset.deleteOutboxName).catch(toastError("删除 Word 失败"));
@@ -4368,6 +4678,47 @@ function bindEvents() {
   el.refreshMemoryButton?.addEventListener("click", () =>
     refreshMemoryWeekly().catch(toastError("用户记忆刷新失败")),
   );
+  el.refreshOrganizationButton?.addEventListener("click", () =>
+    refreshOrganizationWorkspaces().catch(toastError("组织协作刷新失败")),
+  );
+  el.organizationWorkspaceSelect?.addEventListener("change", () => {
+    state.organizationWorkspaceId = el.organizationWorkspaceSelect.value;
+    renderOrganizationSummary();
+    refreshOrganizationMemories().catch(toastError("组织记忆加载失败"));
+  });
+  el.organizationMemorySearch?.addEventListener(
+    "input",
+    debounce(() => refreshOrganizationMemories().catch(toastError("组织记忆检索失败")), 220),
+  );
+  el.organizationMemoryTypeFilter?.addEventListener("change", () =>
+    refreshOrganizationMemories().catch(toastError("组织记忆筛选失败")),
+  );
+  el.organizationMemoryForm?.addEventListener("submit", (event) =>
+    saveOrganizationMemory(event).catch(toastError("组织记忆保存失败")),
+  );
+  el.createOrganizationWorkspaceButton?.addEventListener("click", () =>
+    openOrganizationGroupDialog("create").catch(toastError("飞书成员加载失败")),
+  );
+  el.inviteOrganizationMembersButton?.addEventListener("click", () =>
+    openOrganizationGroupDialog("invite").catch(toastError("飞书成员加载失败")),
+  );
+  el.organizationGroupForm?.addEventListener("submit", (event) =>
+    submitOrganizationGroup(event).catch(toastError("飞书群同步失败")),
+  );
+  el.closeOrganizationGroupButton?.addEventListener("click", closeOrganizationGroupDialog);
+  el.cancelOrganizationGroupButton?.addEventListener("click", closeOrganizationGroupDialog);
+  el.organizationGroupDialog?.addEventListener("click", (event) => {
+    if (event.target === el.organizationGroupDialog) closeOrganizationGroupDialog();
+  });
+  el.organizationConvertTarget?.addEventListener("change", syncOrganizationConvertFields);
+  el.organizationConvertForm?.addEventListener("submit", (event) =>
+    submitOrganizationConversion(event).catch(toastError("组织记忆转换失败")),
+  );
+  el.closeOrganizationConvertButton?.addEventListener("click", closeOrganizationConvertDialog);
+  el.cancelOrganizationConvertButton?.addEventListener("click", closeOrganizationConvertDialog);
+  el.organizationConvertDialog?.addEventListener("click", (event) => {
+    if (event.target === el.organizationConvertDialog) closeOrganizationConvertDialog();
+  });
   el.saveMemoryButton?.addEventListener("click", () =>
     saveMemoryWeekly().catch(toastError("用户记忆保存失败")),
   );
@@ -4441,6 +4792,8 @@ async function init() {
   applyDepthProfile(el.searchDepthSelect?.value || "standard");
   syncActionMode();
   await refreshAll();
+  const requestedView = new URLSearchParams(window.location.search).get("view") || "";
+  if (document.getElementById(requestedView)?.classList.contains("view")) showView(requestedView);
 }
 
 init().catch((error) => showToast(`页面初始化失败：${error.message}`));

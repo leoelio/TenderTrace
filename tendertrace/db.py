@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 
 DDL = (
@@ -542,6 +542,74 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS organization_workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        feishu_chat_id TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_by TEXT NOT NULL DEFAULT 'admin',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS organization_members (
+        workspace_id TEXT NOT NULL,
+        member_open_id TEXT NOT NULL,
+        member_name TEXT NOT NULL DEFAULT '',
+        role TEXT NOT NULL DEFAULT 'member',
+        status TEXT NOT NULL DEFAULT 'active',
+        added_by TEXT NOT NULL DEFAULT 'admin',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (workspace_id, member_open_id),
+        FOREIGN KEY (workspace_id) REFERENCES organization_workspaces(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS organization_memories (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        memory_type TEXT NOT NULL DEFAULT 'note',
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_message_id TEXT,
+        sender_open_id TEXT,
+        related_notice_id TEXT,
+        evidence_url TEXT,
+        content_hash TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (workspace_id, source_message_id),
+        UNIQUE (workspace_id, content_hash),
+        FOREIGN KEY (workspace_id) REFERENCES organization_workspaces(id),
+        FOREIGN KEY (related_notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS organization_memory_events (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        memory_id TEXT,
+        action TEXT NOT NULL,
+        actor_open_id TEXT,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (workspace_id) REFERENCES organization_workspaces(id),
+        FOREIGN KEY (memory_id) REFERENCES organization_memories(id)
+    )
+    """,
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS organization_memories_fts USING fts5(
+        memory_id UNINDEXED,
+        workspace_id UNINDEXED,
+        title,
+        content
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS source_incidents (
         artifact_key TEXT PRIMARY KEY,
         status TEXT NOT NULL DEFAULT 'open',
@@ -614,6 +682,11 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_organization_workspaces_status ON organization_workspaces(status, updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_organization_members_workspace ON organization_members(workspace_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_organization_memories_workspace ON organization_memories(workspace_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_organization_memories_notice ON organization_memories(related_notice_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_organization_memory_events_workspace ON organization_memory_events(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_source_incidents_status ON source_incidents(status, updated_at)",
 )
 

@@ -26,7 +26,7 @@ PRIORITY_LABELS = {
     "critical": "紧急",
 }
 STATUSES = {"open", "completed", "cancelled"}
-SOURCE_TYPES = {"manual", "stakeholder_strategy", "stage_gap"}
+SOURCE_TYPES = {"manual", "stakeholder_strategy", "stage_gap", "organization_memory"}
 
 
 @dataclass(frozen=True)

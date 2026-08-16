@@ -37,6 +37,46 @@ FEISHU_ENV_KEYS = (
 
 
 class FeishuIntegrationTests(unittest.TestCase):
+    def test_create_chat_and_invite_members_use_official_group_endpoints(self) -> None:
+        old_env = _clear_env(FEISHU_ENV_KEYS)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / ".env.local").write_text(
+                    "FEISHU_ENABLED=true\nFEISHU_APP_ID=cli_test\nFEISHU_APP_SECRET=secret-value\n",
+                    encoding="utf-8",
+                )
+                settings = Settings.load(root)
+                seen: list[str] = []
+
+                def handler(request: httpx.Request) -> httpx.Response:
+                    seen.append(request.url.path)
+                    if request.url.path.endswith("/tenant_access_token/internal"):
+                        return httpx.Response(200, json={"code": 0, "tenant_access_token": "token"})
+                    payload = json.loads(request.content.decode("utf-8"))
+                    if request.url.path.endswith("/im/v1/chats"):
+                        self.assertEqual(request.url.params["user_id_type"], "open_id")
+                        self.assertEqual(payload["user_id_list"], ["ou_owner"])
+                        self.assertTrue(payload["uuid"])
+                        return httpx.Response(200, json={"code": 0, "data": {"chat_id": "oc_team"}})
+                    self.assertEqual(request.url.path, "/open-apis/im/v1/chats/oc_team/members")
+                    self.assertEqual(request.url.params["member_id_type"], "open_id")
+                    self.assertEqual(payload["id_list"], ["ou_partner"])
+                    return httpx.Response(200, json={"code": 0, "data": {"invalid_id_list": []}})
+
+                client = FeishuClient(
+                    settings,
+                    client=httpx.Client(transport=httpx.MockTransport(handler)),
+                )
+                chat = client.create_chat(name="TenderTrace 项目组", member_open_ids=["ou_owner"])
+                invited = client.add_chat_members("oc_team", ["ou_partner"])
+        finally:
+            _restore_env(old_env)
+
+        self.assertEqual(chat["chat_id"], "oc_team")
+        self.assertEqual(invited["invalid_id_list"], [])
+        self.assertIn("/open-apis/im/v1/chats/oc_team/members", seen)
+
     def test_status_is_safe_and_secret_free(self) -> None:
         old_env = _clear_env(FEISHU_ENV_KEYS)
         try:

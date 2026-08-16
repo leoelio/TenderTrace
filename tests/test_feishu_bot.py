@@ -218,6 +218,40 @@ class FeishuBotTests(unittest.TestCase):
         self.assertEqual(captured["feishu_receive_id"], "oc_chat")
         self.assertIn("订阅已保存", client.replies[0][1])
 
+    def test_explicit_group_memory_commands_record_and_search_without_running_query(self) -> None:
+        def should_not_run(**kwargs):
+            self.fail("organization memory command must not trigger tender collection")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            record_event = accept_feishu_message_event(
+                settings,
+                _event_payload("evt-memory", "msg-memory", "记录：客户要求支持国产数据库"),
+            )
+            search_event = accept_feishu_message_event(
+                settings,
+                _event_payload("evt-search", "msg-search", "查询组织记忆：国产数据库"),
+            )
+            client = FakeFeishuClient()
+            recorded = process_feishu_message_event(
+                settings,
+                record_event.event_id,
+                client=client,
+                run_func=should_not_run,
+            )
+            searched = process_feishu_message_event(
+                settings,
+                search_event.event_id,
+                client=client,
+                run_func=should_not_run,
+            )
+
+        self.assertEqual(recorded.command_kind, "organization_record")
+        self.assertEqual(searched.command_kind, "organization_search")
+        self.assertIn("已沉淀为组织记忆", client.replies[0][1])
+        self.assertIn("客户要求支持国产数据库", client.replies[1][1])
+        self.assertIn("organizationView", client.replies[1][1])
+
     def test_non_text_message_is_audited_without_execution(self) -> None:
         payload = _event_payload("evt-file", "msg-file", "")
         payload["event"]["message"]["message_type"] = "file"

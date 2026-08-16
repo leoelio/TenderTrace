@@ -91,6 +91,16 @@ from tendertrace.opportunity import (
 )
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
 from tendertrace.opportunity_outcomes import record_outcome
+from tendertrace.organization_memory import (
+    add_members as add_organization_members,
+    create_workspace as create_organization_workspace,
+    get_memory as get_organization_memory,
+    get_workspace as get_organization_workspace,
+    list_workspaces as list_organization_workspaces,
+    record_memory as record_organization_memory,
+    record_conversion as record_organization_memory_conversion,
+    search_memories as search_organization_memories,
+)
 from tendertrace.opportunity_relationship_actions import (
     create_relationship_action,
     relationship_action as get_relationship_action,
@@ -394,6 +404,7 @@ def create_app():
             statuses=ACTIVE_SOURCE_INCIDENT_STATUSES,
             limit=200,
         )
+        organization_spaces = list_organization_workspaces(settings, limit=200)
         issues: list[dict[str, str]] = []
         if not message["configured"]:
             issues.append({"code": "message_app", "message": "消息应用尚未启用或凭据不完整"})
@@ -442,6 +453,14 @@ def create_app():
                     "long_connection_available": long_connection_available,
                     "webhook_ready": webhook_ready,
                     "last_event": latest_message_event,
+                },
+                "organization_collaboration": {
+                    "ready": bool(
+                        message["configured"]
+                        and (long_connection_available or webhook_ready)
+                    ),
+                    "workspace_count": len(organization_spaces),
+                    "memory_count": sum(item.memory_count for item in organization_spaces),
                 },
                 "agent_service": {"ready": bool(agent["configured"])},
                 "opportunity_cards": {"ready": bool(message["configured"])},
@@ -573,6 +592,189 @@ def create_app():
         except FeishuError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "sent", "response": result}
+
+    @app.get("/api/organization/workspaces")
+    def organization_workspaces(limit: int = 100) -> dict[str, object]:
+        return {
+            "items": [item.to_dict() for item in list_organization_workspaces(settings, limit=limit)]
+        }
+
+    @app.post("/api/organization/workspaces")
+    def create_organization_workspace_api(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        name = str(request.get("name") or "").strip()
+        members = request.get("members") if isinstance(request.get("members"), list) else []
+        normalized_members = [
+            {
+                "open_id": str(item.get("open_id") or ""),
+                "name": str(item.get("name") or ""),
+                "role": str(item.get("role") or "member"),
+            }
+            for item in members
+            if isinstance(item, dict) and str(item.get("open_id") or "").strip()
+        ]
+        try:
+            feishu = FeishuClient(settings)
+            chat = feishu.create_chat(
+                name=name,
+                member_open_ids=[item["open_id"] for item in normalized_members],
+                description="TenderTrace 机会协作与组织记忆工作区",
+                client_uuid=str(uuid4()),
+            )
+            chat_id = str(chat.get("chat_id") or "").strip()
+            if not chat_id:
+                raise FeishuError("Feishu create chat response is missing chat_id")
+            workspace = create_organization_workspace(
+                settings,
+                name=name,
+                feishu_chat_id=chat_id,
+                members=normalized_members,
+                actor=str(request.get("actor") or "admin"),
+            )
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "created", "workspace": workspace.to_dict()}
+
+    @app.post("/api/organization/workspaces/{workspace_id}/members")
+    def add_organization_members_api(
+        workspace_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        workspace = get_organization_workspace(settings, workspace_id)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="organization workspace not found")
+        members = request.get("members") if isinstance(request.get("members"), list) else []
+        normalized_members = [
+            {
+                "open_id": str(item.get("open_id") or ""),
+                "name": str(item.get("name") or ""),
+                "role": str(item.get("role") or "member"),
+            }
+            for item in members
+            if isinstance(item, dict) and str(item.get("open_id") or "").strip()
+        ]
+        try:
+            FeishuClient(settings).add_chat_members(
+                workspace.feishu_chat_id,
+                [item["open_id"] for item in normalized_members],
+            )
+            stored = add_organization_members(
+                settings,
+                workspace_id,
+                normalized_members,
+                actor=str(request.get("actor") or "admin"),
+            )
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "invited", "members": stored}
+
+    @app.get("/api/organization/workspaces/{workspace_id}/memories")
+    def organization_memories(
+        workspace_id: str,
+        query: str = "",
+        memory_type: str = "",
+        limit: int = 50,
+    ) -> dict[str, object]:
+        try:
+            items = search_organization_memories(
+                settings,
+                workspace_id=workspace_id,
+                query=query,
+                memory_type=memory_type,
+                limit=limit,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"items": [item.to_dict() for item in items]}
+
+    @app.post("/api/organization/workspaces/{workspace_id}/memories")
+    def record_organization_memory_api(
+        workspace_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            memory = record_organization_memory(
+                settings,
+                workspace_id=workspace_id,
+                content=str(request.get("content") or ""),
+                title=str(request.get("title") or ""),
+                memory_type=str(request.get("memory_type") or "note"),
+                source_type="web",
+                related_notice_id=str(request.get("related_notice_id") or ""),
+                evidence_url=str(request.get("evidence_url") or ""),
+                actor=str(request.get("actor") or "admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "recorded", "memory": memory.to_dict()}
+
+    @app.post("/api/organization/workspaces/{workspace_id}/memories/{memory_id}/convert")
+    def convert_organization_memory_api(
+        workspace_id: str,
+        memory_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        memory = get_organization_memory(
+            settings,
+            workspace_id=workspace_id,
+            memory_id=memory_id,
+        )
+        if memory is None:
+            raise HTTPException(status_code=404, detail="organization memory not found")
+        target_type = str(request.get("target_type") or "").strip()
+        notice_id = str(request.get("notice_id") or memory.related_notice_id).strip()
+        actor = str(request.get("actor") or "admin")
+        try:
+            if target_type == "opportunity_fact":
+                facts = request.get("facts") if isinstance(request.get("facts"), dict) else {}
+                source_url = str(request.get("evidence_url") or memory.evidence_url)
+                result: object = upsert_verified_facts(
+                    settings,
+                    notice_id=notice_id,
+                    facts=facts,
+                    source_url=source_url,
+                    evidence_text=memory.content,
+                    note=f"来自组织记忆：{memory.title}",
+                    actor=actor,
+                    channel="organization_memory",
+                )
+                target_id = notice_id
+            elif target_type == "relationship_action":
+                action = create_relationship_action(
+                    settings,
+                    notice_id=notice_id,
+                    title=str(request.get("title") or memory.title),
+                    due_at=str(request.get("due_at") or ""),
+                    stakeholder_id=str(request.get("stakeholder_id") or ""),
+                    action_type=str(request.get("action_type") or "internal_alignment"),
+                    priority=str(request.get("priority") or "normal"),
+                    assignee_member_id=str(request.get("assignee_member_id") or ""),
+                    source_type="organization_memory",
+                    source_ref=memory.id,
+                    actor=actor,
+                )
+                result = action.to_dict()
+                target_id = action.id
+            else:
+                raise ValueError("target_type must be opportunity_fact or relationship_action")
+            record_organization_memory_conversion(
+                settings,
+                workspace_id=workspace_id,
+                memory_id=memory_id,
+                target_type=target_type,
+                target_id=target_id,
+                actor=actor,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "converted", "target_type": target_type, "result": result}
 
     @app.post("/api/intent/parse")
     def parse_intent(request: dict[str, object] = Body(...)) -> dict[str, object]:

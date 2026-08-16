@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P50</strong> · Opportunity Outcome Review · Evidence-backed Learning · Feishu Result Ledger
+  <strong>Current stage: P51</strong> · Feishu Group Collaboration · Organization Memory · Shared Workflows
 </p>
 
 ---
@@ -58,6 +58,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
 - 竞争情报：从结果/合同公告提取成交供应商、成交金额和证据摘录，聚合同品类历史供应商；无法可靠提取时明确标记样本不足。
 - 投标结果复盘：赢标或失标必须记录主因、经验、后续行动和证据；已确认结果回流到同品类胜率、败因分布、竞品与成交价格基准，并同步到 Web、飞书多维表格和审计事件流。
+- 组织记忆与群协作：Web 可创建飞书项目群并邀请授权成员；群内通过显式“记录/查询”指令沉淀和检索共享知识，普通招标问题继续触发报告或订阅。组织记忆按群工作区隔离，与个人画像分表存储，并可审计地转换为机会事实或客户行动。
 - 需求审阅：按技术规格、兼容集成、交付实施、验收、服务、资质、评分和安全 8 个维度检查当前采集文本，并给出待核对项与优化建议。
 - 飞书记录视图：切换多维表格记录时同步读取本地机会库的负责人、销售阶段、资格门禁、投标决策与任务状态；可回写研判、提交证据核验，并在同一视图执行阶段有效的 Go/Hold/No-Go、投标准备、结果和归档动作。首次认领必须通过交互卡获取成员真实 `open_id`，不会把 Base 用户标识误作任务负责人。
 - 统一动作契约：工作流域层根据销售阶段、资格门禁与 Go 决策动态生成带版本的动作清单、阻断原因、展示语义和身份要求；Web、飞书卡片与记录视图消费同一契约，不再各自硬编码流程分支。
@@ -514,8 +515,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P50
-- 348 automated tests pass, including 426 subtests.
+- Current stage: P51
+- 353 automated tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -582,6 +583,7 @@ The current architecture is local-first: background ingestion continuously store
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
 - Competition intelligence extracted from result and contract notices, including awarded suppliers, amounts, evidence excerpts, and comparable-category supplier history.
 - Evidence-backed bid outcome reviews require a primary reason, lessons, follow-up action, and source evidence. Confirmed outcomes feed category win rates, loss-reason distributions, competitors, and award benchmarks across Web, Feishu Bitable, and the audit stream.
+- Feishu group workspaces can be created from the Web UI with authorized members. Explicit record and search commands operate on group-scoped organization memory, while ordinary tender questions still run reports or subscriptions. Organization memory is physically separated from personal profiles and can be converted, with audit provenance, into verified opportunity facts or customer actions.
 - An eight-dimension requirement review covering specifications, integration, delivery, acceptance, service, qualifications, scoring, and security; missing evidence is explicitly labeled for verification.
 - A Feishu record-view workflow portal that reloads authoritative ownership, stage, qualification, decision, and task state as the selected row changes; it writes intelligence, verifies evidence-backed facts, and executes stage-valid actions through the same auditable gates as the Web UI. Initial claiming remains an interactive-card action so a Base user identifier is never mistaken for the member `open_id` required by Task v2.
 - A versioned, server-driven action contract that derives labels, intent, availability, gate reasons, decision input, and identity requirements from the workflow domain. Web, interactive Feishu cards, and the record-view extension consume the same contract instead of duplicating stage branches.
@@ -995,8 +997,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P50
-- 348 automated tests pass, including 426 subtests.
+- Current stage: P51
+- 353 automated tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
