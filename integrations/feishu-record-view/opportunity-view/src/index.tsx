@@ -84,15 +84,26 @@ type OpportunityWorkspace = {
     workflow?: Workflow;
     qualification?: Qualification;
     action_state?: Record<string, unknown>;
+    action_contract?: ActionContract;
   };
 };
 
 type WorkflowAction = {
   action: string;
   label: string;
-  icon: LucideIcon;
-  decision?: boolean;
-  tone?: string;
+  intent: string;
+  group: string;
+  enabled: boolean;
+  blocked_reasons: string[];
+  accepts_reason: boolean;
+  requires_member_identity: boolean;
+};
+
+type ActionContract = {
+  version: number;
+  stage: string;
+  stage_label: string;
+  actions: WorkflowAction[];
 };
 
 class ApiError extends Error {
@@ -176,32 +187,18 @@ async function request(path: string, options: RequestInit = {}) {
   return response.json();
 }
 
-function workflowActions(workflow: Workflow): WorkflowAction[] {
-  if (workflow.stage === "identified" || workflow.stage === "archived") return [];
-  if (workflow.stage === "qualifying") {
-    return [
-      { action: "pursue", label: "确认机会", icon: Flag },
-      { action: "hold", label: "暂缓", icon: CirclePause, decision: true },
-      { action: "reject", label: "No-Go", icon: CircleX, decision: true, tone: "danger" },
-    ];
-  }
-  if (workflow.stage === "pursuing") {
-    return [
-      workflow.decision === "go"
-        ? { action: "prepare_bid", label: "进入投标准备", icon: CheckCircle2 }
-        : { action: "approve_bid", label: "批准 Go", icon: CheckCircle2, decision: true },
-      { action: "hold", label: "暂缓", icon: CirclePause, decision: true },
-      { action: "reject", label: "No-Go", icon: CircleX, decision: true, tone: "danger" },
-    ];
-  }
-  if (workflow.stage === "bidding") {
-    return [
-      { action: "mark_won", label: "标记中标", icon: Trophy },
-      { action: "mark_lost", label: "标记失标", icon: CircleX, tone: "danger" },
-      { action: "hold", label: "暂缓", icon: CirclePause, decision: true },
-    ];
-  }
-  return [{ action: "archive", label: "归档", icon: Archive }];
+function actionIcon(action: string): LucideIcon {
+  return {
+    archive: Archive,
+    approve_bid: CheckCircle2,
+    claim: Send,
+    hold: CirclePause,
+    mark_lost: CircleX,
+    mark_won: Trophy,
+    prepare_bid: CheckCircle2,
+    pursue: Flag,
+    reject: CircleX,
+  }[action] || Flag;
 }
 
 function payloadFrom(values: Record<string, string>) {
@@ -280,7 +277,9 @@ function App() {
   const factEvidenceReady = Boolean(context?.values["事实核验证据"]?.trim());
   const workflow = workspace?.opportunity?.workflow || null;
   const qualification = workspace?.opportunity?.qualification || null;
-  const availableActions = workflow ? workflowActions(workflow) : [];
+  const availableActions = workspace?.opportunity?.action_contract?.actions || [];
+  const claimAction = availableActions.find((item) => item.requires_member_identity);
+  const directActions = availableActions.filter((item) => !item.requires_member_identity);
   const quality = intelligence?.scores || {};
   const marketBenchmark = intelligence?.market_context?.benchmark;
   const marketContextSignals = intelligence?.market_context?.signals || [];
@@ -495,14 +494,17 @@ function App() {
                 {workflow.decision_reason && (
                   <p className="workflow-reason">{workflow.decision_reason}{workflow.decision_by ? ` · ${workflow.decision_by}` : ""}</p>
                 )}
-                {workflow.stage === "identified" ? (
+                {claimAction && (
                   <div className="claim-gate">
                     <p>首次认领需由成员在飞书机会卡中确认，认领后才能正确分派任务。</p>
-                    <button className="primary" onClick={sendFeishu}><Send size={16} />发送认领卡</button>
+                    <button className="primary" disabled={!claimAction.enabled} onClick={sendFeishu}>
+                      <Send size={16} />发送认领卡
+                    </button>
                   </div>
-                ) : availableActions.length ? (
+                )}
+                {directActions.length ? (
                   <>
-                    {availableActions.some((item) => item.decision) && (
+                    {directActions.some((item) => item.accepts_reason) && (
                       <label className="decision-reason">
                         决策依据
                         <textarea
@@ -514,22 +516,30 @@ function App() {
                       </label>
                     )}
                     <div className="workflow-actions">
-                      {availableActions.map((item) => {
-                        const Icon = item.icon;
+                      {directActions.map((item) => {
+                        const Icon = actionIcon(item.action);
                         return (
                           <button
-                            className={item.tone || ""}
-                            disabled={Boolean(acting)}
+                            className={item.intent === "danger" ? "danger" : ""}
+                            disabled={Boolean(acting) || !item.enabled}
                             key={item.action}
                             onClick={() => applyWorkflowAction(item.action)}
+                            title={item.blocked_reasons.join("；")}
                           >
                             <Icon size={15} />{acting === item.action ? "处理中" : item.label}
                           </button>
                         );
                       })}
                     </div>
+                    {directActions.some((item) => !item.enabled) && (
+                      <div className="workflow-blockers">
+                        {directActions
+                          .filter((item) => !item.enabled)
+                          .map((item) => <p key={item.action}>{item.label}：{item.blocked_reasons.join("、")}</p>)}
+                      </div>
+                    )}
                   </>
-                ) : <p className="workflow-hint">当前阶段没有待执行动作。</p>}
+                ) : !claimAction && <p className="workflow-hint">当前阶段没有待执行动作。</p>}
               </>
             ) : (
               <p className="workflow-hint">

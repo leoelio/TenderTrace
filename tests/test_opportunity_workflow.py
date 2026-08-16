@@ -15,6 +15,7 @@ from tendertrace.workflow import (
     apply_action,
     get_workflow,
     update_workflow,
+    workflow_action_contract,
 )
 
 
@@ -265,9 +266,44 @@ class OpportunityWorkflowTests(unittest.TestCase):
                 if element.get("tag") == "action"
                 for button in element["actions"]
             ]
+            identified_contract = workflow_action_contract(workflow)
+            apply_action(
+                settings,
+                "notice-1",
+                "claim",
+                actor_open_id="ou_owner",
+            )
+            qualifying_contract = workflow_action_contract(
+                get_workflow(settings, "notice-1"),
+                {"blockers": {"pursue": ["采购主体"]}},
+            )
+            qualifying_card = build_opportunity_card(
+                {
+                    **opportunity,
+                    "qualification": {"blockers": {"pursue": ["采购主体"]}},
+                },
+                get_workflow(settings, "notice-1"),
+                next_action="补齐采购主体",
+            )
+            qualifying_actions = [
+                button["value"]["action"]
+                for element in qualifying_card["elements"]
+                if element.get("tag") == "action"
+                for button in element["actions"]
+            ]
 
         self.assertTrue(card["config"]["update_multi"])
         self.assertEqual(actions, ["claim", "hold", "reject"])
+        self.assertEqual(identified_contract["version"], 1)
+        self.assertTrue(identified_contract["actions"][0]["requires_member_identity"])
+        self.assertEqual(qualifying_contract["actions"][0]["action"], "pursue")
+        self.assertFalse(qualifying_contract["actions"][0]["enabled"])
+        self.assertEqual(
+            qualifying_contract["actions"][0]["blocked_reasons"],
+            ["采购主体"],
+        )
+        self.assertEqual(qualifying_actions, ["pursue", "hold", "reject"])
+        self.assertIn("待补充", str(qualifying_card))
 
 
 def _settings(root: Path) -> Settings:

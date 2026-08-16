@@ -135,6 +135,10 @@ section { padding: 16px 0; border-bottom: 1px solid #e8edf4; }
 .decision-reason textarea:focus { border-color: #1463ff; outline: 2px solid rgba(20, 99, 255, .1); }
 .workflow-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .workflow-actions button.danger { color: #b42318; border-color: #f3c7c3; background: #fffafa; }
+.workflow-actions button:disabled { cursor: not-allowed; opacity: .52; }
+.workflow-blockers { padding: 8px 10px; border-left: 2px solid #d49b16; background: #fffaf0; }
+.workflow-blockers p { color: #7b570c; font-size: 10px; line-height: 1.5; }
+.workflow-blockers p + p { margin-top: 4px; }
 
 .supplier-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .supplier-list span { padding: 5px 7px; border: 1px solid #dfe6ef; border-radius: 5px; color: #445168; background: #f8fafc; font-size: 10px; }

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P41</strong> · Feishu Workflow Portal · Identity-safe Collaboration · Enterprise Glass UI
+  <strong>Current stage: P42</strong> · Server-driven Action Contract · Identity-safe Collaboration · Enterprise Glass UI
 </p>
 
 ---
@@ -51,6 +51,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 竞争情报：从结果/合同公告提取成交供应商、成交金额和证据摘录，聚合同品类历史供应商；无法可靠提取时明确标记样本不足。
 - 需求审阅：按技术规格、兼容集成、交付实施、验收、服务、资质、评分和安全 8 个维度检查当前采集文本，并给出待核对项与优化建议。
 - 飞书记录视图：切换多维表格记录时同步读取本地机会库的负责人、销售阶段、资格门禁、投标决策与任务状态；可回写研判、提交证据核验，并在同一视图执行阶段有效的 Go/Hold/No-Go、投标准备、结果和归档动作。首次认领必须通过交互卡获取成员真实 `open_id`，不会把 Base 用户标识误作任务负责人。
+- 统一动作契约：工作流域层根据销售阶段、资格门禁与 Go 决策动态生成带版本的动作清单、阻断原因、展示语义和身份要求；Web、飞书卡片与记录视图消费同一契约，不再各自硬编码流程分支。
 - 清洗去重：正文噪声清理、URL 规范化、项目编号提取、SimHash 聚类。
 - 附件抽取：支持受限下载并抽取 PDF、DOCX、XLSX 正文片段。
 - 证据链：保存来源链接、正文摘录、附件快照、字段级证据和事实校验结果。
@@ -479,7 +480,7 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P41
+- Current stage: P42
 - 295 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
@@ -540,6 +541,7 @@ The current architecture is local-first: background ingestion continuously store
 - Competition intelligence extracted from result and contract notices, including awarded suppliers, amounts, evidence excerpts, and comparable-category supplier history.
 - An eight-dimension requirement review covering specifications, integration, delivery, acceptance, service, qualifications, scoring, and security; missing evidence is explicitly labeled for verification.
 - A Feishu record-view workflow portal that reloads authoritative ownership, stage, qualification, decision, and task state as the selected row changes; it writes intelligence, verifies evidence-backed facts, and executes stage-valid actions through the same auditable gates as the Web UI. Initial claiming remains an interactive-card action so a Base user identifier is never mistaken for the member `open_id` required by Task v2.
+- A versioned, server-driven action contract that derives labels, intent, availability, gate reasons, decision input, and identity requirements from the workflow domain. Web, interactive Feishu cards, and the record-view extension consume the same contract instead of duplicating stage branches.
 - Text cleaning, URL canonicalization, project-number extraction, SimHash clustering.
 - Bounded attachment download and extraction for PDF, DOCX, and XLSX.
 - Evidence chain with source links, excerpts, attachment snapshots, and fact checks.
@@ -925,7 +927,7 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P41
+- Current stage: P42
 - 295 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.

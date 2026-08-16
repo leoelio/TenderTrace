@@ -48,6 +48,27 @@ ACTION_FROM_STAGES = {
     "archive": {"identified", "qualifying", "pursuing", "bidding", "won", "lost"},
 }
 
+ACTION_PRESENTATION = {
+    "claim": ("认领机会", "primary", False, True),
+    "pursue": ("完成机会确认", "primary", False, False),
+    "approve_bid": ("Go · 批准投标", "primary", True, False),
+    "prepare_bid": ("进入投标准备", "primary", False, False),
+    "mark_won": ("标记中标", "primary", False, False),
+    "mark_lost": ("标记未中标", "default", False, False),
+    "hold": ("暂缓", "default", True, False),
+    "reject": ("No-Go", "danger", True, False),
+    "archive": ("归档机会", "default", False, False),
+}
+
+STAGE_ACTIONS = {
+    "identified": ("claim", "hold", "reject"),
+    "qualifying": ("pursue", "hold", "reject"),
+    "bidding": ("mark_won", "mark_lost", "hold", "reject"),
+    "won": ("archive",),
+    "lost": ("archive",),
+    "archived": (),
+}
+
 
 class WorkflowGateError(ValueError):
     def __init__(self, action: str, reasons: list[str]) -> None:
@@ -83,6 +104,45 @@ class OpportunityWorkflow:
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+def workflow_action_contract(
+    workflow: OpportunityWorkflow,
+    qualification: dict[str, Any] | None = None,
+) -> dict[str, object]:
+    qualification = qualification or {}
+    if workflow.stage == "pursuing":
+        action_names = (
+            "prepare_bid" if workflow.decision == "go" else "approve_bid",
+            "hold",
+            "reject",
+        )
+    else:
+        action_names = STAGE_ACTIONS.get(workflow.stage, ())
+    actions: list[dict[str, object]] = []
+    for index, action in enumerate(action_names):
+        label, intent, accepts_reason, requires_member_identity = ACTION_PRESENTATION[action]
+        blockers = action_blockers(qualification, action)
+        if action == "prepare_bid" and workflow.decision != "go":
+            blockers.append("投标决策尚未通过 Go 审批")
+        actions.append(
+            {
+                "action": action,
+                "label": label,
+                "intent": intent,
+                "group": "primary" if index == 0 and intent == "primary" else "secondary",
+                "enabled": not blockers,
+                "blocked_reasons": blockers,
+                "accepts_reason": accepts_reason,
+                "requires_member_identity": requires_member_identity,
+            }
+        )
+    return {
+        "version": 1,
+        "stage": workflow.stage,
+        "stage_label": workflow.stage_label,
+        "actions": actions,
+    }
 
 
 def get_workflow(settings: Settings, notice_id: str) -> OpportunityWorkflow:

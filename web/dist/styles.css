@@ -4902,6 +4902,14 @@ tbody tr:hover {
   white-space: nowrap;
 }
 
+.opportunity-actions button:disabled {
+  color: var(--text-muted);
+  border-color: var(--line-soft);
+  background: rgba(245, 247, 250, 0.72);
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
 .opportunity-detail-dialog::backdrop {
   background: rgba(30, 45, 66, 0.34);
   backdrop-filter: blur(5px);

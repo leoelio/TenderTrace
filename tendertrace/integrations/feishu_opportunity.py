@@ -10,7 +10,12 @@ from tendertrace.config import Settings
 from tendertrace.delivery.feishu_bitable import update_opportunity_workflow_in_bitable
 from tendertrace.integrations.feishu import FeishuClient
 from tendertrace.qualification import assess_qualification, policy_from_settings
-from tendertrace.workflow import OpportunityWorkflow, get_workflow, update_workflow
+from tendertrace.workflow import (
+    OpportunityWorkflow,
+    get_workflow,
+    update_workflow,
+    workflow_action_contract,
+)
 
 
 @dataclass(frozen=True)
@@ -222,32 +227,22 @@ def _card_action_rows(
     opportunity: dict[str, Any],
     workflow: OpportunityWorkflow,
 ) -> list[dict[str, Any]]:
-    stage = workflow.stage
     primary: list[dict[str, Any]] = []
     secondary: list[dict[str, Any]] = []
-    if stage == "identified":
-        primary.append(_action_button("认领机会", "claim", opportunity))
-    elif stage == "qualifying":
-        primary.append(_action_button("完成机会确认", "pursue", opportunity))
-    elif stage == "pursuing":
-        if workflow.decision == "go":
-            primary.append(_action_button("进入投标准备", "prepare_bid", opportunity))
-        else:
-            primary.append(_action_button("Go · 批准投标", "approve_bid", opportunity))
-    elif stage == "bidding":
-        primary.extend(
-            (
-                _action_button("标记中标", "mark_won", opportunity),
-                _action_button("标记未中标", "mark_lost", opportunity, button_type="default"),
-            )
-        )
-    elif stage in {"won", "lost"}:
-        primary.append(_action_button("归档机会", "archive", opportunity))
-    if stage in {"identified", "qualifying", "pursuing", "bidding"}:
-        secondary.extend(
-            (
-                _action_button("暂缓", "hold", opportunity, button_type="default"),
-                _action_button("No-Go", "reject", opportunity, button_type="danger"),
+    contract = workflow_action_contract(
+        workflow,
+        _mapping(opportunity.get("qualification")),
+    )
+    for descriptor in contract["actions"]:
+        target = primary if descriptor["group"] == "primary" else secondary
+        enabled = bool(descriptor["enabled"])
+        label = str(descriptor["label"])
+        target.append(
+            _action_button(
+                label if enabled else f"{label} · 待补充",
+                str(descriptor["action"]),
+                opportunity,
+                button_type=str(descriptor["intent"]) if enabled else "default",
             )
         )
     return [

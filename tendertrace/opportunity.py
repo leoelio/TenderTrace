@@ -15,7 +15,7 @@ from tendertrace.intent.topic import extract_topic
 from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.retrieval import parse_date
-from tendertrace.workflow import workflow_snapshots
+from tendertrace.workflow import workflow_action_contract, workflow_snapshots
 
 
 LEVELS = (
@@ -287,7 +287,8 @@ def list_opportunities(
             continue
         _attach_market_context(intelligence, payload, market)
         structured = _mapping(payload.get("structured_fields"))
-        workflow = workflows[notice_id].to_dict()
+        workflow_snapshot = workflows[notice_id]
+        workflow = workflow_snapshot.to_dict()
         item: dict[str, object] = {
             "notice_id": notice_id,
             "title": notice.title,
@@ -312,6 +313,10 @@ def list_opportunities(
             workflow,
             policy=qualification_policy,
         ).to_dict()
+        item["action_contract"] = workflow_action_contract(
+            workflow_snapshot,
+            _mapping(item.get("qualification")),
+        )
         item["action_state"] = _opportunity_action_state(
             item,
             decision_sla_hours=settings.decision_sla_hours,
@@ -404,6 +409,10 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         workflow.to_dict(),
         policy=policy_from_settings(settings),
     ).to_dict()
+    item["action_contract"] = workflow_action_contract(
+        workflow,
+        _mapping(item.get("qualification")),
+    )
     item["action_state"] = _opportunity_action_state(
         item,
         decision_sla_hours=settings.decision_sla_hours,

@@ -1696,26 +1696,16 @@ function decisionPipelineValue(label, value, tone) {
 }
 
 function opportunityActionButtons(item) {
-  const workflow = item.workflow || {};
-  const stage = workflow.stage || "identified";
-  const buttons = [];
-  const add = (action, label, className = "ghost-button") => {
-    buttons.push(`<button class="${className}" type="button" data-opportunity-action="${action}" data-opportunity-id="${escapeHtml(item.notice_id)}">${label}</button>`);
-  };
-  if (stage === "identified") add("claim", "认领机会", "primary-lite-button");
-  if (stage === "qualifying") add("pursue", "完成机会确认", "primary-lite-button");
-  if (stage === "pursuing" && workflow.decision !== "go") add("approve_bid", "Go · 批准投标", "primary-lite-button");
-  if (stage === "pursuing" && workflow.decision === "go") add("prepare_bid", "进入投标准备", "primary-lite-button");
-  if (stage === "bidding") {
-    add("mark_won", "标记中标", "primary-lite-button");
-    add("mark_lost", "标记未中标");
-  }
-  if (["won", "lost"].includes(stage)) add("archive", "归档机会");
-  if (["identified", "qualifying", "pursuing", "bidding"].includes(stage)) {
-    add("hold", "暂缓");
-    add("reject", "No-Go", "danger-button");
-  }
-  return buttons.join("");
+  const actions = item.action_contract?.actions || [];
+  return actions.map((descriptor) => {
+    const className = descriptor.intent === "primary"
+      ? "primary-lite-button"
+      : descriptor.intent === "danger" ? "danger-button" : "ghost-button";
+    const reasons = descriptor.blocked_reasons || [];
+    const title = reasons.length ? ` title="${escapeHtml(reasons.join("；"))}"` : "";
+    const disabled = descriptor.enabled ? "" : " disabled";
+    return `<button class="${className}" type="button" data-opportunity-action="${escapeHtml(descriptor.action)}" data-opportunity-id="${escapeHtml(item.notice_id)}"${title}${disabled}>${escapeHtml(descriptor.label)}</button>`;
+  }).join("");
 }
 
 function marketInsight(label, value, detail) {
