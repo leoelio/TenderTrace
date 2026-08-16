@@ -75,6 +75,7 @@ from tendertrace.memory import (
 )
 from tendertrace.memory_actions import apply_memory_advice_feedback
 from tendertrace.notice_changes import list_notice_revisions
+from tendertrace.notice_change_reviews import reviews_by_revision
 from tendertrace.opportunity import (
     analyze_opportunity_with_market_context,
     get_opportunity,
@@ -591,8 +592,12 @@ def create_app():
             notice_id=notice_id.strip(),
             limit=limit,
         )
+        reviews = reviews_by_revision(settings, [item.id for item in items])
         return {
-            "items": [item.to_dict() for item in items],
+            "items": [
+                {**item.to_dict(), "review": reviews.get(item.id, {})}
+                for item in items
+            ],
             "returned": len(items),
         }
 

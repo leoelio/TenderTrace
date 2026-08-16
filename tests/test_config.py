@@ -25,6 +25,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.qualification_min_opportunity_score, 65)
         self.assertEqual(settings.qualification_min_credibility, 60)
         self.assertEqual(settings.decision_sla_hours, 24)
+        self.assertEqual(settings.change_review_sla_hours, 8)
         self.assertFalse(settings.opportunity_escalation_enabled)
         self.assertEqual(settings.opportunity_escalation_cron, "0 9,14 * * 1-5")
         self.assertFalse(settings.opportunity_briefing_enabled)
@@ -51,6 +52,10 @@ class SettingsTests(unittest.TestCase):
             settings.safe_summary()["qualification_policy"]["decision_sla_hours"],
             24,
         )
+        self.assertEqual(
+            settings.safe_summary()["qualification_policy"]["change_review_sla_hours"],
+            8,
+        )
         self.assertFalse(
             settings.safe_summary()["qualification_policy"]["briefing_enabled"]
         )
@@ -69,6 +74,13 @@ class SettingsTests(unittest.TestCase):
 
             (root / ".env.local").write_text(
                 "TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS=0\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
+
+            (root / ".env.local").write_text(
+                "TENDERTRACE_CHANGE_REVIEW_SLA_HOURS=0\n",
                 encoding="utf-8",
             )
             with self.assertRaises(ConfigError):
@@ -136,7 +148,8 @@ class SettingsTests(unittest.TestCase):
                 "TENDERTRACE_QUALIFICATION_MIN_CREDIBILITY=70\n"
                 "TENDERTRACE_QUALIFICATION_MIN_COMPLETENESS=65\n"
                 "TENDERTRACE_QUALIFICATION_MIN_REQUIREMENT_COVERAGE=50\n"
-                "TENDERTRACE_DECISION_SLA_HOURS=12\n",
+                "TENDERTRACE_DECISION_SLA_HOURS=12\n"
+                "TENDERTRACE_CHANGE_REVIEW_SLA_HOURS=6\n",
                 encoding="utf-8",
             )
             settings = Settings.load(root)
@@ -146,6 +159,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.qualification_min_completeness, 65)
         self.assertEqual(settings.qualification_min_requirement_coverage, 50)
         self.assertEqual(settings.decision_sla_hours, 12)
+        self.assertEqual(settings.change_review_sla_hours, 6)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

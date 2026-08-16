@@ -160,10 +160,14 @@ def process_opportunity_card_action(
             "task_status": collaboration["task_status"],
         },
     )
-    toast_content = f"机会已更新为{workflow.stage_label}"
-    if collaboration["task_status"] == "created" and collaboration["task_assigned"]:
+    toast_content = (
+        "公告变更已复核，请基于最新内容重新完成投标决策"
+        if action == "acknowledge_change"
+        else f"机会已更新为{workflow.stage_label}"
+    )
+    if action == "claim" and collaboration["task_status"] == "created" and collaboration["task_assigned"]:
         toast_content = f"机会已更新为{workflow.stage_label}，任务已创建并分派给你"
-    elif collaboration["task_status"] == "reused" and collaboration["task_assigned"]:
+    elif action == "claim" and collaboration["task_status"] == "reused" and collaboration["task_assigned"]:
         toast_content = f"机会已更新为{workflow.stage_label}，已复用并分派现有任务"
     return {
         "toast": {"type": "success", "content": toast_content},

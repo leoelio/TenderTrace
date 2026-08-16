@@ -294,7 +294,7 @@ class OpportunityWorkflowTests(unittest.TestCase):
 
         self.assertTrue(card["config"]["update_multi"])
         self.assertEqual(actions, ["claim", "hold", "reject"])
-        self.assertEqual(identified_contract["version"], 1)
+        self.assertEqual(identified_contract["version"], 2)
         self.assertTrue(identified_contract["actions"][0]["requires_member_identity"])
         self.assertEqual(qualifying_contract["actions"][0]["action"], "pursue")
         self.assertFalse(qualifying_contract["actions"][0]["enabled"])

@@ -4941,12 +4941,43 @@ tbody tr:hover {
 .opportunity-change-list span { color: var(--text-muted); }
 .opportunity-change-list i { color: #9a6a12; font-style: normal; text-align: center; }
 
+.change-review-status {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(196, 133, 22, 0.34);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.change-review-status > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.change-review-status strong { color: #80570d; font-size: 13px; }
+.change-review-status span,
+.change-review-status small,
+.change-review-acknowledged { color: var(--text-muted); font-size: 11px; }
+.change-review-status.is-overdue { border-color: rgba(190, 44, 44, 0.34); }
+.change-review-status.is-overdue strong { color: var(--danger); }
+.change-review-acknowledged { margin: 10px 0 0; }
+
 @media (max-width: 760px) {
   .opportunity-change-list > div {
     grid-template-columns: 1fr;
   }
 
   .opportunity-change-list i { display: none; }
+
+  .change-review-status > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
 }
 
 .opportunity-detail-dialog::backdrop {

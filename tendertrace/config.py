@@ -140,6 +140,7 @@ class Settings:
     qualification_min_completeness: int
     qualification_min_requirement_coverage: int
     decision_sla_hours: int
+    change_review_sla_hours: int
     opportunity_escalation_enabled: bool
     opportunity_escalation_cron: str
     opportunity_briefing_enabled: bool
@@ -471,6 +472,10 @@ class Settings:
                 _first_value("TENDERTRACE_DECISION_SLA_HOURS", env_files, "24"),
                 "TENDERTRACE_DECISION_SLA_HOURS",
             ),
+            change_review_sla_hours=_parse_positive_int(
+                _first_value("TENDERTRACE_CHANGE_REVIEW_SLA_HOURS", env_files, "8"),
+                "TENDERTRACE_CHANGE_REVIEW_SLA_HOURS",
+            ),
             opportunity_escalation_enabled=_parse_bool(
                 _first_value(
                     "TENDERTRACE_OPPORTUNITY_ESCALATION_ENABLED",
@@ -589,6 +594,7 @@ class Settings:
                     self.qualification_min_requirement_coverage
                 ),
                 "decision_sla_hours": self.decision_sla_hours,
+                "change_review_sla_hours": self.change_review_sla_hours,
                 "escalation_enabled": self.opportunity_escalation_enabled,
                 "escalation_cron": self.opportunity_escalation_cron,
                 "briefing_enabled": self.opportunity_briefing_enabled,

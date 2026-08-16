@@ -71,6 +71,7 @@ REQUIRED_TABLES = {
     "sent_history",
     "notices",
     "notice_revisions",
+    "notice_change_reviews",
     "notices_fts",
     "notice_embeddings",
     "clusters",

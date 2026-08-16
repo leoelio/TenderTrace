@@ -78,6 +78,16 @@ type Qualification = {
   blockers?: Record<string, string[]>;
 };
 
+type ChangeReview = {
+  pending_count: number;
+  status: string;
+  severity: string;
+  required_by: string;
+  overdue: boolean;
+  acknowledged_by?: string;
+  acknowledged_at?: string;
+};
+
 type OpportunityWorkspace = {
   opportunity: {
     intelligence?: Intelligence;
@@ -85,6 +95,7 @@ type OpportunityWorkspace = {
     qualification?: Qualification;
     action_state?: Record<string, unknown>;
     action_contract?: ActionContract;
+    change_review?: ChangeReview;
   };
 };
 
@@ -191,6 +202,7 @@ function actionIcon(action: string): LucideIcon {
   return {
     archive: Archive,
     approve_bid: CheckCircle2,
+    acknowledge_change: RefreshCw,
     claim: Send,
     hold: CirclePause,
     mark_lost: CircleX,
@@ -277,6 +289,7 @@ function App() {
   const factEvidenceReady = Boolean(context?.values["事实核验证据"]?.trim());
   const workflow = workspace?.opportunity?.workflow || null;
   const qualification = workspace?.opportunity?.qualification || null;
+  const changeReview = workspace?.opportunity?.change_review || null;
   const availableActions = workspace?.opportunity?.action_contract?.actions || [];
   const claimAction = availableActions.find((item) => item.requires_member_identity);
   const directActions = availableActions.filter((item) => !item.requires_member_identity);
@@ -373,7 +386,7 @@ function App() {
       });
       await load();
       setDecisionReason("");
-      setMessage("机会阶段已更新，并同步到飞书台账");
+      setMessage(action === "acknowledge_change" ? "公告变更已复核，请重新完成投标决策" : "机会阶段已更新，并同步到飞书台账");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "机会动作执行失败");
     } finally {
@@ -490,6 +503,7 @@ function App() {
                   <div><span>资格评估</span><strong>{qualification?.score ?? workflow.qualification_score} · {qualification?.status || workflow.qualification_status}</strong></div>
                   <div><span>飞书任务</span><strong>{workflow.feishu_task_status || "not_created"}</strong></div>
                   <div><span>投标决策</span><strong>{workflow.decision || "待决策"}</strong></div>
+                  <div><span>公告变更</span><strong>{changeReview?.pending_count ? `${changeReview.pending_count} 条待复核${changeReview.overdue ? " · 已逾期" : ""}` : "无待复核变更"}</strong></div>
                 </div>
                 {workflow.decision_reason && (
                   <p className="workflow-reason">{workflow.decision_reason}{workflow.decision_by ? ` · ${workflow.decision_by}` : ""}</p>
@@ -506,7 +520,7 @@ function App() {
                   <>
                     {directActions.some((item) => item.accepts_reason) && (
                       <label className="decision-reason">
-                        决策依据
+                        {directActions.some((item) => item.action === "acknowledge_change") ? "复核说明" : "决策依据"}
                         <textarea
                           value={decisionReason}
                           onChange={(event) => setDecisionReason(event.target.value)}

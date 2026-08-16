@@ -8,6 +8,10 @@ from uuid import uuid4
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
+from tendertrace.notice_change_reviews import (
+    acknowledge_notice_change_reviews,
+    change_review_summaries,
+)
 from tendertrace.qualification import action_blockers
 
 
@@ -37,6 +41,7 @@ DECISION_ACTION = {
 }
 
 ACTION_FROM_STAGES = {
+    "acknowledge_change": {"qualifying", "pursuing", "bidding"},
     "claim": {"identified", "qualifying"},
     "pursue": {"qualifying", "pursuing"},
     "approve_bid": {"pursuing", "bidding"},
@@ -49,6 +54,7 @@ ACTION_FROM_STAGES = {
 }
 
 ACTION_PRESENTATION = {
+    "acknowledge_change": ("确认已复核变更", "primary", True, False),
     "claim": ("认领机会", "primary", False, True),
     "pursue": ("完成机会确认", "primary", False, False),
     "approve_bid": ("Go · 批准投标", "primary", True, False),
@@ -98,6 +104,7 @@ class OpportunityWorkflow:
     decision_reason: str
     decision_by: str
     decision_at: str
+    decision_requested_at: str
     stage_changed_at: str
     updated_by: str
     updated_at: str
@@ -109,20 +116,27 @@ class OpportunityWorkflow:
 def workflow_action_contract(
     workflow: OpportunityWorkflow,
     qualification: dict[str, Any] | None = None,
+    change_review: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     qualification = qualification or {}
-    if workflow.stage == "pursuing":
+    change_review = change_review or {}
+    review_pending = int(change_review.get("pending_count") or 0) > 0
+    if review_pending:
+        action_names = ("acknowledge_change",)
+    elif workflow.stage == "pursuing":
         action_names = (
             "prepare_bid" if workflow.decision == "go" else "approve_bid",
             "hold",
             "reject",
         )
+    elif workflow.stage == "bidding" and workflow.decision != "go":
+        action_names = ("approve_bid", "hold", "reject")
     else:
         action_names = STAGE_ACTIONS.get(workflow.stage, ())
     actions: list[dict[str, object]] = []
     for index, action in enumerate(action_names):
         label, intent, accepts_reason, requires_member_identity = ACTION_PRESENTATION[action]
-        blockers = action_blockers(qualification, action)
+        blockers = [] if action == "acknowledge_change" else action_blockers(qualification, action)
         if action == "prepare_bid" and workflow.decision != "go":
             blockers.append("投标决策尚未通过 Go 审批")
         actions.append(
@@ -138,9 +152,10 @@ def workflow_action_contract(
             }
         )
     return {
-        "version": 1,
+        "version": 2,
         "stage": workflow.stage,
         "stage_label": workflow.stage_label,
+        "change_review_required": review_pending,
         "actions": actions,
     }
 
@@ -203,6 +218,7 @@ def update_workflow(
     decision_reason: str | None = None,
     decision_by: str | None = None,
     decision_at: str | None = None,
+    decision_requested_at: str | None = None,
     updated_by: str | None = None,
 ) -> OpportunityWorkflow:
     current = get_workflow(settings, notice_id)
@@ -253,6 +269,11 @@ def update_workflow(
         ),
         "decision_by": current.decision_by if decision_by is None else decision_by,
         "decision_at": current.decision_at if decision_at is None else decision_at,
+        "decision_requested_at": (
+            current.decision_requested_at
+            if decision_requested_at is None
+            else decision_requested_at
+        ),
         "stage_changed_at": (
             current.stage_changed_at
             if target_stage == current.stage
@@ -270,7 +291,8 @@ def update_workflow(
                 feishu_event_id = ?, feishu_message_id = ?,
                 qualification_score = ?, qualification_status = ?, decision = ?,
                 decision_reason = ?, decision_by = ?, decision_at = ?,
-                stage_changed_at = ?, updated_by = ?, updated_at = datetime('now')
+                decision_requested_at = ?, stage_changed_at = ?, updated_by = ?,
+                updated_at = datetime('now')
             WHERE notice_id = ?
             """,
             (*values.values(), notice_id),
@@ -289,9 +311,29 @@ def apply_action(
     decision_reason: str = "",
     payload: dict[str, Any] | None = None,
 ) -> OpportunityWorkflow:
+    if action == "acknowledge_change":
+        current = get_workflow(settings, notice_id)
+        if current.stage not in ACTION_FROM_STAGES[action]:
+            raise WorkflowGateError(
+                action,
+                [f"当前阶段“{current.stage_label}”不能执行该操作"],
+            )
+        try:
+            acknowledge_notice_change_reviews(
+                settings,
+                notice_id,
+                actor=actor_name or actor_open_id,
+                note=decision_reason,
+            )
+        except ValueError as exc:
+            raise WorkflowGateError(action, [str(exc)]) from exc
+        return get_workflow(settings, notice_id)
     if action not in ACTION_STAGE and action not in DECISION_ACTION:
         raise ValueError(f"unsupported opportunity action: {action}")
     current = get_workflow(settings, notice_id)
+    change_review = change_review_summaries(settings, [notice_id]).get(notice_id, {})
+    if int(change_review.get("pending_count") or 0) > 0:
+        raise WorkflowGateError(action, ["公告重大变更尚未复核"])
     allowed_stages = ACTION_FROM_STAGES[action]
     if current.stage not in allowed_stages:
         raise WorkflowGateError(
@@ -313,6 +355,11 @@ def apply_action(
     qualification_score = _qualification_score(qualification) if qualification else None
     qualification_status = str(qualification.get("status") or "pending") if qualification else None
     decision_at = datetime.now().astimezone().isoformat(timespec="seconds") if decision else None
+    decision_requested_at = (
+        datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if action == "pursue"
+        else None
+    )
     recorded_reason = decision_reason
     if decision and not recorded_reason:
         recorded_reason = {
@@ -332,6 +379,7 @@ def apply_action(
         decision_reason=recorded_reason if decision else None,
         decision_by=(actor_name or actor_open_id) if decision else None,
         decision_at=decision_at,
+        decision_requested_at=decision_requested_at,
         updated_by=actor_open_id or actor_name,
     )
     with connection(settings) as conn:
@@ -376,6 +424,7 @@ def _from_row(row: Any) -> OpportunityWorkflow:
         decision_reason=str(row["decision_reason"] or ""),
         decision_by=str(row["decision_by"] or ""),
         decision_at=str(row["decision_at"] or ""),
+        decision_requested_at=str(row["decision_requested_at"] or ""),
         stage_changed_at=str(row["stage_changed_at"] or ""),
         updated_by=str(row["updated_by"] or ""),
         updated_at=str(row["updated_at"] or datetime.now().isoformat(timespec="seconds")),
@@ -403,6 +452,7 @@ def _default_workflow(notice_id: str) -> OpportunityWorkflow:
         decision_reason="",
         decision_by="",
         decision_at="",
+        decision_requested_at="",
         stage_changed_at="",
         updated_by="",
         updated_at="",

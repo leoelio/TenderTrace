@@ -10,6 +10,7 @@ from tendertrace.delivery.ledger import record_delivery_attempt
 from tendertrace.delivery.preferences import resolve_feishu_receiver
 from tendertrace.integrations.feishu import FeishuClient, FeishuError
 from tendertrace.notice_changes import NoticeRevision, list_notice_revisions
+from tendertrace.notice_change_reviews import pending_review_revision_ids
 from tendertrace.workflow import OpportunityWorkflow, workflow_snapshots
 
 
@@ -112,13 +113,20 @@ def send_opportunity_change_alerts(
         )
 
     feishu = client or FeishuClient(settings)
+    review_revision_ids = pending_review_revision_ids(
+        settings,
+        [revision.id for items in groups.values() for revision, _workflow in items],
+    )
     sent_count = 0
     message_count = 0
     failed_count = 0
     failures: list[dict[str, str]] = []
     for (receive_id, receive_type), items in groups.items():
         for chunk in _chunks(items, 10):
-            card = build_notice_change_card(chunk)
+            card = build_notice_change_card(
+                chunk,
+                review_revision_ids=review_revision_ids,
+            )
             try:
                 response = feishu.send_card(
                     card,
@@ -170,7 +178,10 @@ def send_opportunity_change_alerts(
 
 def build_notice_change_card(
     items: list[tuple[NoticeRevision, OpportunityWorkflow]],
+    *,
+    review_revision_ids: set[str] | None = None,
 ) -> dict[str, Any]:
+    review_revision_ids = review_revision_ids or set()
     elements: list[dict[str, Any]] = [
         {
             "tag": "div",
@@ -212,6 +223,23 @@ def build_notice_change_card(
                 },
             )
         )
+        if revision.id in review_revision_ids:
+            elements.append(
+                {
+                    "tag": "action",
+                    "actions": [
+                        {
+                            "tag": "button",
+                            "text": {"tag": "plain_text", "content": "确认已复核变更"},
+                            "type": "primary",
+                            "value": {
+                                "action": "acknowledge_change",
+                                "notice_id": revision.notice_id,
+                            },
+                        }
+                    ],
+                }
+            )
     return {
         "config": {"wide_screen_mode": True},
         "header": {

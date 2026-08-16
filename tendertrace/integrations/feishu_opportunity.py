@@ -173,6 +173,13 @@ def build_opportunity_card(
         workflow.to_dict(),
     ).to_dict()
     qualification_blockers = _qualification_blockers(qualification)
+    change_review = _mapping(opportunity.get("change_review"))
+    change_review_text = (
+        f"待复核 {change_review.get('pending_count') or 0} 条 · "
+        f"截止 {change_review.get('required_by') or '-'}"
+        if int(change_review.get("pending_count") or 0) > 0
+        else "无待复核变更"
+    )
     decision = _decision_label(workflow.decision)
     decision_sla = _decision_sla_text(_mapping(opportunity.get("action_state")))
     action_rows = _card_action_rows(opportunity, workflow)
@@ -203,6 +210,7 @@ def build_opportunity_card(
                     "content": (
                         f"**下一步** {next_action}\n"
                         f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
+                        f"**变更复核** {change_review_text}\n"
                         f"**决策 SLA** {decision_sla}\n"
                         f"**风险** {risk_text}"
                     ),
@@ -232,6 +240,7 @@ def _card_action_rows(
     contract = workflow_action_contract(
         workflow,
         _mapping(opportunity.get("qualification")),
+        _mapping(opportunity.get("change_review")),
     )
     for descriptor in contract["actions"]:
         target = primary if descriptor["group"] == "primary" else secondary

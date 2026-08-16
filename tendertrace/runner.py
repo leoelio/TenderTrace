@@ -24,6 +24,7 @@ from tendertrace.notice_changes import (
     notice_change_payload_from_row,
     record_notice_revision,
 )
+from tendertrace.notice_change_reviews import register_notice_change_review
 from tendertrace.opportunity import enrich_opportunity_intelligence
 from tendertrace.pipeline.attachments import Downloader, enrich_attachment_snapshots
 from tendertrace.pipeline.dedup import clean_and_cluster_notices
@@ -598,6 +599,12 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
                     after=after_payload,
                 )
                 changed = revision is not None
+                if revision is not None:
+                    register_notice_change_review(
+                        conn,
+                        revision,
+                        review_sla_hours=settings.change_review_sla_hours,
+                    )
             conn.execute(
                 """
                 INSERT INTO notices(

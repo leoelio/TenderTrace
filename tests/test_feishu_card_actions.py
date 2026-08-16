@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import tempfile
 import unittest
 
+from tendertrace.adapters.ccgp import Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
 from tendertrace.integrations.feishu_card_actions import (
@@ -13,6 +14,8 @@ from tendertrace.integrations.feishu_card_actions import (
     process_opportunity_card_action,
 )
 from tendertrace.memory import build_weekly_report, record_activity
+from tendertrace.notice_change_reviews import change_review_summaries
+from tendertrace.runner import persist_notices_and_clusters
 from tendertrace.scheduling.subscriptions import list_subscriptions
 from tendertrace.workflow import get_workflow, update_workflow
 
@@ -106,6 +109,41 @@ class FeishuCardActionTests(unittest.TestCase):
         self.assertTrue(result["blocked"])
         self.assertEqual(result["toast"]["type"], "warning")
         self.assertIn("当前阶段", result["reasons"][0])
+
+    def test_change_alert_card_action_acknowledges_review_and_refreshes_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            persist_notices_and_clusters(settings, [_review_notice("100 万元")])
+            update_workflow(
+                settings,
+                "ccgp:notice-1",
+                stage="pursuing",
+                owner_open_id="ou_owner",
+                owner_name="张三",
+                decision="go",
+            )
+            persist_notices_and_clusters(settings, [_review_notice("120 万元")])
+
+            result = process_opportunity_card_action(
+                settings,
+                _payload("acknowledge_change", notice_id="ccgp:notice-1"),
+                bitable_updater=lambda *_args, **_kwargs: SimpleNamespace(status="sent"),
+            )
+            review = change_review_summaries(settings, ["ccgp:notice-1"])[
+                "ccgp:notice-1"
+            ]
+
+        actions = [
+            button["value"]["action"]
+            for element in result["card"]["elements"]
+            if element.get("tag") == "action"
+            for button in element["actions"]
+        ]
+        self.assertEqual(review["status"], "acknowledged")
+        self.assertEqual(result["workflow"]["decision"], "pending")
+        self.assertEqual(actions, ["approve_bid", "hold", "reject"])
+        self.assertIn("重新完成投标决策", result["toast"]["content"])
 
     def test_memory_advice_action_updates_shared_feedback_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -284,7 +322,7 @@ class FeishuCardActionTests(unittest.TestCase):
         self.assertIn("当前飞书会话", result["toast"]["content"])
 
 
-def _payload(action: str) -> dict[str, object]:
+def _payload(action: str, *, notice_id: str = "notice-1") -> dict[str, object]:
     return {
         "header": {"event_id": "event-1"},
         "event": {
@@ -292,7 +330,7 @@ def _payload(action: str) -> dict[str, object]:
                 "name": "张三",
                 "operator_id": {"open_id": "ou_owner"},
             },
-            "action": {"value": {"action": action, "notice_id": "notice-1"}},
+            "action": {"value": {"action": action, "notice_id": notice_id}},
         },
     }
 
@@ -318,6 +356,27 @@ def _insert_notice(settings: Settings) -> None:
                 '{"bid_deadline":"2026-08-30 17:00"}',
             ),
         )
+
+
+def _review_notice(budget: str) -> Notice:
+    return Notice(
+        id="notice-1",
+        source_site="ccgp",
+        title="服务器采购项目",
+        publish_time="2026-08-16 09:00",
+        region="上海",
+        purchaser="示例采购人",
+        source_url="https://example.com/notice-1",
+        content_text=f"预算 {budget}，投标截止 2026-09-20",
+        core_content=f"预算 {budget}，投标截止 2026-09-20",
+        fields={
+            "structured_fields": {
+                "budget": budget,
+                "bid_deadline": "2026-09-20 17:00",
+                "project_no": "CARD-REVIEW-001",
+            }
+        },
+    )
 
 
 def _insert_priority_notice(settings: Settings) -> None:

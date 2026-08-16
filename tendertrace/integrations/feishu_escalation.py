@@ -21,6 +21,7 @@ class EscalationDeliveryResult:
     artifact_key: str
     decision_count: int = 0
     task_count: int = 0
+    change_review_count: int = 0
     message_id: str = ""
     reason: str = ""
 
@@ -41,13 +42,13 @@ def send_opportunity_escalation_summary(
     queue = _mapping(summary.get("action_queue"))
     escalations = queue.get("escalations")
     items = escalations if isinstance(escalations, list) else []
-    decision_count, task_count = _issue_counts(items)
+    decision_count, task_count, change_review_count = _issue_counts(items)
     if not items:
         return EscalationDeliveryResult(
             status="skipped",
             escalation_count=0,
             artifact_key="",
-            reason="no overdue opportunity decisions or tasks",
+            reason="no overdue opportunity decisions, tasks, or change reviews",
         )
     artifact_key = _artifact_key(settings, items, now=now)
     if not force and _already_sent(settings, artifact_key):
@@ -57,6 +58,7 @@ def send_opportunity_escalation_summary(
             artifact_key=artifact_key,
             decision_count=decision_count,
             task_count=task_count,
+            change_review_count=change_review_count,
             reason="same escalation set already sent today",
         )
     receive_id, receive_id_type = resolve_feishu_receiver(settings)
@@ -92,6 +94,7 @@ def send_opportunity_escalation_summary(
         artifact_key=artifact_key,
         decision_count=decision_count,
         task_count=task_count,
+        change_review_count=change_review_count,
         message_id=message_id,
     )
 
@@ -100,7 +103,7 @@ def build_escalation_card(
     escalations: list[object],
     action_queue: dict[str, Any],
 ) -> dict[str, object]:
-    decision_count, task_count = _issue_counts(escalations)
+    decision_count, task_count, change_review_count = _issue_counts(escalations)
     rows = []
     for index, raw in enumerate(escalations[:8], start=1):
         item = _mapping(raw)
@@ -110,16 +113,7 @@ def build_escalation_card(
             if "decision" in issue_types
             else ""
         )
-        deadline_text = (
-            f"决策截止 {_text(item.get('decision_due_at') or item.get('due_at'), '-')} · "
-            f"任务截止 {_text(item.get('task_due_at') or item.get('due_at'), '-')}"
-            if len(issue_types) > 1
-            else (
-                f"任务截止 {_text(item.get('task_due_at') or item.get('due_at'), '-')}"
-                if "task" in issue_types
-                else f"决策截止 {_text(item.get('decision_due_at') or item.get('due_at'), '-')}"
-            )
-        )
+        deadline_text = _deadline_text(item, issue_types)
         rows.append(
             {
                 "tag": "div",
@@ -150,6 +144,7 @@ def build_escalation_card(
                         f"**{len(escalations)} 条机会需要管理介入**\n"
                         f"决策超时 {decision_count} 条 · "
                         f"任务逾期 {task_count} 条 · "
+                        f"变更复核逾期 {change_review_count} 条 · "
                         f"决策 SLA {action_queue.get('decision_sla_hours') or 0} 小时\n"
                         "请负责人补齐阻断项和逾期任务，管理者完成资源协调或 "
                         "Go/Hold/No-Go 决策。"
@@ -237,26 +232,48 @@ def _issue_types(item: dict[str, Any]) -> tuple[str, ...]:
     raw = item.get("issue_types")
     if isinstance(raw, list):
         present = {str(item).strip() for item in raw}
-        values = tuple(value for value in ("decision", "task") if value in present)
+        values = tuple(
+            value for value in ("decision", "task", "change_review") if value in present
+        )
         if values:
             return values
     issue_type = str(item.get("issue_type") or "decision")
-    present = set(issue_type.split("_"))
-    values = tuple(value for value in ("decision", "task") if value in present)
+    present = {
+        value
+        for value in ("decision", "task", "change_review")
+        if value in issue_type
+    }
+    values = tuple(
+        value for value in ("decision", "task", "change_review") if value in present
+    )
     return values or ("decision",)
 
 
-def _issue_counts(escalations: list[object]) -> tuple[int, int]:
+def _issue_counts(escalations: list[object]) -> tuple[int, int, int]:
     issue_sets = [_issue_types(_mapping(item)) for item in escalations if _mapping(item)]
     return (
         sum("decision" in values for values in issue_sets),
         sum("task" in values for values in issue_sets),
+        sum("change_review" in values for values in issue_sets),
     )
 
 
 def _issue_label(issue_types: tuple[str, ...]) -> str:
-    if set(issue_types) == {"decision", "task"}:
-        return "决策超时 + 任务逾期"
-    if "task" in issue_types:
-        return "任务逾期"
-    return "决策超时"
+    labels = {
+        "decision": "决策超时",
+        "task": "任务逾期",
+        "change_review": "变更复核逾期",
+    }
+    return " + ".join(labels[value] for value in issue_types)
+
+
+def _deadline_text(item: dict[str, Any], issue_types: tuple[str, ...]) -> str:
+    labels = {
+        "decision": ("决策截止", "decision_due_at"),
+        "task": ("任务截止", "task_due_at"),
+        "change_review": ("复核截止", "change_review_due_at"),
+    }
+    return " · ".join(
+        f"{labels[value][0]} {_text(item.get(labels[value][1]) or item.get('due_at'), '-')}"
+        for value in issue_types
+    )

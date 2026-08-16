@@ -13,6 +13,7 @@ from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.intent.topic import extract_topic
 from tendertrace.notice_changes import notice_change_summaries
+from tendertrace.notice_change_reviews import change_review_summaries
 from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.retrieval import parse_date
@@ -285,6 +286,10 @@ def list_opportunities(
         settings,
         [notice_id for notice_id, _notice in rows],
     )
+    review_summaries = change_review_summaries(
+        settings,
+        [notice_id for notice_id, _notice in rows],
+    )
     for notice_id, notice in rows:
         payload = _notice_payload(notice)
         intelligence = _analyze(payload, as_of=None)
@@ -313,6 +318,7 @@ def list_opportunities(
             "intelligence": intelligence,
             "workflow": workflow,
             "change_summary": change_summaries.get(notice_id, {}),
+            "change_review": review_summaries.get(notice_id, {}),
         }
         item["qualification"] = assess_qualification(
             item,
@@ -322,6 +328,7 @@ def list_opportunities(
         item["action_contract"] = workflow_action_contract(
             workflow_snapshot,
             _mapping(item.get("qualification")),
+            _mapping(item.get("change_review")),
         )
         item["action_state"] = _opportunity_action_state(
             item,
@@ -414,6 +421,10 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         notice_id,
         {},
     )
+    item["change_review"] = change_review_summaries(settings, [notice_id]).get(
+        notice_id,
+        {},
+    )
     item["qualification"] = assess_qualification(
         item,
         workflow.to_dict(),
@@ -422,6 +433,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     item["action_contract"] = workflow_action_contract(
         workflow,
         _mapping(item.get("qualification")),
+        _mapping(item.get("change_review")),
     )
     item["action_state"] = _opportunity_action_state(
         item,
@@ -468,6 +480,7 @@ def _opportunity_action_state(
     intelligence = _mapping(item.get("intelligence"))
     workflow = _mapping(item.get("workflow"))
     qualification = _mapping(item.get("qualification"))
+    change_review = _mapping(item.get("change_review"))
     level = str(intelligence.get("level") or "D")
     stage = str(workflow.get("stage") or "identified")
     deadline = _deadline_date(item)
@@ -480,11 +493,17 @@ def _opportunity_action_state(
     owner_required = not str(workflow.get("owner_open_id") or workflow.get("owner_name") or "")
     actionable = not terminal and not overdue
     qualification_blocked = str(qualification.get("status") or "blocked") != "ready"
+    change_review_required = int(change_review.get("pending_count") or 0) > 0
+    change_review_overdue = change_review_required and bool(change_review.get("overdue"))
     decision_required = (
-        stage == "pursuing" and str(workflow.get("decision") or "pending") == "pending"
+        stage in {"pursuing", "bidding"}
+        and str(workflow.get("decision") or "pending") == "pending"
+        and not change_review_required
     )
     decision_anchor = _workflow_timestamp(
-        workflow.get("stage_changed_at") or workflow.get("updated_at")
+        workflow.get("decision_requested_at")
+        or workflow.get("stage_changed_at")
+        or workflow.get("updated_at")
     )
     decision_due_at = (
         decision_anchor + timedelta(hours=decision_sla_hours)
@@ -521,6 +540,10 @@ def _opportunity_action_state(
     task_status = str(workflow.get("feishu_task_status") or "not_created")
     if task_status == "overdue" and actionable:
         priority += 20
+    if change_review_required and actionable:
+        priority += 20
+    if change_review_overdue and actionable:
+        priority += 20
     if actionable and not qualification_blocked and decision_required:
         priority += 8
     if decision_sla_status == "due_soon":
@@ -537,6 +560,9 @@ def _opportunity_action_state(
         "overdue": overdue,
         "days_to_deadline": days_to_deadline,
         "qualification_blocked": qualification_blocked,
+        "change_review_required": change_review_required,
+        "change_review_overdue": change_review_overdue,
+        "change_review_due_at": str(change_review.get("required_by") or ""),
         "decision_required": decision_required,
         "decision_sla_status": decision_sla_status,
         "decision_sla_hours": decision_sla_hours,
@@ -566,6 +592,8 @@ def _action_queue_summary(
     task_open = 0
     task_completed = 0
     task_overdue = 0
+    change_review_pending = 0
+    change_review_overdue = 0
     decisions = {name: 0 for name in ("go", "hold", "no_go")}
     escalations: list[dict[str, object]] = []
     deadlines: list[tuple[date, dict[str, object]]] = []
@@ -573,6 +601,7 @@ def _action_queue_summary(
         workflow = _mapping(item.get("workflow"))
         intelligence = _mapping(item.get("intelligence"))
         action = _mapping(item.get("action_state"))
+        change_review = _mapping(item.get("change_review"))
         stage = str(workflow.get("stage") or "identified")
         stages[stage] = stages.get(stage, 0) + 1
         if action.get("owner_required") and intelligence.get("level") in {"A", "B"} and action.get("actionable"):
@@ -585,6 +614,10 @@ def _action_queue_summary(
         task_open += int(task_status == "open")
         task_completed += int(task_status == "completed")
         task_overdue += int(task_status == "overdue")
+        review_pending = int(change_review.get("pending_count") or 0) > 0
+        review_is_overdue = review_pending and bool(change_review.get("overdue"))
+        change_review_pending += int(review_pending)
+        change_review_overdue += int(review_is_overdue)
         qualification = _mapping(item.get("qualification"))
         if qualification.get("status") == "ready":
             qualification_ready += 1
@@ -603,14 +636,16 @@ def _action_queue_summary(
         }
         if decision_is_overdue:
             decision_overdue += 1
-        if decision_is_overdue or task_is_overdue:
+        if decision_is_overdue or task_is_overdue or review_is_overdue:
             decision_due_at = str(action.get("decision_due_at") or "")
             task_due_at = str(workflow.get("due_at") or item.get("bid_deadline") or "")
+            change_review_due_at = str(change_review.get("required_by") or "")
             issue_types = [
                 issue_type
                 for issue_type, active in (
                     ("decision", decision_is_overdue),
                     ("task", task_is_overdue),
+                    ("change_review", review_is_overdue),
                 )
                 if active
             ]
@@ -624,6 +659,9 @@ def _action_queue_summary(
                     "issue_types": issue_types,
                     "decision_due_at": decision_due_at if decision_is_overdue else "",
                     "task_due_at": task_due_at if task_is_overdue else "",
+                    "change_review_due_at": (
+                        change_review_due_at if review_is_overdue else ""
+                    ),
                     "wait_hours": (
                         float(action.get("decision_wait_hours") or 0)
                         if decision_is_overdue
@@ -633,6 +671,8 @@ def _action_queue_summary(
                         decision_due_at
                         if decision_is_overdue
                         else task_due_at
+                        if task_is_overdue
+                        else change_review_due_at
                     ),
                 }
             )
@@ -670,6 +710,8 @@ def _action_queue_summary(
         "task_open": task_open,
         "task_completed": task_completed,
         "task_overdue": task_overdue,
+        "change_review_pending": change_review_pending,
+        "change_review_overdue": change_review_overdue,
         "decision_sla_hours": decision_sla_hours,
         "decisions": decisions,
         "go_rate": round(decisions["go"] / closed_decisions * 100, 1)

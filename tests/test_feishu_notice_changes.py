@@ -67,6 +67,8 @@ class FeishuNoticeChangeTests(unittest.TestCase):
         self.assertIn("机会公告变更提醒", str(card))
         self.assertIn("预算", str(card))
         self.assertIn("投标截止", str(card))
+        self.assertIn("确认已复核变更", str(card))
+        self.assertIn("acknowledge_change", str(card))
 
     def test_sent_recent_revisions_do_not_starve_older_pending_revision(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

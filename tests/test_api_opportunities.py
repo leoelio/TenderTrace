@@ -206,7 +206,7 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(facts.status_code, 200)
         self.assertEqual(facts.json()["bitable_status"], "sent")
         self.assertEqual(facts.json()["opportunity"]["project_no"], "SH-2026-001")
-        self.assertEqual(facts.json()["opportunity"]["action_contract"]["version"], 1)
+        self.assertEqual(facts.json()["opportunity"]["action_contract"]["version"], 2)
         self.assertEqual(
             facts.json()["opportunity"]["action_contract"]["actions"][0]["action"],
             "claim",

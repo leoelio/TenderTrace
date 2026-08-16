@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 
 DDL = (
@@ -97,6 +97,24 @@ DDL = (
         before_json TEXT NOT NULL DEFAULT '{}',
         after_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS notice_change_reviews (
+        revision_id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        required_by TEXT NOT NULL,
+        previous_decision TEXT NOT NULL DEFAULT 'pending',
+        previous_decision_at TEXT,
+        acknowledged_by TEXT,
+        acknowledgment_note TEXT,
+        acknowledged_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (revision_id) REFERENCES notice_revisions(id),
         FOREIGN KEY (notice_id) REFERENCES notices(id)
     )
     """,
@@ -347,6 +365,7 @@ DDL = (
         decision_reason TEXT,
         decision_by TEXT,
         decision_at TEXT,
+        decision_requested_at TEXT,
         stage_changed_at TEXT NOT NULL DEFAULT '',
         updated_by TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -459,6 +478,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_notices_source_site ON notices(source_site)",
     "CREATE INDEX IF NOT EXISTS idx_notice_revisions_notice ON notice_revisions(notice_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_notice_revisions_time ON notice_revisions(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_notice_change_reviews_notice ON notice_change_reviews(notice_id, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_notice_change_reviews_due ON notice_change_reviews(status, required_by)",
     "CREATE INDEX IF NOT EXISTS idx_clusters_project_no ON clusters(project_no)",
     "CREATE INDEX IF NOT EXISTS idx_evidence_items_cluster ON evidence_items(cluster_key)",
     "CREATE INDEX IF NOT EXISTS idx_evidence_items_notice ON evidence_items(notice_id)",
@@ -509,6 +530,7 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "decision_reason TEXT",
         "decision_by TEXT",
         "decision_at TEXT",
+        "decision_requested_at TEXT",
         "stage_changed_at TEXT NOT NULL DEFAULT ''",
         "feishu_task_status TEXT NOT NULL DEFAULT 'not_created'",
         "feishu_task_completed_at TEXT",

@@ -109,6 +109,30 @@ class FeishuEscalationTests(unittest.TestCase):
 
         self.assertTrue(key.startswith("decision_sla:2026-08-16:"))
 
+    def test_change_review_overdue_is_counted_and_rendered(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            save_feishu_receiver(
+                settings,
+                receive_id="oc_test",
+                receive_id_type="chat_id",
+                label="销售管理群",
+            )
+            client = _FakeClient()
+            result = send_opportunity_escalation_summary(
+                settings,
+                client=client,
+                opportunity_loader=_change_review_payload,
+                now=datetime(2026, 8, 16, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+            )
+
+        self.assertEqual(result.change_review_count, 1)
+        self.assertEqual(result.decision_count, 0)
+        self.assertEqual(result.task_count, 0)
+        self.assertIn("变更复核逾期", str(client.cards[0]))
+        self.assertIn("2026-08-15T08:00:00+00:00", str(client.cards[0]))
+
 
 def _overdue_payload(*_args, **_kwargs) -> dict[str, object]:
     return {
@@ -129,6 +153,29 @@ def _overdue_payload(*_args, **_kwargs) -> dict[str, object]:
                         "decision_due_at": "2026-08-15T09:00:00+00:00",
                         "task_due_at": "2026-08-15T17:00:00+08:00",
                         "due_at": "2026-08-15T09:00:00+00:00",
+                    }
+                ],
+            }
+        }
+    }
+
+
+def _change_review_payload(*_args, **_kwargs) -> dict[str, object]:
+    return {
+        "summary": {
+            "action_queue": {
+                "decision_sla_hours": 24,
+                "change_review_overdue": 1,
+                "escalations": [
+                    {
+                        "notice_id": "notice-review-1",
+                        "title": "服务器采购项目更正公告",
+                        "owner": "张三",
+                        "stage": "投标准备",
+                        "issue_type": "change_review",
+                        "issue_types": ["change_review"],
+                        "change_review_due_at": "2026-08-15T08:00:00+00:00",
+                        "due_at": "2026-08-15T08:00:00+00:00",
                     }
                 ],
             }

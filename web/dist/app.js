@@ -1322,9 +1322,9 @@ function renderOpportunities(payload) {
     el.opportunitySummary.innerHTML = [
       summaryTile("当前线索", summary.total ?? items.length),
       summaryTile("A 级机会", levels.A ?? 0),
-      summaryTile("准入就绪", actionQueue.qualification_ready ?? 0),
+      summaryTile("待复核变更", actionQueue.change_review_pending ?? 0),
       summaryTile("待管理决策", actionQueue.decision_pending ?? 0),
-      summaryTile("协同逾期", (actionQueue.decision_overdue || 0) + (actionQueue.task_overdue || 0)),
+      summaryTile("协同逾期", (actionQueue.decision_overdue || 0) + (actionQueue.task_overdue || 0) + (actionQueue.change_review_overdue || 0)),
       summaryTile("Go 通过率", actionQueue.go_rate == null ? "-" : `${actionQueue.go_rate}%`),
     ].join("");
     renderOpportunityDecisionBoard(actionQueue);
@@ -1362,11 +1362,16 @@ function renderOpportunities(payload) {
           const workflow = item.workflow || {};
           const actionState = item.action_state || {};
           const changeSummary = item.change_summary || {};
+          const changeReview = item.change_review || {};
           const scores = intelligence.scores || {};
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
           const qualification = item.qualification || {};
           const decision = workflow.decision || "pending";
-          const actionSignal = actionState.feishu_task_overdue
+          const actionSignal = changeReview.overdue
+            ? `<small class="action-signal action-signal-danger">重大变更复核已逾期 · ${escapeHtml(changeReview.pending_count || 0)} 条</small>`
+            : Number(changeReview.pending_count) > 0
+            ? `<small class="action-signal action-signal-warning">重大变更待复核 · ${escapeHtml(changeReview.pending_count)} 条</small>`
+            : actionState.feishu_task_overdue
             ? '<small class="action-signal action-signal-danger">飞书任务已逾期</small>'
             : Number(changeSummary.count) > 0
             ? `<small class="action-signal action-signal-warning">公告已修订 ${escapeHtml(changeSummary.count)} 次 · ${escapeHtml((changeSummary.changed_fields || []).map(noticeChangeFieldLabel).slice(0, 2).join("、"))}</small>`
@@ -1433,6 +1438,7 @@ function openOpportunityDetail(noticeId) {
   const qualification = item.qualification || {};
   const actionState = item.action_state || {};
   const changeSummary = item.change_summary || {};
+  const changeReview = item.change_review || {};
   const changedFields = Array.isArray(changeSummary.changed_fields)
     ? changeSummary.changed_fields
     : [];
@@ -1482,6 +1488,15 @@ function openOpportunityDetail(noticeId) {
             changeSummary.after?.[field],
           )).join("")}
         </div>
+        ${Number(changeReview.pending_count) > 0 ? `
+          <div class="change-review-status ${changeReview.overdue ? "is-overdue" : ""}">
+            <div>
+              <strong>${changeReview.overdue ? "复核已逾期" : "需要负责人复核"}</strong>
+              <span>${escapeHtml(changeReview.pending_count)} 条重大变更 · 截止 ${escapeHtml(changeReview.required_by || "-")}</span>
+            </div>
+            <small>原决策已失效，确认复核后需要重新完成 Go/Hold/No-Go 判断。</small>
+          </div>
+        ` : changeReview.acknowledged_at ? `<p class="change-review-acknowledged">最近复核：${escapeHtml(changeReview.acknowledged_by || "-")} · ${escapeHtml(changeReview.acknowledged_at)}</p>` : ""}
       </section>
     ` : ""}
     <section class="opportunity-detail-section opportunity-facts-section">
@@ -1660,9 +1675,12 @@ function decisionSlaLabel(actionState) {
 }
 
 function escalationIssueLabel(item) {
-  if (item.issue_type === "decision_task") return "决策超时 + 任务逾期";
-  if (item.issue_type === "task") return "任务逾期";
-  return "决策超时";
+  const labels = { decision: "决策超时", task: "任务逾期", change_review: "变更复核逾期" };
+  const rawType = String(item.issue_type || "decision");
+  const types = Array.isArray(item.issue_types)
+    ? item.issue_types
+    : Object.keys(labels).filter((value) => rawType.includes(value));
+  return types.map((value) => labels[value]).filter(Boolean).join(" + ") || "协同逾期";
 }
 
 function renderOpportunityDecisionBoard(actionQueue) {
@@ -1678,6 +1696,7 @@ function renderOpportunityDecisionBoard(actionQueue) {
       <strong>${escapeHtml(actionQueue.qualification_ready || 0)} 条可决策</strong>
       <div class="decision-board-lines">
         ${decisionBoardLine("阻断待补", actionQueue.qualification_blocked || 0)}
+        ${decisionBoardLine("公告变更待复核", actionQueue.change_review_pending || 0, actionQueue.change_review_overdue ? "danger" : "")}
         ${decisionBoardLine("待管理决策", actionQueue.decision_pending || 0)}
         ${decisionBoardLine(`超过 ${actionQueue.decision_sla_hours || 0} 小时`, actionQueue.decision_overdue || 0, actionQueue.decision_overdue ? "danger" : "")}
       </div>
@@ -1690,7 +1709,7 @@ function renderOpportunityDecisionBoard(actionQueue) {
         ${decisionPipelineValue("Hold", decisions.hold || 0, "hold")}
         ${decisionPipelineValue("No-Go", decisions.no_go || 0, "no-go")}
       </div>
-      <small>飞书任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)}</small>
+      <small>飞书任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)} · 变更复核逾期 ${escapeHtml(actionQueue.change_review_overdue || 0)}</small>
     </section>
     <section>
       <span class="decision-board-kicker">协同升级队列</span>
@@ -1704,7 +1723,7 @@ function renderOpportunityDecisionBoard(actionQueue) {
             <span>${escapeHtml(item.title || "未命名机会")}</span>
             <small>${escapeHtml(escalationIssueLabel(item))} · ${escapeHtml(item.owner || "待分配")}</small>
           </button>
-        `).join("") : '<small>决策计时与飞书任务同步会自动识别需要管理介入的机会。</small>'}
+        `).join("") : '<small>决策、飞书任务与公告变更复核会自动识别需要管理介入的机会。</small>'}
       </div>
     </section>
   `;
@@ -2722,14 +2741,25 @@ async function sendOpportunityToFeishu(noticeId, assignment = {}) {
 }
 
 async function applyOpportunityAction(noticeId, action) {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  const descriptor = item?.action_contract?.actions?.find((value) => value.action === action);
+  let reason = "";
+  if (descriptor?.accepts_reason) {
+    const input = window.prompt(
+      action === "acknowledge_change" ? "请填写复核结论或影响说明（可留空）" : "请填写决策依据（可留空）",
+      "",
+    );
+    if (input === null) return;
+    reason = input.trim();
+  }
   const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/actions`, {
     method: "POST",
-    body: JSON.stringify({ action, actor_name: "admin" }),
+    body: JSON.stringify({ action, actor_name: "admin", reason }),
   });
   await refreshOpportunities();
   if (el.opportunityDetailDialog?.open) openOpportunityDetail(noticeId);
   const workflow = result.workflow || {};
-  showToast(`机会已更新：${workflow.stage_label || decisionLabel(workflow.decision)}`);
+  showToast(action === "acknowledge_change" ? "公告变更已复核，请重新完成投标决策" : `机会已更新：${workflow.stage_label || decisionLabel(workflow.decision)}`);
 }
 
 async function sendOpportunityEscalations() {
@@ -2739,7 +2769,7 @@ async function sendOpportunityEscalations() {
   });
   showToast(
     result.status === "sent"
-      ? `已发送 ${result.escalation_count} 条协同升级 · 决策 ${result.decision_count || 0} · 任务 ${result.task_count || 0}`
+      ? `已发送 ${result.escalation_count} 条协同升级 · 决策 ${result.decision_count || 0} · 任务 ${result.task_count || 0} · 变更复核 ${result.change_review_count || 0}`
       : "当前没有需要发送的协同升级",
   );
 }
