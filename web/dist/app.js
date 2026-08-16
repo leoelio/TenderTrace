@@ -95,6 +95,7 @@ const el = {
   refreshEvaluationButton: document.querySelector("#refreshEvaluationButton"),
   refreshOpportunitiesButton: document.querySelector("#refreshOpportunitiesButton"),
   syncFeishuTasksButton: document.querySelector("#syncFeishuTasksButton"),
+  sendOpportunityChangesButton: document.querySelector("#sendOpportunityChangesButton"),
   sendOpportunityBriefingButton: document.querySelector("#sendOpportunityBriefingButton"),
   opportunityTopicFilter: document.querySelector("#opportunityTopicFilter"),
   opportunityLevelFilter: document.querySelector("#opportunityLevelFilter"),
@@ -1360,12 +1361,15 @@ function renderOpportunities(payload) {
           const intelligence = item.intelligence || {};
           const workflow = item.workflow || {};
           const actionState = item.action_state || {};
+          const changeSummary = item.change_summary || {};
           const scores = intelligence.scores || {};
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
           const qualification = item.qualification || {};
           const decision = workflow.decision || "pending";
           const actionSignal = actionState.feishu_task_overdue
             ? '<small class="action-signal action-signal-danger">飞书任务已逾期</small>'
+            : Number(changeSummary.count) > 0
+            ? `<small class="action-signal action-signal-warning">公告已修订 ${escapeHtml(changeSummary.count)} 次 · ${escapeHtml((changeSummary.changed_fields || []).map(noticeChangeFieldLabel).slice(0, 2).join("、"))}</small>`
             : actionState.decision_sla_status === "overdue"
             ? `<small class="action-signal action-signal-danger">决策已超时 ${escapeHtml(actionState.decision_wait_hours || 0)} 小时</small>`
             : actionState.decision_sla_status === "due_soon"
@@ -1428,6 +1432,10 @@ function openOpportunityDetail(noticeId) {
   const workflow = item.workflow || {};
   const qualification = item.qualification || {};
   const actionState = item.action_state || {};
+  const changeSummary = item.change_summary || {};
+  const changedFields = Array.isArray(changeSummary.changed_fields)
+    ? changeSummary.changed_fields
+    : [];
   const qualificationGates = Array.isArray(qualification.gates) ? qualification.gates : [];
   const approvalBlockers = qualificationBlockers(qualification, "approve_bid");
   const scores = intelligence.scores || {};
@@ -1461,6 +1469,21 @@ function openOpportunityDetail(noticeId) {
       ${detailMetric("可信", scores.credibility || 0)}
       ${detailMetric("需求覆盖", review.coverage_score || 0)}
     </div>
+    ${Number(changeSummary.count) > 0 ? `
+      <section class="opportunity-detail-section opportunity-change-section">
+        <div class="opportunity-detail-section-title">
+          <h3>公告变更</h3>
+          <span>累计 ${escapeHtml(changeSummary.count)} 次 · 最近 ${escapeHtml(changeSummary.latest_at || "-")}</span>
+        </div>
+        <div class="opportunity-change-list">
+          ${changedFields.map((field) => noticeChangeLine(
+            field,
+            changeSummary.before?.[field],
+            changeSummary.after?.[field],
+          )).join("")}
+        </div>
+      </section>
+    ` : ""}
     <section class="opportunity-detail-section opportunity-facts-section">
       <div class="opportunity-detail-section-title">
         <h3>事实核验</h3>
@@ -1706,6 +1729,43 @@ function opportunityActionButtons(item) {
     const disabled = descriptor.enabled ? "" : " disabled";
     return `<button class="${className}" type="button" data-opportunity-action="${escapeHtml(descriptor.action)}" data-opportunity-id="${escapeHtml(item.notice_id)}"${title}${disabled}>${escapeHtml(descriptor.label)}</button>`;
   }).join("");
+}
+
+function noticeChangeFieldLabel(field) {
+  return {
+    attachment_fingerprints: "附件内容",
+    attachments: "附件列表",
+    bid_deadline: "投标截止",
+    budget: "预算",
+    content_text: "公告正文",
+    core_content: "核心内容",
+    project_no: "项目编号",
+    publish_time: "发布时间",
+    purchaser: "采购主体",
+    region: "地区",
+    source_url: "来源链接",
+    title: "标题",
+  }[field] || field;
+}
+
+function noticeChangeLine(field, before, after) {
+  const beforeText = noticeChangeValue(before);
+  const afterText = noticeChangeValue(after);
+  return `
+    <div>
+      <strong>${escapeHtml(noticeChangeFieldLabel(field))}</strong>
+      <span>${escapeHtml(beforeText || "未提供")}</span>
+      <i aria-hidden="true">→</i>
+      <span>${escapeHtml(afterText || "未提供")}</span>
+    </div>
+  `;
+}
+
+function noticeChangeValue(value) {
+  if (Array.isArray(value)) return `${value.length} 项`;
+  if (value && typeof value === "object") return value.excerpt || "内容已更新";
+  const text = String(value ?? "").trim();
+  return text.length > 140 ? `${text.slice(0, 140)}…` : text;
 }
 
 function marketInsight(label, value, detail) {
@@ -2697,6 +2757,27 @@ async function sendOpportunityBriefing() {
   );
 }
 
+async function sendOpportunityChanges() {
+  if (el.sendOpportunityChangesButton) el.sendOpportunityChangesButton.disabled = true;
+  try {
+    const result = await api("/api/opportunities/changes/send-feishu", {
+      method: "POST",
+      body: JSON.stringify({ limit: 100 }),
+    });
+    showToast(
+      result.status === "sent"
+        ? `已向 ${result.receiver_count || 0} 位负责人推送 ${result.sent_count || 0} 条公告变更`
+        : result.status === "partial"
+          ? `已推送 ${result.sent_count || 0} 条，${result.failed_count || 0} 条将在下次继续重试`
+          : result.status === "failed"
+            ? `公告变更推送失败 ${result.failed_count || 0} 条，将在下次继续重试`
+            : "当前没有待推送的公告变更",
+    );
+  } finally {
+    if (el.sendOpportunityChangesButton) el.sendOpportunityChangesButton.disabled = false;
+  }
+}
+
 async function syncFeishuTasks() {
   if (el.syncFeishuTasksButton) el.syncFeishuTasksButton.disabled = true;
   try {
@@ -3440,6 +3521,9 @@ function bindEvents() {
   );
   el.sendOpportunityBriefingButton?.addEventListener("click", () =>
     sendOpportunityBriefing().catch(toastError("机会经营晨报发送失败")),
+  );
+  el.sendOpportunityChangesButton?.addEventListener("click", () =>
+    sendOpportunityChanges().catch(toastError("公告变更推送失败")),
   );
   el.syncFeishuTasksButton?.addEventListener("click", () =>
     syncFeishuTasks().catch(toastError("飞书任务同步失败")),

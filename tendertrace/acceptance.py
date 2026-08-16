@@ -70,6 +70,7 @@ REQUIRED_TABLES = {
     "ingest_subscriptions",
     "sent_history",
     "notices",
+    "notice_revisions",
     "notices_fts",
     "notice_embeddings",
     "clusters",

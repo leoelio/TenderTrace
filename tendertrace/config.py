@@ -116,6 +116,8 @@ class Settings:
     feishu_callback_verification_token_present: bool
     feishu_task_sync_enabled: bool
     feishu_task_sync_cron: str
+    opportunity_change_alert_enabled: bool
+    opportunity_change_alert_cron: str
     source_alert_enabled: bool
     source_alert_cron: str
     source_alert_min_reliability: float
@@ -250,6 +252,18 @@ class Settings:
             raise ConfigError(
                 "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true requires FEISHU_ENABLED=true"
             )
+        opportunity_change_alert_enabled = _parse_bool(
+            _first_value(
+                "TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED",
+                env_files,
+                "false",
+            )
+        )
+        if opportunity_change_alert_enabled and not feishu_enabled:
+            raise ConfigError(
+                "TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED=true requires "
+                "FEISHU_ENABLED=true"
+            )
         source_alert_enabled = _parse_bool(
             _first_value("TENDERTRACE_SOURCE_ALERT_ENABLED", env_files, "false")
         )
@@ -372,6 +386,12 @@ class Settings:
             feishu_task_sync_enabled=feishu_task_sync_enabled,
             feishu_task_sync_cron=_first_value(
                 "TENDERTRACE_FEISHU_TASK_SYNC_CRON", env_files, "*/10 * * * *"
+            ),
+            opportunity_change_alert_enabled=opportunity_change_alert_enabled,
+            opportunity_change_alert_cron=_first_value(
+                "TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_CRON",
+                env_files,
+                "*/15 * * * *",
             ),
             source_alert_enabled=source_alert_enabled,
             source_alert_cron=_first_value(
@@ -542,6 +562,8 @@ class Settings:
             ),
             "feishu_task_sync_enabled": self.feishu_task_sync_enabled,
             "feishu_task_sync_cron": self.feishu_task_sync_cron,
+            "opportunity_change_alert_enabled": self.opportunity_change_alert_enabled,
+            "opportunity_change_alert_cron": self.opportunity_change_alert_cron,
             "source_alert_enabled": self.source_alert_enabled,
             "source_alert_cron": self.source_alert_cron,
             "source_alert_min_reliability": self.source_alert_min_reliability,

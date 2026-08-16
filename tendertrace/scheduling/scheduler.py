@@ -7,6 +7,7 @@ from tendertrace.config import Settings
 from tendertrace.ingest import run_ingest_cycle
 from tendertrace.integrations.feishu_briefing import send_opportunity_briefing
 from tendertrace.integrations.feishu_escalation import send_opportunity_escalation_summary
+from tendertrace.integrations.feishu_notice_changes import send_opportunity_change_alerts
 from tendertrace.integrations.feishu_source_alerts import send_source_health_alert
 from tendertrace.integrations.feishu_source_incidents import sync_source_incidents
 from tendertrace.integrations.feishu_leads import import_partner_leads
@@ -45,6 +46,8 @@ def start_subscription_scheduler(settings: Settings):
     if settings.feishu_task_sync_enabled:
         schedule_feishu_task_sync(scheduler, settings)
         schedule_source_incident_sync(scheduler, settings)
+    if settings.opportunity_change_alert_enabled:
+        schedule_opportunity_change_alert(scheduler, settings)
     if settings.source_alert_enabled:
         schedule_source_health_alert(scheduler, settings)
     scheduler.start()
@@ -171,6 +174,25 @@ def schedule_feishu_task_sync(scheduler, settings: Settings) -> None:
             timezone=settings.timezone,
         ),
         id="feishu:task-sync",
+        kwargs={"settings": settings},
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
+def schedule_opportunity_change_alert(scheduler, settings: Settings) -> None:
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError as exc:
+        raise RuntimeError("APScheduler is not installed. Run: python -m pip install -e .[dev]") from exc
+    scheduler.add_job(
+        send_opportunity_change_alerts,
+        trigger=CronTrigger.from_crontab(
+            settings.opportunity_change_alert_cron,
+            timezone=settings.timezone,
+        ),
+        id="feishu:opportunity-change-alert",
         kwargs={"settings": settings},
         replace_existing=True,
         coalesce=True,

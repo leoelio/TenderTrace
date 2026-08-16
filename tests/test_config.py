@@ -31,6 +31,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.opportunity_briefing_cron, "45 8 * * 1-5")
         self.assertFalse(settings.feishu_task_sync_enabled)
         self.assertEqual(settings.feishu_task_sync_cron, "*/10 * * * *")
+        self.assertFalse(settings.opportunity_change_alert_enabled)
+        self.assertEqual(settings.opportunity_change_alert_cron, "*/15 * * * *")
         self.assertFalse(settings.source_alert_enabled)
         self.assertEqual(settings.source_alert_cron, "15 */2 * * *")
         self.assertEqual(settings.source_alert_min_reliability, 0.75)
@@ -53,6 +55,7 @@ class SettingsTests(unittest.TestCase):
             settings.safe_summary()["qualification_policy"]["briefing_enabled"]
         )
         self.assertFalse(settings.safe_summary()["source_alert_enabled"])
+        self.assertFalse(settings.safe_summary()["opportunity_change_alert_enabled"])
 
     def test_source_health_alert_requires_feishu_and_valid_ratio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -102,17 +105,28 @@ class SettingsTests(unittest.TestCase):
                 Settings.load(root)
 
             (root / ".env.local").write_text(
+                "TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED=true\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
+
+            (root / ".env.local").write_text(
                 "FEISHU_ENABLED=true\n"
                 "FEISHU_APP_ID=cli_test\n"
                 "FEISHU_APP_SECRET=secret\n"
                 "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true\n"
-                "TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/5 * * * *\n",
+                "TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/5 * * * *\n"
+                "TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED=true\n"
+                "TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_CRON=*/7 * * * *\n",
                 encoding="utf-8",
             )
             settings = Settings.load(root)
 
         self.assertTrue(settings.feishu_task_sync_enabled)
         self.assertEqual(settings.feishu_task_sync_cron, "*/5 * * * *")
+        self.assertTrue(settings.opportunity_change_alert_enabled)
+        self.assertEqual(settings.opportunity_change_alert_cron, "*/7 * * * *")
 
     def test_qualification_policy_is_configurable_and_validated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

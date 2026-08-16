@@ -11,6 +11,7 @@ from tendertrace.scheduling.scheduler import (
     schedule_ingest_pool,
     schedule_ingest_subscription,
     schedule_opportunity_briefing,
+    schedule_opportunity_change_alert,
     schedule_opportunity_escalation,
     schedule_source_health_alert,
     schedule_source_incident_sync,
@@ -163,11 +164,16 @@ class SchedulerTests(unittest.TestCase):
             settings = Settings.load(root)
 
         schedule_feishu_task_sync(scheduler, settings)
+        schedule_opportunity_change_alert(scheduler, settings)
 
-        job = scheduler.jobs[0]["kwargs"]
-        self.assertEqual(job["id"], "feishu:task-sync")
-        self.assertTrue(job["replace_existing"])
-        self.assertTrue(job["coalesce"])
+        task_job = scheduler.jobs[0]["kwargs"]
+        change_job = scheduler.jobs[1]["kwargs"]
+        self.assertEqual(task_job["id"], "feishu:task-sync")
+        self.assertTrue(task_job["replace_existing"])
+        self.assertTrue(task_job["coalesce"])
+        self.assertEqual(change_job["id"], "feishu:opportunity-change-alert")
+        self.assertTrue(change_job["replace_existing"])
+        self.assertTrue(change_job["coalesce"])
 
     def test_source_health_alert_registers_configured_cron_job(self) -> None:
         scheduler = FakeScheduler()

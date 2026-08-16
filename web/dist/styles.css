@@ -4910,6 +4910,45 @@ tbody tr:hover {
   opacity: 0.64;
 }
 
+.opportunity-change-section {
+  border-left: 3px solid rgba(196, 133, 22, 0.72);
+  background: rgba(255, 249, 235, 0.58);
+}
+
+.opportunity-change-list {
+  display: grid;
+  margin-top: 10px;
+  border-top: 1px solid rgba(220, 199, 154, 0.58);
+}
+
+.opportunity-change-list > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.55fr) minmax(0, 1fr) 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(220, 199, 154, 0.46);
+}
+
+.opportunity-change-list strong,
+.opportunity-change-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.opportunity-change-list span { color: var(--text-muted); }
+.opportunity-change-list i { color: #9a6a12; font-style: normal; text-align: center; }
+
+@media (max-width: 760px) {
+  .opportunity-change-list > div {
+    grid-template-columns: 1fr;
+  }
+
+  .opportunity-change-list i { display: none; }
+}
+
 .opportunity-detail-dialog::backdrop {
   background: rgba(30, 45, 66, 0.34);
   backdrop-filter: blur(5px);

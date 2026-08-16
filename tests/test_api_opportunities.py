@@ -95,6 +95,17 @@ class OpportunityApiTests(unittest.TestCase):
                         },
                     ),
                 ), patch.object(
+                    api_module,
+                    "send_opportunity_change_alerts",
+                    return_value=SimpleNamespace(
+                        sent_count=0,
+                        to_dict=lambda: {
+                            "status": "skipped",
+                            "revision_count": 0,
+                            "sent_count": 0,
+                        },
+                    ),
+                ), patch.object(
                     api_module.FeishuClient,
                     "list_authorized_users",
                     return_value={
@@ -160,6 +171,11 @@ class OpportunityApiTests(unittest.TestCase):
                         "/api/opportunities/tasks/sync",
                         json={"limit": 100},
                     )
+                    changes = client.get("/api/opportunities/changes?limit=20")
+                    change_alert = client.post(
+                        "/api/opportunities/changes/send-feishu",
+                        json={"limit": 20},
+                    )
                     users = client.get("/api/integrations/feishu/users?limit=20")
                     escalation = client.post(
                         "/api/opportunities/escalations/send-feishu",
@@ -213,6 +229,10 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(task_sync.json()["completed_count"], 1)
         self.assertEqual(task_sync.json()["completion_notifications_sent"], 1)
         self.assertEqual(task_sync.json()["overdue_notifications_sent"], 1)
+        self.assertEqual(changes.status_code, 200)
+        self.assertEqual(changes.json()["returned"], 0)
+        self.assertEqual(change_alert.status_code, 200)
+        self.assertEqual(change_alert.json()["status"], "skipped")
         self.assertEqual(users.status_code, 200)
         self.assertEqual(users.json()["items"][0]["open_id"], "ou_owner")
         self.assertIn("当前阶段", blocked.json()["detail"]["reasons"][0])

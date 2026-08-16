@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 
 DDL = (
@@ -83,7 +83,21 @@ DDL = (
         fields_json TEXT NOT NULL DEFAULT '{}',
         snapshot_sha256 TEXT,
         simhash64 TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS notice_revisions (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        change_hash TEXT NOT NULL,
+        changed_fields_json TEXT NOT NULL DEFAULT '[]',
+        before_json TEXT NOT NULL DEFAULT '{}',
+        after_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
     )
     """,
     """
@@ -443,6 +457,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_runs_subscription ON runs(subscription_id)",
     "CREATE INDEX IF NOT EXISTS idx_notices_publish_time ON notices(publish_time)",
     "CREATE INDEX IF NOT EXISTS idx_notices_source_site ON notices(source_site)",
+    "CREATE INDEX IF NOT EXISTS idx_notice_revisions_notice ON notice_revisions(notice_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_notice_revisions_time ON notice_revisions(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_clusters_project_no ON clusters(project_no)",
     "CREATE INDEX IF NOT EXISTS idx_evidence_items_cluster ON evidence_items(cluster_key)",
     "CREATE INDEX IF NOT EXISTS idx_evidence_items_notice ON evidence_items(notice_id)",
@@ -478,6 +494,8 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "purchaser TEXT",
         "core_content TEXT",
         "attachments_json TEXT NOT NULL DEFAULT '[]'",
+        "updated_at TEXT NOT NULL DEFAULT ''",
+        "last_seen_at TEXT NOT NULL DEFAULT ''",
     ),
     "feishu_lead_import_runs": (
         "verified_count INTEGER NOT NULL DEFAULT 0",
@@ -528,6 +546,14 @@ def init_db(settings: Settings) -> None:
         for statement in DDL:
             conn.execute(statement)
         _ensure_required_columns(conn)
+        conn.execute(
+            """
+            UPDATE notices
+            SET updated_at = CASE WHEN updated_at = '' THEN created_at ELSE updated_at END,
+                last_seen_at = CASE WHEN last_seen_at = '' THEN created_at ELSE last_seen_at END
+            WHERE updated_at = '' OR last_seen_at = ''
+            """
+        )
         _ensure_fts(conn)
         for statement in INDEXES:
             conn.execute(statement)

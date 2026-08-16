@@ -36,6 +36,7 @@ from tendertrace.integrations.feishu_card_actions import (
     process_feishu_card_action,
 )
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
+from tendertrace.integrations.feishu_notice_changes import send_opportunity_change_alerts
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
 from tendertrace.integrations.feishu_source_alerts import (
     build_source_alert_snapshot,
@@ -73,6 +74,7 @@ from tendertrace.memory import (
     record_activity,
 )
 from tendertrace.memory_actions import apply_memory_advice_feedback
+from tendertrace.notice_changes import list_notice_revisions
 from tendertrace.opportunity import (
     analyze_opportunity_with_market_context,
     get_opportunity,
@@ -578,6 +580,41 @@ def create_app():
             topic=normalized_topic,
             sort=normalized_sort,
         )
+
+    @app.get("/api/opportunities/changes")
+    def opportunity_changes(
+        limit: int = 100,
+        notice_id: str = "",
+    ) -> dict[str, object]:
+        items = list_notice_revisions(
+            settings,
+            notice_id=notice_id.strip(),
+            limit=limit,
+        )
+        return {
+            "items": [item.to_dict() for item in items],
+            "returned": len(items),
+        }
+
+    @app.post("/api/opportunities/changes/send-feishu")
+    def send_opportunity_changes(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            result = send_opportunity_change_alerts(
+                settings,
+                limit=int(request.get("limit") or 100),
+            )
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="opportunity_change_alert",
+            target="notice_revisions",
+            label=f"推送 {result.sent_count} 条机会变更",
+            metadata=result.to_dict(),
+        )
+        return result.to_dict()
 
     @app.post("/api/opportunities/analyze")
     def analyze_opportunity(request: dict[str, object] = Body(...)) -> dict[str, object]:

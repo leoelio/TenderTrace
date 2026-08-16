@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P42</strong> · Server-driven Action Contract · Identity-safe Collaboration · Enterprise Glass UI
+  <strong>Current stage: P43</strong> · Notice Revision Ledger · Owner Change Alerts · Enterprise Glass UI
 </p>
 
 ---
@@ -52,6 +52,8 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 需求审阅：按技术规格、兼容集成、交付实施、验收、服务、资质、评分和安全 8 个维度检查当前采集文本，并给出待核对项与优化建议。
 - 飞书记录视图：切换多维表格记录时同步读取本地机会库的负责人、销售阶段、资格门禁、投标决策与任务状态；可回写研判、提交证据核验，并在同一视图执行阶段有效的 Go/Hold/No-Go、投标准备、结果和归档动作。首次认领必须通过交互卡获取成员真实 `open_id`，不会把 Base 用户标识误作任务负责人。
 - 统一动作契约：工作流域层根据销售阶段、资格门禁与 Go 决策动态生成带版本的动作清单、阻断原因、展示语义和身份要求；Web、飞书卡片与记录视图消费同一契约，不再各自硬编码流程分支。
+- 公告持续跟踪：重复采集使用原位 UPSERT，保留机会负责人、核验事实、事件和创建时间；预算、截止时间、正文或附件等业务变化写入不可变修订账本，机会列表与详情展示最近差异。
+- 变更提醒：修订按机会负责人聚合为飞书提醒；失败可重试，成功按“修订 + 接收人”去重，终态机会保持静默，无负责人时才回退到统一接收目标。
 - 清洗去重：正文噪声清理、URL 规范化、项目编号提取、SimHash 聚类。
 - 附件抽取：支持受限下载并抽取 PDF、DOCX、XLSX 正文片段。
 - 证据链：保存来源链接、正文摘录、附件快照、字段级证据和事实校验结果。
@@ -194,6 +196,8 @@ TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=false
 TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=45 8 * * 1-5
 TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=false
 TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/10 * * * *
+TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED=false
+TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_CRON=*/15 * * * *
 TENDERTRACE_SOURCE_ALERT_ENABLED=false
 TENDERTRACE_SOURCE_ALERT_CRON=15 */2 * * *
 TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY=0.75
@@ -350,6 +354,8 @@ python -m tendertrace embed-notices
 - `GET /api/opportunities/{notice_id}/facts`：读取字段级核验结果与变更审计。
 - `PATCH /api/opportunities/{notice_id}/facts`：提交带来源链接的核验事实，重算机会与准入，并回写飞书台账。
 - `POST /api/opportunities/{notice_id}/actions`：执行带阶段和资格门禁的认领、确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
+- `GET /api/opportunities/changes`：读取公告修订账本，可按公告过滤。
+- `POST /api/opportunities/changes/send-feishu`：向机会负责人聚合发送尚未成功投递的公告变更。
 - `POST /api/opportunities/escalations/send-feishu`：发送决策超时与任务逾期的统一管理摘要；同一机会合并风险，并按每日风险集合去重。
 - `POST /api/opportunities/briefing/send-feishu`：发送机会经营晨报，汇总机会池、负责人、资格、决策、市场和来源风险；自动任务按同日机会状态去重。
 - `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态或回写建议反馈，并同步相关业务状态。
@@ -381,6 +387,8 @@ python -m tendertrace embed-notices
 来源健康自动告警默认关闭。设置 `TENDERTRACE_SOURCE_ALERT_ENABLED=true` 后，系统按 `TENDERTRACE_SOURCE_ALERT_CRON` 检查登录态、可靠度阈值和最近成功时间，并将异常来源发送到默认飞书接收目标。可靠度与新鲜度阈值分别由 `TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY` 和 `TENDERTRACE_SOURCE_ALERT_STALE_HOURS` 控制；未产生真实运行记录的来源保持“待观察”，不会因零样本误报。数据源页可把当前异常转成飞书 Task v2 处置任务，使用默认授权成员作为负责人，截止时间由 `TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS` 控制；任务使用当日来源状态指纹作为幂等键。处置事件会持久化到本地，启用 `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` 后与销售机会任务共用同步周期；飞书任务完成但来源仍异常时保持打开，避免形式化关闭。
 
 飞书任务状态支持双向回收。机会页的“同步任务状态”会读取已关联任务的完成时间与截止时间，识别进行中、已完成和已逾期状态，并幂等回写本地 workflow、审计事件和多维表格。设置 `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_FEISHU_TASK_SYNC_CRON` 自动执行；启用前需为应用开通任务读取或任务读写权限。
+
+机会公告变更提醒默认关闭。设置 `TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_CRON` 扫描未投递修订，将预算、截止时间、采购主体、正文和附件变化优先发给机会负责人。发送失败不会确认修订，下一轮继续重试；发送成功后同一修订不会重复提醒同一接收人。
 
 飞书会话也可以直接作为 TenderTrace 的自然语言入口。为自建应用启用机器人能力并订阅 `im.message.receive_v1` 与 `card.action.trigger` 后，安装可选依赖 `python -m pip install -e .[feishu]`，运行 `python -m tendertrace feishu-bot-listen` 即可通过官方长连接接收消息和机会卡片动作，无需把本地服务暴露到公网。即时问题会运行检索、生成 Word 并回传原会话；带发送时间或频率的问题会创建绑定原会话的增量订阅。事件先写入 `feishu_message_events`，以 `event_id` 和 `message_id` 双重去重，进程重启时会恢复未处理或超时任务。启用 `TENDERTRACE_SCHEDULER_ENABLED` 时，该 CLI 同时承担订阅调度；同一数据库只能运行一个启用调度器的进程。
 
@@ -480,8 +488,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P42
-- 295 unit tests pass, including 426 subtests.
+- Current stage: P43
+- 298 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -542,6 +550,8 @@ The current architecture is local-first: background ingestion continuously store
 - An eight-dimension requirement review covering specifications, integration, delivery, acceptance, service, qualifications, scoring, and security; missing evidence is explicitly labeled for verification.
 - A Feishu record-view workflow portal that reloads authoritative ownership, stage, qualification, decision, and task state as the selected row changes; it writes intelligence, verifies evidence-backed facts, and executes stage-valid actions through the same auditable gates as the Web UI. Initial claiming remains an interactive-card action so a Base user identifier is never mistaken for the member `open_id` required by Task v2.
 - A versioned, server-driven action contract that derives labels, intent, availability, gate reasons, decision input, and identity requirements from the workflow domain. Web, interactive Feishu cards, and the record-view extension consume the same contract instead of duplicating stage branches.
+- A durable notice-revision ledger backed by in-place UPSERT semantics. Reingestion preserves workflow ownership, verified facts, audit events, and original creation time while tracking meaningful changes to deadlines, budgets, content, and attachments.
+- Receiver-scoped Feishu change alerts grouped by opportunity owner, with retryable failures, irreversible successful-delivery deduplication, terminal-stage suppression, and a configured-target fallback only for unowned opportunities.
 - Text cleaning, URL canonicalization, project-number extraction, SimHash clustering.
 - Bounded attachment download and extraction for PDF, DOCX, and XLSX.
 - Evidence chain with source links, excerpts, attachment snapshots, and fact checks.
@@ -676,6 +686,8 @@ TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=false
 TENDERTRACE_OPPORTUNITY_BRIEFING_CRON=45 8 * * 1-5
 TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=false
 TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/10 * * * *
+TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED=false
+TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_CRON=*/15 * * * *
 TENDERTRACE_SOURCE_ALERT_ENABLED=false
 TENDERTRACE_SOURCE_ALERT_CRON=15 */2 * * *
 TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY=0.75
@@ -803,6 +815,8 @@ Available Web APIs:
 - `GET /api/opportunities/{notice_id}/facts`: inspect field-level verified facts and their audit history.
 - `PATCH /api/opportunities/{notice_id}/facts`: submit evidence-backed facts, recompute qualification, and synchronize the Bitable record.
 - `POST /api/opportunities/{notice_id}/actions`: execute stage- and qualification-gated claim, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions.
+- `GET /api/opportunities/changes`: inspect the durable notice-revision ledger, optionally filtered by notice.
+- `POST /api/opportunities/changes/send-feishu`: deliver pending notice changes to opportunity owners without duplicating successful deliveries.
 - `POST /api/opportunities/escalations/send-feishu`: send a unified decision-overdue and task-overdue management summary, merging risks per opportunity and deduplicating the daily risk set.
 - `POST /api/opportunities/briefing/send-feishu`: send an opportunity operations briefing that combines pipeline, ownership, qualification, decision, market, and source-risk context.
 - `POST /api/integrations/feishu/callback`: verify card callbacks, then advance opportunity state or persist recommendation feedback through the shared business workflow.
@@ -832,6 +846,8 @@ The Opportunity view resolves owners from the Feishu app's authorized contact sc
 Scheduled opportunity briefings are disabled by default. Set `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` and configure `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` to deliver a state-deduplicated weekday briefing to the default chat. The Web Opportunity Intelligence view can also trigger it manually. Claim, qualify, Go, and bid-preparation buttons reuse the same workflow graph, qualification gates, callback handler, and audit stream as the Web UI.
 
 Feishu task status can be synchronized back into TenderTrace. The Opportunity Intelligence view reads completion and due timestamps for linked tasks, classifies them as open, completed, or overdue, and idempotently updates the local workflow, audit ledger, and Bitable record. Enable scheduled synchronization with `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true` and `TENDERTRACE_FEISHU_TASK_SYNC_CRON`; the Feishu app needs task read or task write permission.
+
+Opportunity notice-change alerts are disabled by default. Set `TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_ENABLED=true` to scan pending revisions on `TENDERTRACE_OPPORTUNITY_CHANGE_ALERT_CRON`. Deadline, budget, purchaser, content, and attachment changes are grouped by owner. Failed delivery remains retryable; successful delivery is deduplicated per revision and receiver, and terminal opportunities stay silent.
 
 Automated source-health delivery is disabled by default. Set `TENDERTRACE_SOURCE_ALERT_ENABLED=true` to evaluate login state, observed reliability, and last-success freshness on `TENDERTRACE_SOURCE_ALERT_CRON`. The reliability and freshness thresholds are controlled by `TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY` and `TENDERTRACE_SOURCE_ALERT_STALE_HOURS`. Sources without observed runs remain pending and do not generate zero-sample alerts. The Data Sources view can convert current issues into a Feishu Task v2 incident, assign the configured authorized member, and set its deadline from `TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS`; the daily source-state fingerprint prevents duplicate tasks. Incidents are persisted locally and reuse `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` for periodic synchronization. Completing a task does not resolve the incident while its source still violates the SLO.
 
@@ -927,8 +943,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P42
-- 295 unit tests pass, including 426 subtests.
+- Current stage: P43
+- 298 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

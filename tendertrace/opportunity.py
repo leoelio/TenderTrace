@@ -12,6 +12,7 @@ from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.intent.topic import extract_topic
+from tendertrace.notice_changes import notice_change_summaries
 from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.retrieval import parse_date
@@ -280,6 +281,10 @@ def list_opportunities(
     qualification_policy = policy_from_settings(settings)
     reference_time = datetime.now(timezone.utc)
     workflows = workflow_snapshots(settings, [notice_id for notice_id, _notice in rows])
+    change_summaries = notice_change_summaries(
+        settings,
+        [notice_id for notice_id, _notice in rows],
+    )
     for notice_id, notice in rows:
         payload = _notice_payload(notice)
         intelligence = _analyze(payload, as_of=None)
@@ -307,6 +312,7 @@ def list_opportunities(
             ),
             "intelligence": intelligence,
             "workflow": workflow,
+            "change_summary": change_summaries.get(notice_id, {}),
         }
         item["qualification"] = assess_qualification(
             item,
@@ -404,6 +410,10 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "intelligence": intelligence,
         "workflow": workflow.to_dict(),
     }
+    item["change_summary"] = notice_change_summaries(settings, [notice_id]).get(
+        notice_id,
+        {},
+    )
     item["qualification"] = assess_qualification(
         item,
         workflow.to_dict(),

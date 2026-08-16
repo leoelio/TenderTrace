@@ -24,6 +24,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("notices_fts", health["tables"])
         self.assertIn("ingest_subscriptions", health["tables"])
         self.assertIn("notice_embeddings", health["tables"])
+        self.assertIn("notice_revisions", health["tables"])
         self.assertIn("user_activity_events", health["tables"])
         self.assertIn("weekly_reports", health["tables"])
         self.assertIn("user_memory_profiles", health["tables"])

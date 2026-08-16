@@ -19,6 +19,11 @@ from tendertrace.delivery.feishu_report import deliver_report_to_feishu
 from tendertrace.intent import compile_intent
 from tendertrace.llm.enhancer import enhance_bidql_with_model
 from tendertrace.llm.gateway import ModelGateway
+from tendertrace.notice_changes import (
+    notice_change_payload,
+    notice_change_payload_from_row,
+    record_notice_revision,
+)
 from tendertrace.opportunity import enrich_opportunity_intelligence
 from tendertrace.pipeline.attachments import Downloader, enrich_attachment_snapshots
 from tendertrace.pipeline.dedup import clean_and_cluster_notices
@@ -568,14 +573,57 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
             fields = notice.fields
             notice_pk = f"{notice.source_site}:{notice.id}"
             cluster_key = str(fields.get("cluster_key") or notice_pk)
+            attachments = [attachment.__dict__ for attachment in notice.attachments]
+            existing = conn.execute(
+                "SELECT * FROM notices WHERE id = ?",
+                (notice_pk,),
+            ).fetchone()
+            after_payload = notice_change_payload(
+                title=notice.title,
+                publish_time=notice.publish_time,
+                region=notice.region,
+                purchaser=notice.purchaser,
+                source_url=notice.source_url,
+                content_text=notice.content_text,
+                core_content=notice.core_content,
+                attachments=attachments,
+                fields=fields,
+            )
+            changed = False
+            if existing is not None:
+                revision = record_notice_revision(
+                    conn,
+                    notice_id=notice_pk,
+                    before=notice_change_payload_from_row(existing),
+                    after=after_payload,
+                )
+                changed = revision is not None
             conn.execute(
                 """
-                INSERT OR REPLACE INTO notices(
+                INSERT INTO notices(
                     id, source_site, source_url, canonical_url, title, publish_time,
                     region, purchaser, content_text, core_content, attachments_json,
                     fields_json, snapshot_sha256, simhash64
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    source_site = excluded.source_site,
+                    source_url = excluded.source_url,
+                    canonical_url = excluded.canonical_url,
+                    title = excluded.title,
+                    publish_time = excluded.publish_time,
+                    region = excluded.region,
+                    purchaser = excluded.purchaser,
+                    content_text = excluded.content_text,
+                    core_content = excluded.core_content,
+                    attachments_json = excluded.attachments_json,
+                    fields_json = excluded.fields_json,
+                    snapshot_sha256 = excluded.snapshot_sha256,
+                    simhash64 = excluded.simhash64,
+                    updated_at = CASE
+                        WHEN ? THEN datetime('now') ELSE notices.updated_at
+                    END,
+                    last_seen_at = datetime('now')
                 """,
                 (
                     notice_pk,
@@ -588,10 +636,11 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
                     notice.purchaser,
                     notice.content_text,
                     notice.core_content,
-                    json_dumps([attachment.__dict__ for attachment in notice.attachments]),
+                    json_dumps(attachments),
                     json_dumps(fields),
                     str(fields.get("snapshot_sha256") or ""),
                     str(fields.get("simhash64") or ""),
+                    changed,
                 ),
             )
             upsert_notice_fts(
