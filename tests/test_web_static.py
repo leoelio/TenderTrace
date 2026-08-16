@@ -91,6 +91,8 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("/send-feishu", js)
         self.assertIn("/team", js)
         self.assertIn("opportunity-team-list", css)
+        self.assertIn("/stakeholders", js)
+        self.assertIn("stakeholder-matrix", css)
         self.assertIn("/api/traces/", js)
         self.assertIn("/api/checkpoints/", js)
         self.assertIn('href="/logo.svg"', html)

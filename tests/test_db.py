@@ -34,6 +34,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("opportunity_workflows", health["tables"])
         self.assertIn("opportunity_events", health["tables"])
         self.assertIn("opportunity_team_members", health["tables"])
+        self.assertIn("opportunity_stakeholders", health["tables"])
         self.assertIn("feishu_lead_import_runs", health["tables"])
         self.assertIn("feishu_message_events", health["tables"])
         self.assertIn("source_incidents", health["tables"])

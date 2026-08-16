@@ -110,6 +110,25 @@ type OpportunityTeam = {
   }>;
 };
 
+type StakeholderMap = {
+  stakeholder_count: number;
+  coverage_score: number;
+  relationship_score: number;
+  risk_level: string;
+  missing_roles: string[];
+  risks: Array<{ level: string; message: string }>;
+  strategy_actions: string[];
+  stakeholders: Array<{
+    stakeholder_name: string;
+    role_label: string;
+    influence_label: string;
+    stance_label: string;
+    relationship_label: string;
+    owner_member_name: string;
+    next_action: string;
+  }>;
+};
+
 type OpportunityWorkspace = {
   opportunity: {
     intelligence?: Intelligence;
@@ -119,6 +138,7 @@ type OpportunityWorkspace = {
     action_contract?: ActionContract;
     change_review?: ChangeReview;
     team?: OpportunityTeam;
+    stakeholder_map?: StakeholderMap;
   };
 };
 
@@ -314,6 +334,7 @@ function App() {
   const qualification = workspace?.opportunity?.qualification || null;
   const changeReview = workspace?.opportunity?.change_review || null;
   const team = workspace?.opportunity?.team || null;
+  const stakeholderMap = workspace?.opportunity?.stakeholder_map || null;
   const availableActions = workspace?.opportunity?.action_contract?.actions || [];
   const claimAction = availableActions.find((item) => item.requires_member_identity);
   const directActions = availableActions.filter((item) => !item.requires_member_identity);
@@ -540,10 +561,25 @@ function App() {
                   <div><span>公告变更</span><strong>{changeReview?.pending_count ? `${changeReview.pending_count} 条待复核${changeReview.overdue ? " · 已逾期" : ""}` : "无待复核变更"}</strong></div>
                   <div><span>团队覆盖</span><strong>{team ? `${team.coverage_score}% · ${team.member_count} 名成员` : "待配置"}</strong></div>
                   <div><span>合作伙伴</span><strong>{team?.partner_count ? `${team.partner_count} 名伙伴成员` : "暂无伙伴成员"}</strong></div>
+                  <div><span>关键关系</span><strong>{stakeholderMap ? `${stakeholderMap.coverage_score}% 覆盖 · ${stakeholderMap.relationship_score} 健康` : "待建立"}</strong></div>
+                  <div><span>关系风险</span><strong>{stakeholderMap?.risks?.length ? `${stakeholderMap.risks.length} 项 · ${stakeholderMap.risk_level}` : "暂无风险"}</strong></div>
                 </div>
                 {team?.missing_roles?.length ? (
                   <p className="workflow-reason">当前阶段待补：{team.missing_roles.join("、")}</p>
                 ) : team ? <p className="workflow-reason">当前阶段核心角色已覆盖。</p> : null}
+                {stakeholderMap?.stakeholders?.length ? (
+                  <div className="workflow-grid">
+                    {stakeholderMap.stakeholders.slice(0, 4).map((stakeholder, index) => (
+                      <div key={`${stakeholder.stakeholder_name}-${index}`}>
+                        <span>{stakeholder.role_label} · 影响{stakeholder.influence_label}</span>
+                        <strong>{stakeholder.stakeholder_name} · {stakeholder.stance_label} · {stakeholder.relationship_label}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {stakeholderMap?.missing_roles?.length ? (
+                  <p className="workflow-reason">关键关系待补：{stakeholderMap.missing_roles.join("、")}</p>
+                ) : null}
                 {workflow.decision_reason && (
                   <p className="workflow-reason">{workflow.decision_reason}{workflow.decision_by ? ` · ${workflow.decision_by}` : ""}</p>
                 )}

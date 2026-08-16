@@ -140,6 +140,7 @@ class Settings:
     qualification_min_completeness: int
     qualification_min_requirement_coverage: int
     qualification_min_team_coverage: int
+    qualification_min_stakeholder_coverage: int
     decision_sla_hours: int
     change_review_sla_hours: int
     opportunity_escalation_enabled: bool
@@ -475,6 +476,14 @@ class Settings:
                 ),
                 "TENDERTRACE_QUALIFICATION_MIN_TEAM_COVERAGE",
             ),
+            qualification_min_stakeholder_coverage=_parse_percentage(
+                _first_value(
+                    "TENDERTRACE_QUALIFICATION_MIN_STAKEHOLDER_COVERAGE",
+                    env_files,
+                    "50",
+                ),
+                "TENDERTRACE_QUALIFICATION_MIN_STAKEHOLDER_COVERAGE",
+            ),
             decision_sla_hours=_parse_positive_int(
                 _first_value("TENDERTRACE_DECISION_SLA_HOURS", env_files, "24"),
                 "TENDERTRACE_DECISION_SLA_HOURS",
@@ -601,6 +610,9 @@ class Settings:
                     self.qualification_min_requirement_coverage
                 ),
                 "minimum_team_coverage": self.qualification_min_team_coverage,
+                "minimum_stakeholder_coverage": (
+                    self.qualification_min_stakeholder_coverage
+                ),
                 "decision_sla_hours": self.decision_sla_hours,
                 "change_review_sla_hours": self.change_review_sla_hours,
                 "escalation_enabled": self.opportunity_escalation_enabled,

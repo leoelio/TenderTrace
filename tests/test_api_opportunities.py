@@ -81,6 +81,10 @@ class OpportunityApiTests(unittest.TestCase):
                     return_value=SimpleNamespace(status="sent", message=""),
                 ), patch.object(
                     api_module,
+                    "update_opportunity_stakeholders_in_bitable",
+                    return_value=SimpleNamespace(status="sent", message=""),
+                ), patch.object(
+                    api_module,
                     "sync_opportunity_team",
                     return_value=SimpleNamespace(
                         status="pending",
@@ -179,6 +183,27 @@ class OpportunityApiTests(unittest.TestCase):
                     team_removed = client.delete(
                         f"/api/opportunities/notice-api-1/team/{member_id}"
                     )
+                    stakeholder_added = client.post(
+                        "/api/opportunities/notice-api-1/stakeholders",
+                        json={
+                            "stakeholder_name": "客户李总",
+                            "organization_name": "示例采购人",
+                            "role": "economic_buyer",
+                            "influence": "high",
+                            "stance": "neutral",
+                            "relationship_strength": "developing",
+                            "next_action": "确认预算审批链路",
+                            "evidence_source": "客户访谈",
+                            "evidence_text": "会议纪要确认其参与预算审批。",
+                        },
+                    )
+                    stakeholder_read = client.get(
+                        "/api/opportunities/notice-api-1/stakeholders"
+                    )
+                    stakeholder_id = stakeholder_added.json()["stakeholder"]["id"]
+                    stakeholder_removed = client.delete(
+                        f"/api/opportunities/notice-api-1/stakeholders/{stakeholder_id}"
+                    )
                     record_view_hold = client.post(
                         "/api/opportunities/notice-api-1/actions",
                         json={
@@ -253,6 +278,21 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(team_read.json()["members"][0]["role"], "solution")
         self.assertEqual(team_removed.status_code, 200)
         self.assertEqual(team_removed.json()["team"]["member_count"], 0)
+        self.assertEqual(stakeholder_added.status_code, 200)
+        self.assertEqual(
+            stakeholder_added.json()["stakeholder_map"]["coverage_score"],
+            100,
+        )
+        self.assertEqual(stakeholder_added.json()["bitable_status"], "sent")
+        self.assertEqual(
+            stakeholder_read.json()["stakeholders"][0]["role"],
+            "economic_buyer",
+        )
+        self.assertEqual(stakeholder_removed.status_code, 200)
+        self.assertEqual(
+            stakeholder_removed.json()["stakeholder_map"]["stakeholder_count"],
+            0,
+        )
         self.assertEqual(record_view_hold.status_code, 200)
         self.assertEqual(record_view_hold.json()["workflow"]["decision"], "hold")
         self.assertEqual(record_view_hold.json()["workflow"]["decision_by"], "飞书分析师")

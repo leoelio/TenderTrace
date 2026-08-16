@@ -12,6 +12,7 @@ from tendertrace.delivery.feishu_bitable import (
     sync_notices_to_bitable,
     update_opportunity_facts_in_bitable,
     update_opportunity_team_in_bitable,
+    update_opportunity_stakeholders_in_bitable,
     update_opportunity_workflow_in_bitable,
 )
 from tendertrace.integrations.feishu_leads import (
@@ -424,6 +425,44 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["合作伙伴"], "伙伴科技 · 王经理（伙伴负责人）")
         self.assertEqual(fields["团队覆盖率"], "67%")
         self.assertEqual(fields["团队缺口"], "商务报价")
+        self.assertNotIn("标题", fields)
+
+    def test_stakeholder_update_preserves_notice_fields_and_evidence_privacy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            result = update_opportunity_stakeholders_in_bitable(
+                settings,
+                notice_id="existing",
+                stakeholder_map={
+                    "coverage_score": 67,
+                    "relationship_score": 50,
+                    "risks": [
+                        {"level": "warning", "message": "尚未识别内部支持者"}
+                    ],
+                    "strategy_actions": ["识别并验证内部支持者"],
+                    "stakeholders": [
+                        {
+                            "stakeholder_name": "李总",
+                            "role_label": "经济决策人",
+                            "influence_label": "高",
+                            "stance_label": "中立",
+                            "relationship_label": "持续沟通",
+                            "evidence_text": "不应同步到多维表格的访谈摘录",
+                        }
+                    ],
+                },
+                http_client_factory=FakeFeishuClient,
+            )
+
+        self.assertEqual(result.status, "sent")
+        fields = FakeFeishuClient.updated_records[0][1]
+        self.assertIn("李总（经济决策人 / 影响高 / 中立 / 持续沟通）", fields["关键人图谱"])
+        self.assertEqual(fields["关键关系覆盖率"], "67%")
+        self.assertEqual(fields["关系健康度"], "50/100")
+        self.assertEqual(fields["关键关系风险"], "尚未识别内部支持者")
+        self.assertEqual(fields["关系策略建议"], "识别并验证内部支持者")
+        self.assertNotIn("访谈摘录", str(fields))
         self.assertNotIn("标题", fields)
 
     def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:

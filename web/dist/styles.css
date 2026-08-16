@@ -3983,6 +3983,189 @@ body.theme-dark .grade-c {
   grid-column: 1 / -1;
 }
 
+.opportunity-stakeholder-section {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.opportunity-stakeholder-section .opportunity-detail-section-title > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.opportunity-stakeholder-section .opportunity-detail-section-title small,
+.stakeholder-matrix span,
+.stakeholder-matrix small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.stakeholder-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stakeholder-health-state {
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stakeholder-health-state.risk-normal {
+  color: var(--success);
+  background: rgba(22, 163, 74, 0.09);
+}
+
+.stakeholder-health-state.risk-warning {
+  color: #946100;
+  background: rgba(212, 155, 22, 0.1);
+}
+
+.stakeholder-health-state.risk-critical {
+  color: var(--danger);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.stakeholder-gap {
+  margin: 12px 0 0;
+  color: #946100;
+  font-size: 11px;
+}
+
+.stakeholder-gap.is-ready {
+  color: var(--success);
+}
+
+.stakeholder-matrix {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.stakeholder-matrix-head,
+.stakeholder-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.2fr) minmax(92px, 0.72fr) minmax(90px, 0.7fr) minmax(170px, 1.5fr) 38px;
+  min-width: 0;
+}
+
+.stakeholder-matrix-head {
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stakeholder-matrix-head > span,
+.stakeholder-matrix-row > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.stakeholder-matrix-head > span:last-child,
+.stakeholder-matrix-row > div:last-child {
+  border-right: 0;
+}
+
+.stakeholder-matrix-row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.stakeholder-matrix-row > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.stakeholder-matrix-row strong {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.stakeholder-matrix-row .stance-supportive {
+  color: var(--success);
+}
+
+.stakeholder-matrix-row .stance-resistant {
+  color: var(--danger);
+}
+
+.stakeholder-remove-button {
+  width: 28px;
+  height: 28px;
+  color: var(--danger);
+  font-size: 18px;
+}
+
+.stakeholder-empty {
+  padding: 18px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.stakeholder-risk-list,
+.stakeholder-strategy-list {
+  margin-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.stakeholder-risk-list p,
+.stakeholder-strategy-list p {
+  margin: 0;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.stakeholder-risk-list p.risk-critical {
+  color: var(--danger);
+}
+
+.stakeholder-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-height: min(620px, calc(100vh - 190px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.stakeholder-form-grid .stakeholder-wide-field {
+  grid-column: 1 / -1;
+}
+
+.stakeholder-form-grid input,
+.stakeholder-form-grid select,
+.stakeholder-form-grid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+}
+
+.stakeholder-form-grid input,
+.stakeholder-form-grid select {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.stakeholder-form-grid textarea {
+  min-height: 74px;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
 @media (max-width: 640px) {
   .opportunity-team-section .opportunity-detail-section-title,
   .opportunity-team-member,
@@ -4001,6 +4184,40 @@ body.theme-dark .grade-c {
 
   .opportunity-team-form-grid .team-responsibility-field,
   .opportunity-team-form-grid .owner-directory-status {
+    grid-column: auto;
+  }
+
+  .opportunity-stakeholder-section .opportunity-detail-section-title,
+  .stakeholder-heading-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stakeholder-matrix-head {
+    display: none;
+  }
+
+  .stakeholder-matrix-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stakeholder-matrix-row > div {
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .stakeholder-matrix-row > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .stakeholder-matrix-row > div:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+
+  .stakeholder-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stakeholder-form-grid .stakeholder-wide-field {
     grid-column: auto;
   }
 }

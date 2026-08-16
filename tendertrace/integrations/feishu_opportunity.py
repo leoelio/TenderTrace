@@ -191,6 +191,17 @@ def build_opportunity_card(
         if isinstance(missing_team_roles, list) and missing_team_roles
         else "核心角色已覆盖"
     )
+    stakeholder_map = _mapping(opportunity.get("stakeholder_map"))
+    stakeholder_risks = stakeholder_map.get("risks")
+    relationship_risk_text = (
+        "；".join(
+            str(item.get("message") or "")
+            for item in stakeholder_risks[:2]
+            if isinstance(item, dict)
+        )
+        if isinstance(stakeholder_risks, list) and stakeholder_risks
+        else "暂无关键关系风险"
+    )
     change_review = _mapping(opportunity.get("change_review"))
     change_review_text = (
         f"待复核 {change_review.get('pending_count') or 0} 条 · "
@@ -218,6 +229,8 @@ def build_opportunity_card(
                         f"**负责人** {owner}   **阶段** {workflow.stage_label}\n"
                         f"**协作团队** {team.get('member_count') or 0} 人 · "
                         f"覆盖 {team.get('coverage_score', 0)}%   **缺口** {team_gap}\n"
+                        f"**客户关系** 覆盖 {stakeholder_map.get('coverage_score', 0)}% · "
+                        f"健康 {stakeholder_map.get('relationship_score', 0)}/100\n"
                         f"**资格评估** {qualification.get('score', 0)} 分 · "
                         f"{_qualification_status(qualification)}   **投标决策** {decision}"
                     ),
@@ -232,6 +245,7 @@ def build_opportunity_card(
                         f"**可信依据** {trust.get('verification_label') or '证据待核验'} · {trust_text}\n"
                         f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
                         f"**变更复核** {change_review_text}\n"
+                        f"**关系风险** {relationship_risk_text}\n"
                         f"**决策 SLA** {decision_sla}\n"
                         f"**风险** {risk_text}"
                     ),

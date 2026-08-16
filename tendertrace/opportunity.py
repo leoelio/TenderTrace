@@ -17,6 +17,7 @@ from tendertrace.notice_change_reviews import change_review_summaries
 from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.opportunity_team import team_snapshots
+from tendertrace.opportunity_stakeholders import stakeholder_snapshots
 from tendertrace.retrieval import parse_date
 from tendertrace.source_trust import assess_notice_trust, source_trust_profiles
 from tendertrace.workflow import workflow_action_contract, workflow_snapshots
@@ -319,6 +320,7 @@ def list_opportunities(
     reference_time = datetime.now(timezone.utc)
     workflows = workflow_snapshots(settings, [notice_id for notice_id, _notice in rows])
     teams = team_snapshots(settings, workflows)
+    stakeholder_maps = stakeholder_snapshots(settings, workflows)
     change_summaries = notice_change_summaries(
         settings,
         [notice_id for notice_id, _notice in rows],
@@ -355,6 +357,7 @@ def list_opportunities(
             "intelligence": intelligence,
             "workflow": workflow,
             "team": teams[notice_id],
+            "stakeholder_map": stakeholder_maps[notice_id],
             "change_summary": change_summaries.get(notice_id, {}),
             "change_review": review_summaries.get(notice_id, {}),
         }
@@ -439,6 +442,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     _attach_market_context(intelligence, payload, market)
     workflow = workflow_snapshots(settings, [notice_id])[notice_id]
     team = team_snapshots(settings, {notice_id: workflow})[notice_id]
+    stakeholder_map = stakeholder_snapshots(settings, {notice_id: workflow})[notice_id]
     item: dict[str, object] = {
         "notice_id": str(row["id"]),
         "title": notice.title,
@@ -458,6 +462,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "intelligence": intelligence,
         "workflow": workflow.to_dict(),
         "team": team,
+        "stakeholder_map": stakeholder_map,
     }
     item["change_summary"] = notice_change_summaries(settings, [notice_id]).get(
         notice_id,
@@ -630,6 +635,8 @@ def _action_queue_summary(
     qualification_ready = 0
     qualification_blocked = 0
     team_incomplete = 0
+    stakeholder_incomplete = 0
+    stakeholder_critical = 0
     decision_pending = 0
     decision_overdue = 0
     task_open = 0
@@ -664,6 +671,9 @@ def _action_queue_summary(
         qualification = _mapping(item.get("qualification"))
         team = _mapping(item.get("team"))
         team_incomplete += int(team.get("status") == "incomplete")
+        stakeholder_map = _mapping(item.get("stakeholder_map"))
+        stakeholder_incomplete += int(stakeholder_map.get("status") == "incomplete")
+        stakeholder_critical += int(stakeholder_map.get("risk_level") == "critical")
         if qualification.get("status") == "ready":
             qualification_ready += 1
         else:
@@ -751,6 +761,8 @@ def _action_queue_summary(
         "qualification_ready": qualification_ready,
         "qualification_blocked": qualification_blocked,
         "team_incomplete": team_incomplete,
+        "stakeholder_incomplete": stakeholder_incomplete,
+        "stakeholder_critical": stakeholder_critical,
         "decision_pending": decision_pending,
         "decision_overdue": decision_overdue,
         "task_open": task_open,

@@ -16,6 +16,7 @@ const state = {
   opportunityVisible: 20,
   pendingOpportunityId: "",
   pendingOpportunityTeamId: "",
+  pendingOpportunityStakeholderId: "",
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
@@ -136,6 +137,24 @@ const el = {
   submitOpportunityTeamButton: document.querySelector("#submitOpportunityTeamButton"),
   closeOpportunityTeamButton: document.querySelector("#closeOpportunityTeamButton"),
   cancelOpportunityTeamButton: document.querySelector("#cancelOpportunityTeamButton"),
+  opportunityStakeholderDialog: document.querySelector("#opportunityStakeholderDialog"),
+  opportunityStakeholderForm: document.querySelector("#opportunityStakeholderForm"),
+  opportunityStakeholderProject: document.querySelector("#opportunityStakeholderProject"),
+  opportunityStakeholderName: document.querySelector("#opportunityStakeholderName"),
+  opportunityStakeholderOrganization: document.querySelector("#opportunityStakeholderOrganization"),
+  opportunityStakeholderTitleInput: document.querySelector("#opportunityStakeholderTitleInput"),
+  opportunityStakeholderRole: document.querySelector("#opportunityStakeholderRole"),
+  opportunityStakeholderInfluence: document.querySelector("#opportunityStakeholderInfluence"),
+  opportunityStakeholderStance: document.querySelector("#opportunityStakeholderStance"),
+  opportunityStakeholderRelationship: document.querySelector("#opportunityStakeholderRelationship"),
+  opportunityStakeholderOwner: document.querySelector("#opportunityStakeholderOwner"),
+  opportunityStakeholderNextAction: document.querySelector("#opportunityStakeholderNextAction"),
+  opportunityStakeholderEvidenceSource: document.querySelector("#opportunityStakeholderEvidenceSource"),
+  opportunityStakeholderEvidenceUrl: document.querySelector("#opportunityStakeholderEvidenceUrl"),
+  opportunityStakeholderEvidenceText: document.querySelector("#opportunityStakeholderEvidenceText"),
+  submitOpportunityStakeholderButton: document.querySelector("#submitOpportunityStakeholderButton"),
+  closeOpportunityStakeholderButton: document.querySelector("#closeOpportunityStakeholderButton"),
+  cancelOpportunityStakeholderButton: document.querySelector("#cancelOpportunityStakeholderButton"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
   runSearchInput: document.querySelector("#runSearchInput"),
@@ -1336,7 +1355,7 @@ function renderOpportunities(payload) {
     el.opportunitySummary.innerHTML = [
       summaryTile("当前线索", summary.total ?? items.length),
       summaryTile("A 级机会", levels.A ?? 0),
-      summaryTile("团队待补", actionQueue.team_incomplete ?? 0),
+      summaryTile("团队 / 关系待补", (actionQueue.team_incomplete || 0) + (actionQueue.stakeholder_incomplete || 0)),
       summaryTile("待管理决策", actionQueue.decision_pending ?? 0),
       summaryTile("协同逾期", (actionQueue.decision_overdue || 0) + (actionQueue.task_overdue || 0) + (actionQueue.change_review_overdue || 0)),
       summaryTile("Go 通过率", actionQueue.go_rate == null ? "-" : `${actionQueue.go_rate}%`),
@@ -1477,6 +1496,19 @@ function openOpportunityDetail(noticeId) {
   const team = item.team || {};
   const teamMembers = Array.isArray(team.members) ? team.members : [];
   const missingTeamRoles = Array.isArray(team.missing_roles) ? team.missing_roles : [];
+  const stakeholderMap = item.stakeholder_map || {};
+  const stakeholders = Array.isArray(stakeholderMap.stakeholders)
+    ? stakeholderMap.stakeholders
+    : [];
+  const stakeholderRisks = Array.isArray(stakeholderMap.risks)
+    ? stakeholderMap.risks
+    : [];
+  const stakeholderActions = Array.isArray(stakeholderMap.strategy_actions)
+    ? stakeholderMap.strategy_actions
+    : [];
+  const missingStakeholderRoles = Array.isArray(stakeholderMap.missing_roles)
+    ? stakeholderMap.missing_roles
+    : [];
   el.opportunityDetailTitle.textContent = item.title || "机会详情";
   el.opportunityDetailContent.innerHTML = `
     <div class="opportunity-detail-hero">
@@ -1531,6 +1563,29 @@ function openOpportunityDetail(noticeId) {
         </div>
         ${teamMembers.map(opportunityTeamMemberRow).join("")}
       </div>
+    </section>
+    <section class="opportunity-detail-section opportunity-stakeholder-section">
+      <div class="opportunity-detail-section-title">
+        <div>
+          <h3>客户关系图谱</h3>
+          <small>${escapeHtml(stakeholderMap.stakeholder_count || 0)} 名关键人 · ${escapeHtml(stakeholderRisks.length)} 项风险</small>
+        </div>
+        <div class="stakeholder-heading-actions">
+          <span class="stakeholder-health-state risk-${escapeHtml(stakeholderMap.risk_level || "normal")}">${escapeHtml(stakeholderMap.coverage_score ?? 0)}% 覆盖 · ${escapeHtml(stakeholderMap.relationship_score ?? 0)} 健康</span>
+          <button class="primary-lite-button" type="button" data-add-opportunity-stakeholder="${escapeHtml(item.notice_id)}">添加关键人</button>
+        </div>
+      </div>
+      ${missingStakeholderRoles.length ? `<p class="stakeholder-gap">当前阶段待识别：${escapeHtml(missingStakeholderRoles.join("、"))}</p>` : '<p class="stakeholder-gap is-ready">当前阶段关键关系已覆盖。</p>'}
+      <div class="stakeholder-matrix" role="table" aria-label="客户关键人关系图谱">
+        <div class="stakeholder-matrix-head" role="row">
+          <span>关键人 / 角色</span><span>影响与立场</span><span>关系</span><span>责任与行动</span><span>操作</span>
+        </div>
+        <div class="stakeholder-matrix-body">
+          ${stakeholders.length ? stakeholders.map(opportunityStakeholderRow).join("") : '<div class="stakeholder-empty">尚未录入可验证的客户关键人</div>'}
+        </div>
+      </div>
+      ${stakeholderRisks.length ? `<div class="stakeholder-risk-list">${stakeholderRisks.map((risk) => `<p class="risk-${escapeHtml(risk.level || "warning")}">${escapeHtml(risk.message || "关系风险待核对")}</p>`).join("")}</div>` : ""}
+      ${stakeholderActions.length ? `<div class="stakeholder-strategy-list">${stakeholderActions.map((action) => `<p>${escapeHtml(action)}</p>`).join("")}</div>` : ""}
     </section>
     ${Number(changeSummary.count) > 0 ? `
       <section class="opportunity-detail-section opportunity-change-section">
@@ -1705,6 +1760,25 @@ function opportunityTeamMemberRow(member) {
   `;
 }
 
+function opportunityStakeholderRow(stakeholder) {
+  const evidence = [stakeholder.evidence_source, stakeholder.evidence_text]
+    .filter(Boolean)
+    .join(" · ");
+  return `
+    <div class="stakeholder-matrix-row" role="row">
+      <div>
+        <strong>${escapeHtml(stakeholder.stakeholder_name || "未命名关键人")}</strong>
+        <span>${escapeHtml(stakeholder.role_label || stakeholder.role || "角色待确认")}${stakeholder.job_title ? ` · ${escapeHtml(stakeholder.job_title)}` : ""}</span>
+        ${stakeholder.organization_name ? `<small>${escapeHtml(stakeholder.organization_name)}</small>` : ""}
+      </div>
+      <div><strong>影响${escapeHtml(stakeholder.influence_label || "待确认")}</strong><span class="stance-${escapeHtml(stakeholder.stance || "unknown")}">${escapeHtml(stakeholder.stance_label || "待确认")}</span></div>
+      <div><strong>${escapeHtml(stakeholder.relationship_label || "未建立")}</strong><small title="${escapeHtml(evidence)}">${escapeHtml(stakeholder.evidence_source || "证据待补")}</small></div>
+      <div><strong>${escapeHtml(stakeholder.owner_member_name || "责任人待分配")}</strong><span>${escapeHtml(stakeholder.next_action || "行动待明确")}</span></div>
+      <div><button class="icon-close-button stakeholder-remove-button" type="button" aria-label="移除关键人" data-remove-opportunity-stakeholder="${escapeHtml(stakeholder.id || "")}" data-opportunity-id="${escapeHtml(stakeholder.notice_id || "")}">×</button></div>
+    </div>
+  `;
+}
+
 function teamSyncLabel(status, openId) {
   if (!openId) return "仅本地记录";
   if (status === "synced") return "已同步 Task";
@@ -1779,6 +1853,8 @@ function renderOpportunityDecisionBoard(actionQueue) {
       <strong>${escapeHtml(actionQueue.qualification_ready || 0)} 条可决策</strong>
       <div class="decision-board-lines">
         ${decisionBoardLine("阻断待补", actionQueue.qualification_blocked || 0)}
+        ${decisionBoardLine("关键关系待补", actionQueue.stakeholder_incomplete || 0)}
+        ${decisionBoardLine("关键关系高风险", actionQueue.stakeholder_critical || 0, actionQueue.stakeholder_critical ? "danger" : "")}
         ${decisionBoardLine("公告变更待复核", actionQueue.change_review_pending || 0, actionQueue.change_review_overdue ? "danger" : "")}
         ${decisionBoardLine("待管理决策", actionQueue.decision_pending || 0)}
         ${decisionBoardLine(`超过 ${actionQueue.decision_sla_hours || 0} 小时`, actionQueue.decision_overdue || 0, actionQueue.decision_overdue ? "danger" : "")}
@@ -2235,7 +2311,7 @@ function renderSettingsSummary(payload) {
     settingTile(
       "销售准入策略",
       config.qualification_policy
-        ? `机会 ${config.qualification_policy.minimum_opportunity_score} · 可信 ${config.qualification_policy.minimum_credibility} · 完整 ${config.qualification_policy.minimum_completeness} · 需求 ${config.qualification_policy.minimum_requirement_coverage} · 团队 ${config.qualification_policy.minimum_team_coverage}`
+        ? `机会 ${config.qualification_policy.minimum_opportunity_score} · 可信 ${config.qualification_policy.minimum_credibility} · 完整 ${config.qualification_policy.minimum_completeness} · 需求 ${config.qualification_policy.minimum_requirement_coverage} · 团队 ${config.qualification_policy.minimum_team_coverage} · 关系 ${config.qualification_policy.minimum_stakeholder_coverage}`
         : "-",
     ),
     settingTile(
@@ -2900,6 +2976,81 @@ async function removeOpportunityTeamMember(noticeId, memberId) {
   await refreshOpportunities();
   openOpportunityDetail(noticeId);
   showToast("团队成员已移除，飞书协同状态已刷新");
+}
+
+function openOpportunityStakeholderDialog(noticeId) {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (!item || !el.opportunityStakeholderDialog) return;
+  state.pendingOpportunityStakeholderId = noticeId;
+  el.opportunityStakeholderProject.textContent = item.title || "未命名机会";
+  el.opportunityStakeholderName.value = "";
+  el.opportunityStakeholderOrganization.value = item.purchaser || "";
+  el.opportunityStakeholderTitleInput.value = "";
+  el.opportunityStakeholderRole.value = "economic_buyer";
+  el.opportunityStakeholderInfluence.value = "medium";
+  el.opportunityStakeholderStance.value = "unknown";
+  el.opportunityStakeholderRelationship.value = "unknown";
+  el.opportunityStakeholderNextAction.value = "";
+  el.opportunityStakeholderEvidenceSource.value = "";
+  el.opportunityStakeholderEvidenceUrl.value = "";
+  el.opportunityStakeholderEvidenceText.value = "";
+  const members = Array.isArray(item.team?.members) ? item.team.members : [];
+  el.opportunityStakeholderOwner.innerHTML = [
+    '<option value="">暂未指定</option>',
+    ...members.map(
+      (member) => `<option value="${escapeHtml(member.id || "")}">${escapeHtml(member.member_name || "未命名成员")} · ${escapeHtml(member.role_label || "协作成员")}</option>`,
+    ),
+  ].join("");
+  if (!el.opportunityStakeholderDialog.open) el.opportunityStakeholderDialog.showModal();
+}
+
+function closeOpportunityStakeholderDialog() {
+  state.pendingOpportunityStakeholderId = "";
+  el.opportunityStakeholderDialog?.close();
+}
+
+async function submitOpportunityStakeholder(event) {
+  event.preventDefault();
+  const noticeId = state.pendingOpportunityStakeholderId;
+  if (!noticeId) return;
+  if (el.submitOpportunityStakeholderButton) el.submitOpportunityStakeholderButton.disabled = true;
+  try {
+    await api(`/api/opportunities/${encodeURIComponent(noticeId)}/stakeholders`, {
+      method: "POST",
+      body: JSON.stringify({
+        stakeholder_name: el.opportunityStakeholderName?.value.trim() || "",
+        organization_name: el.opportunityStakeholderOrganization?.value.trim() || "",
+        job_title: el.opportunityStakeholderTitleInput?.value.trim() || "",
+        role: el.opportunityStakeholderRole?.value || "economic_buyer",
+        influence: el.opportunityStakeholderInfluence?.value || "medium",
+        stance: el.opportunityStakeholderStance?.value || "unknown",
+        relationship_strength: el.opportunityStakeholderRelationship?.value || "unknown",
+        owner_member_id: el.opportunityStakeholderOwner?.value || "",
+        next_action: el.opportunityStakeholderNextAction?.value.trim() || "",
+        evidence_source: el.opportunityStakeholderEvidenceSource?.value.trim() || "",
+        evidence_url: el.opportunityStakeholderEvidenceUrl?.value.trim() || "",
+        evidence_text: el.opportunityStakeholderEvidenceText?.value.trim() || "",
+        actor: "web:admin",
+      }),
+    });
+    closeOpportunityStakeholderDialog();
+    await refreshOpportunities();
+    openOpportunityDetail(noticeId);
+    showToast("关键人关系已保存，机会策略与准入已重新计算");
+  } finally {
+    if (el.submitOpportunityStakeholderButton) el.submitOpportunityStakeholderButton.disabled = false;
+  }
+}
+
+async function removeOpportunityStakeholder(noticeId, stakeholderId) {
+  if (!noticeId || !stakeholderId) return;
+  if (!window.confirm("确认移除该关键人记录？历史审计仍会保留。")) return;
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/stakeholders/${encodeURIComponent(stakeholderId)}`, {
+    method: "DELETE",
+  });
+  await refreshOpportunities();
+  openOpportunityDetail(noticeId);
+  showToast("关键人已移除，关系覆盖与资格门禁已刷新");
 }
 
 async function applyOpportunityAction(noticeId, action) {
@@ -3634,6 +3785,19 @@ function bindEvents() {
       ).catch(toastError("移除团队成员失败"));
       return;
     }
+    const addStakeholderTarget = event.target.closest("[data-add-opportunity-stakeholder]");
+    if (addStakeholderTarget) {
+      openOpportunityStakeholderDialog(addStakeholderTarget.dataset.addOpportunityStakeholder);
+      return;
+    }
+    const removeStakeholderTarget = event.target.closest("[data-remove-opportunity-stakeholder]");
+    if (removeStakeholderTarget) {
+      removeOpportunityStakeholder(
+        removeStakeholderTarget.dataset.opportunityId || "",
+        removeStakeholderTarget.dataset.removeOpportunityStakeholder,
+      ).catch(toastError("移除关键人失败"));
+      return;
+    }
     const opportunityEscalationTarget = event.target.closest("[data-send-opportunity-escalations]");
     if (opportunityEscalationTarget) {
       sendOpportunityEscalations().catch(toastError("飞书升级摘要发送失败"));
@@ -3716,6 +3880,17 @@ function bindEvents() {
   );
   el.closeOpportunityTeamButton?.addEventListener("click", closeOpportunityTeamDialog);
   el.cancelOpportunityTeamButton?.addEventListener("click", closeOpportunityTeamDialog);
+  el.opportunityStakeholderDialog?.addEventListener("click", (event) => {
+    if (event.target === el.opportunityStakeholderDialog) closeOpportunityStakeholderDialog();
+  });
+  el.opportunityStakeholderDialog?.addEventListener("close", () => {
+    state.pendingOpportunityStakeholderId = "";
+  });
+  el.opportunityStakeholderForm?.addEventListener("submit", (event) =>
+    submitOpportunityStakeholder(event).catch(toastError("关键人保存失败")),
+  );
+  el.closeOpportunityStakeholderButton?.addEventListener("click", closeOpportunityStakeholderDialog);
+  el.cancelOpportunityStakeholderButton?.addEventListener("click", closeOpportunityStakeholderDialog);
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);
   el.queryInput?.addEventListener("input", () => {

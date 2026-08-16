@@ -15,6 +15,7 @@ class QualificationPolicy:
     minimum_completeness: int = 55
     minimum_requirement_coverage: int = 40
     minimum_team_coverage: int = 60
+    minimum_stakeholder_coverage: int = 50
 
     def to_dict(self) -> dict[str, int]:
         return asdict(self)
@@ -64,6 +65,7 @@ def policy_from_settings(settings: Settings) -> QualificationPolicy:
         minimum_completeness=settings.qualification_min_completeness,
         minimum_requirement_coverage=settings.qualification_min_requirement_coverage,
         minimum_team_coverage=settings.qualification_min_team_coverage,
+        minimum_stakeholder_coverage=settings.qualification_min_stakeholder_coverage,
     )
 
 
@@ -91,6 +93,10 @@ def assess_qualification(
     requirement_coverage = _score(requirement_review.get("coverage_score"))
     team = _mapping(opportunity.get("team"))
     team_coverage = _score(team.get("coverage_score")) if team else 100
+    stakeholder_map = _mapping(opportunity.get("stakeholder_map"))
+    stakeholder_coverage = (
+        _score(stakeholder_map.get("coverage_score")) if stakeholder_map else 100
+    )
     gates = (
         _gate(
             "owner",
@@ -154,6 +160,14 @@ def assess_qualification(
             team_coverage >= policy.minimum_team_coverage,
             f"{team_coverage}/100",
             f"至少 {policy.minimum_team_coverage}/100",
+            ("approve_bid",),
+        ),
+        _gate(
+            "stakeholder_coverage",
+            "关键关系覆盖",
+            stakeholder_coverage >= policy.minimum_stakeholder_coverage,
+            f"{stakeholder_coverage}/100",
+            f"至少 {policy.minimum_stakeholder_coverage}/100",
             ("approve_bid",),
         ),
     )

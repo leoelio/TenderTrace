@@ -16,6 +16,7 @@ from tendertrace.delivery.feishu_bitable import (
     check_feishu_bitable,
     update_opportunity_facts_in_bitable,
     update_opportunity_team_in_bitable,
+    update_opportunity_stakeholders_in_bitable,
     update_opportunity_workflow_in_bitable,
 )
 from tendertrace.delivery.feishu_report import deliver_report_to_feishu
@@ -85,6 +86,10 @@ from tendertrace.opportunity import (
 )
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
 from tendertrace.opportunity_team import remove_team_member, upsert_team_member
+from tendertrace.opportunity_stakeholders import (
+    remove_stakeholder,
+    upsert_stakeholder,
+)
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import run_once
 from tendertrace.sanitize import sanitize_for_output, sanitize_stats
@@ -796,6 +801,73 @@ def create_app():
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _team_mutation_response(settings, notice_id, member.to_dict(), "removed")
+
+    @app.get("/api/opportunities/{notice_id}/stakeholders")
+    def opportunity_stakeholders(notice_id: str) -> dict[str, object]:
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return _mapping_value(opportunity.get("stakeholder_map"))
+
+    @app.post("/api/opportunities/{notice_id}/stakeholders")
+    def add_opportunity_stakeholder(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        try:
+            stakeholder = upsert_stakeholder(
+                settings,
+                notice_id=notice_id,
+                stakeholder_name=str(request.get("stakeholder_name") or ""),
+                organization_name=str(request.get("organization_name") or ""),
+                job_title=str(request.get("job_title") or ""),
+                role=str(request.get("role") or ""),
+                influence=str(request.get("influence") or "medium"),
+                stance=str(request.get("stance") or "unknown"),
+                relationship_strength=str(
+                    request.get("relationship_strength") or "unknown"
+                ),
+                owner_member_id=str(request.get("owner_member_id") or ""),
+                next_action=str(request.get("next_action") or ""),
+                evidence_source=str(request.get("evidence_source") or ""),
+                evidence_url=str(request.get("evidence_url") or ""),
+                evidence_text=str(request.get("evidence_text") or ""),
+                actor=str(request.get("actor") or "admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _stakeholder_mutation_response(
+            settings,
+            notice_id,
+            stakeholder.to_dict(),
+            "updated",
+        )
+
+    @app.delete("/api/opportunities/{notice_id}/stakeholders/{stakeholder_id}")
+    def delete_opportunity_stakeholder(
+        notice_id: str,
+        stakeholder_id: str,
+        actor: str = "admin",
+    ) -> dict[str, object]:
+        try:
+            stakeholder = remove_stakeholder(
+                settings,
+                notice_id=notice_id,
+                stakeholder_id=stakeholder_id,
+                actor=actor,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _stakeholder_mutation_response(
+            settings,
+            notice_id,
+            stakeholder.to_dict(),
+            "removed",
+        )
 
     @app.get("/api/opportunities/{notice_id}/facts")
     def opportunity_facts(notice_id: str) -> dict[str, object]:
@@ -1999,6 +2071,42 @@ def _team_mutation_response(
         "team": team,
         "qualification": opportunity.get("qualification"),
         "team_sync": team_sync.to_dict(),
+        "bitable_status": bitable.status,
+        "bitable_message": bitable.message,
+    }
+
+
+def _stakeholder_mutation_response(
+    settings: Settings,
+    notice_id: str,
+    stakeholder: dict[str, object],
+    action: str,
+) -> dict[str, object]:
+    opportunity = get_opportunity(settings, notice_id)
+    if opportunity is None:
+        raise LookupError("opportunity not found after stakeholder update")
+    stakeholder_map = _mapping_value(opportunity.get("stakeholder_map"))
+    bitable = update_opportunity_stakeholders_in_bitable(
+        settings,
+        notice_id=notice_id,
+        stakeholder_map=stakeholder_map,
+    )
+    record_activity(
+        settings,
+        event_type=f"opportunity_stakeholder_{action}",
+        target=notice_id,
+        label=str(stakeholder.get("stakeholder_name") or ""),
+        metadata={
+            "role": str(stakeholder.get("role") or ""),
+            "risk_level": str(stakeholder_map.get("risk_level") or "normal"),
+            "bitable_status": bitable.status,
+        },
+    )
+    return {
+        "status": action,
+        "stakeholder": stakeholder,
+        "stakeholder_map": stakeholder_map,
+        "qualification": opportunity.get("qualification"),
         "bitable_status": bitable.status,
         "bitable_message": bitable.message,
     }

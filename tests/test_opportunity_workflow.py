@@ -107,6 +107,11 @@ class OpportunityWorkflowTests(unittest.TestCase):
                         {"role": "机会负责人", "action": "确认客户预算与技术边界"}
                     ],
                 },
+                "stakeholder_map": {
+                    "coverage_score": 67,
+                    "relationship_score": 50,
+                    "risks": [{"message": "尚未识别内部支持者"}],
+                },
             }
 
             first = start_opportunity_collaboration(
@@ -301,6 +306,8 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertTrue(card["config"]["update_multi"])
         self.assertIn("多源已印证", str(card))
         self.assertIn("采集可靠度 95%", str(card))
+        self.assertIn("客户关系", str(card))
+        self.assertIn("关系风险", str(card))
         self.assertEqual(actions, ["claim", "hold", "reject"])
         self.assertEqual(identified_contract["version"], 2)
         self.assertTrue(identified_contract["actions"][0]["requires_member_identity"])

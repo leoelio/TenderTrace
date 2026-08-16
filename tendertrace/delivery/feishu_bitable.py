@@ -54,6 +54,11 @@ REQUIRED_FIELDS = (
     "合作伙伴",
     "团队覆盖率",
     "团队缺口",
+    "关键人图谱",
+    "关键关系覆盖率",
+    "关系健康度",
+    "关键关系风险",
+    "关系策略建议",
     "协同状态",
     "下一步行动",
     "飞书任务ID",
@@ -436,6 +441,68 @@ def update_opportunity_team_in_bitable(
     )
 
 
+def update_opportunity_stakeholders_in_bitable(
+    settings: Settings,
+    *,
+    notice_id: str,
+    stakeholder_map: dict[str, object],
+    http_client_factory=httpx.Client,
+) -> FeishuBitableResult:
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        return FeishuBitableResult(
+            status="skipped",
+            message=f"missing Feishu settings: {', '.join(missing_settings)}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    try:
+        with _client_context(http_client_factory, settings.feishu_timeout) as client:
+            token = _tenant_access_token(settings, client)
+            fields = _list_fields(settings, client, token)
+            relationship_fields = _opportunity_stakeholder_fields(stakeholder_map)
+            missing_fields = [name for name in relationship_fields if name not in fields]
+            if missing_fields:
+                return FeishuBitableResult(
+                    status="failed",
+                    message=f"missing Feishu fields: {', '.join(missing_fields)}",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            record_id = _record_id_for_notice(
+                _existing_records_by_notice_id(settings, client, token),
+                notice_id,
+            )
+            if not record_id:
+                return FeishuBitableResult(
+                    status="skipped",
+                    message="opportunity has not been synced to Feishu bitable",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            updated_count = _update_record(
+                settings,
+                client,
+                token,
+                record_id,
+                relationship_fields,
+            )
+    except Exception as exc:
+        return FeishuBitableResult(
+            status="failed",
+            message=f"{type(exc).__name__}: {exc}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    return FeishuBitableResult(
+        status="sent",
+        record_count=updated_count,
+        updated_count=updated_count,
+        app_token=settings.feishu_bitable_app_token,
+        table_id=settings.feishu_bitable_table_id,
+    )
+
+
 def list_feishu_bitable_records(
     settings: Settings,
     *,
@@ -794,6 +861,11 @@ def _record_fields(
         "合作伙伴": "",
         "团队覆盖率": "100%",
         "团队缺口": "",
+        "关键人图谱": "",
+        "关键关系覆盖率": "100%",
+        "关系健康度": "0/100",
+        "关键关系风险": "",
+        "关系策略建议": "",
         "协同状态": "线索识别",
         "下一步行动": "",
         "飞书任务ID": "",
@@ -939,6 +1011,38 @@ def _opportunity_team_fields(team: dict[str, object]) -> dict[str, object]:
         "合作伙伴": "；".join(partners),
         "团队覆盖率": f"{int(team.get('coverage_score') or 0)}%",
         "团队缺口": "、".join(missing_roles),
+    }
+
+
+def _opportunity_stakeholder_fields(
+    stakeholder_map: dict[str, object],
+) -> dict[str, object]:
+    raw_stakeholders = stakeholder_map.get("stakeholders")
+    stakeholders = (
+        [item for item in raw_stakeholders if isinstance(item, dict)]
+        if isinstance(raw_stakeholders, list)
+        else []
+    )
+    raw_risks = stakeholder_map.get("risks")
+    risks = (
+        [item for item in raw_risks if isinstance(item, dict)]
+        if isinstance(raw_risks, list)
+        else []
+    )
+    raw_actions = stakeholder_map.get("strategy_actions")
+    actions = [str(value) for value in raw_actions] if isinstance(raw_actions, list) else []
+    stakeholder_text = "；".join(
+        f"{item.get('stakeholder_name')}（{item.get('role_label')} / "
+        f"影响{item.get('influence_label')} / {item.get('stance_label')} / "
+        f"{item.get('relationship_label')}）"
+        for item in stakeholders
+    )
+    return {
+        "关键人图谱": stakeholder_text,
+        "关键关系覆盖率": f"{int(stakeholder_map.get('coverage_score') or 0)}%",
+        "关系健康度": f"{int(stakeholder_map.get('relationship_score') or 0)}/100",
+        "关键关系风险": "；".join(str(item.get("message") or "") for item in risks),
+        "关系策略建议": "；".join(actions),
     }
 
 

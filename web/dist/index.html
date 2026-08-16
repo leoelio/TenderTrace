@@ -466,6 +466,96 @@
               </div>
             </form>
           </dialog>
+          <dialog id="opportunityStakeholderDialog" class="owner-assignment-dialog stakeholder-dialog" aria-labelledby="opportunityStakeholderTitle">
+            <form id="opportunityStakeholderForm" class="owner-assignment-form">
+              <div class="owner-assignment-heading">
+                <div>
+                  <span>客户关系</span>
+                  <h2 id="opportunityStakeholderTitle">添加关键人</h2>
+                  <small id="opportunityStakeholderProject">-</small>
+                </div>
+                <button id="closeOpportunityStakeholderButton" class="icon-close-button" type="button" aria-label="关闭关键人添加">×</button>
+              </div>
+              <div class="owner-assignment-body stakeholder-form-grid">
+                <label>
+                  <span>关键人姓名</span>
+                  <input id="opportunityStakeholderName" maxlength="100" autocomplete="off" required />
+                </label>
+                <label>
+                  <span>所属组织</span>
+                  <input id="opportunityStakeholderOrganization" maxlength="150" autocomplete="off" />
+                </label>
+                <label>
+                  <span>职位</span>
+                  <input id="opportunityStakeholderTitleInput" maxlength="120" autocomplete="off" />
+                </label>
+                <label>
+                  <span>业务角色</span>
+                  <select id="opportunityStakeholderRole" required>
+                    <option value="economic_buyer">经济决策人</option>
+                    <option value="technical_buyer">技术决策人</option>
+                    <option value="procurement">采购执行人</option>
+                    <option value="champion">内部支持者</option>
+                    <option value="end_user">业务使用者</option>
+                    <option value="blocker">关键阻力人</option>
+                  </select>
+                </label>
+                <label>
+                  <span>影响力</span>
+                  <select id="opportunityStakeholderInfluence">
+                    <option value="high">高</option>
+                    <option value="medium" selected>中</option>
+                    <option value="low">低</option>
+                  </select>
+                </label>
+                <label>
+                  <span>当前立场</span>
+                  <select id="opportunityStakeholderStance">
+                    <option value="unknown">待确认</option>
+                    <option value="supportive">支持</option>
+                    <option value="neutral">中立</option>
+                    <option value="resistant">抵触</option>
+                  </select>
+                </label>
+                <label>
+                  <span>关系强度</span>
+                  <select id="opportunityStakeholderRelationship">
+                    <option value="unknown">未建立</option>
+                    <option value="weak">初步接触</option>
+                    <option value="developing">持续沟通</option>
+                    <option value="strong">稳定关系</option>
+                    <option value="trusted">深度信任</option>
+                  </select>
+                </label>
+                <label>
+                  <span>内部责任人</span>
+                  <select id="opportunityStakeholderOwner">
+                    <option value="">暂未指定</option>
+                  </select>
+                </label>
+                <label class="stakeholder-wide-field">
+                  <span>下一步行动</span>
+                  <input id="opportunityStakeholderNextAction" maxlength="500" autocomplete="off" required />
+                </label>
+                <label>
+                  <span>证据来源</span>
+                  <input id="opportunityStakeholderEvidenceSource" maxlength="120" autocomplete="off" placeholder="客户访谈、伙伴反馈或公开资料" required />
+                </label>
+                <label>
+                  <span>证据链接</span>
+                  <input id="opportunityStakeholderEvidenceUrl" type="url" maxlength="1000" autocomplete="off" />
+                </label>
+                <label class="stakeholder-wide-field">
+                  <span>证据摘录</span>
+                  <textarea id="opportunityStakeholderEvidenceText" rows="3" maxlength="2000" required></textarea>
+                </label>
+              </div>
+              <div class="owner-assignment-actions">
+                <button id="cancelOpportunityStakeholderButton" class="ghost-button" type="button">取消</button>
+                <button id="submitOpportunityStakeholderButton" class="primary-button" type="submit">保存关键人</button>
+              </div>
+            </form>
+          </dialog>
         </section>
 
         <section id="historyView" class="view">
