@@ -77,6 +77,10 @@ _PROVINCE_SHORT_NAMES: dict[str, tuple[str, ...]] = {
 }
 
 _INTERNATIONAL_SCOPES = (
+    ("欧洲复兴开发银行", "ebrd"),
+    ("European Bank for Reconstruction and Development", "ebrd"),
+    ("EBRD", "ebrd"),
+    ("ebrd", "ebrd"),
     ("非洲开发银行", "afdb"),
     ("African Development Bank", "afdb"),
     ("AfDB", "afdb"),

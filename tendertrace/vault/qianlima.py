@@ -174,6 +174,7 @@ class QianlimaAdapter:
             "idb",
             "adb",
             "afdb",
+            "ebrd",
         }
 
     def collect(

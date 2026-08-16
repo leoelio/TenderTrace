@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from tendertrace.adapters.adb import AdbAdapter
 from tendertrace.adapters.afdb import AfdbAdapter
+from tendertrace.adapters.ebrd import EbrdAdapter
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
 from tendertrace.adapters.idb import IdbAdapter
@@ -66,6 +67,7 @@ class MultiSourceAdapter:
             IdbAdapter(),
             AdbAdapter(),
             AfdbAdapter(),
+            EbrdAdapter(),
             ContractsFinderAdapter(),
             FindTenderAdapter(),
         ]

@@ -234,6 +234,7 @@ class GgzyAdapter:
             "idb",
             "adb",
             "afdb",
+            "ebrd",
         }
 
     def collect(

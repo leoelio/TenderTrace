@@ -240,6 +240,7 @@ class CcgpAdapter:
             "idb",
             "adb",
             "afdb",
+            "ebrd",
         }
 
     def list_urls(self, max_pages: int) -> list[str]:

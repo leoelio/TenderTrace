@@ -13,7 +13,7 @@ from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.llm.gateway import ModelCallResult
 from tendertrace.runlog import get_run, list_outbox_messages
-from tendertrace.runner import run_once
+from tendertrace.runner import _can_use_local_only, run_once
 from tendertrace.runtime.checkpoint import SqliteCheckpointer
 from tendertrace.runtime.trace import SqliteTraceStore
 
@@ -84,6 +84,13 @@ class FailingAdapter:
     ) -> list[Notice]:
         self.calls += 1
         raise AssertionError("local retrieval should satisfy this run")
+
+
+class EbrdOnlyAdapter(FailingAdapter):
+    name = "ebrd"
+
+    def supports(self, bidql: dict[str, object]) -> bool:
+        return bidql.get("region", {}).get("scope") == "ebrd"
 
 
 class SupplementAdapter:
@@ -422,6 +429,27 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(second.stats["local_retrieved"], 1)
         self.assertEqual(second.stats["source_collected"], 1)
         self.assertEqual(second.stats["source_sites"], ["ccgp", "ggzy"])
+
+    def test_scoped_single_source_can_reuse_a_full_local_result(self) -> None:
+        notice = Notice(
+            id="ebrd-water-1",
+            source_site="ebrd",
+            title="Water infrastructure procurement",
+            publish_time="2026-08-13",
+            region="Jordan",
+            purchaser="Water Authority",
+            source_url="https://ecepp.ebrd.com/delta/viewNotice.html?displayNoticeId=1",
+        )
+        adapter = MultiSourceAdapter([EbrdOnlyAdapter()])
+
+        self.assertTrue(
+            _can_use_local_only(
+                [notice],
+                1,
+                adapter,
+                {"region": {"scope": "ebrd"}},
+            )
+        )
 
     def test_run_once_downloads_extracts_and_persists_attachment_snapshots(self) -> None:
         def fake_download(url: str, max_bytes: int) -> bytes:

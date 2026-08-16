@@ -123,7 +123,7 @@ def run_once(
                 notices=local_notices,
             )
         source_stats = [local_result.stats]
-        if _can_use_local_only(local_notices, max_results, source_adapter):
+        if _can_use_local_only(local_notices, max_results, source_adapter, state.intent):
             dedup_result = clean_and_cluster_notices(local_notices[:max_results])
             notices = dedup_result.notices
             region_scope = _region_scope_summary(state.intent, source_stats)
@@ -439,10 +439,19 @@ def _can_use_local_only(
     local_notices: list[Notice],
     max_results: int,
     source_adapter: NoticeAdapter,
+    bidql: dict[str, Any],
 ) -> bool:
     if len(local_notices) < max_results:
         return False
     if isinstance(source_adapter, MultiSourceAdapter):
+        scope = str(bidql.get("region", {}).get("scope") or "domestic")
+        supported = [
+            adapter
+            for adapter in source_adapter.adapters
+            if not callable(getattr(adapter, "supports", None)) or adapter.supports(bidql)
+        ]
+        if scope not in {"domestic", "global"} and len(supported) == 1:
+            return True
         return len(_source_sites(local_notices)) >= 2
     return True
 

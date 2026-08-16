@@ -6,6 +6,7 @@ from typing import Any
 
 from tendertrace.adapters.adb import ADB_NOTICES_URL
 from tendertrace.adapters.afdb import AFDB_SOLICITATIONS_URL
+from tendertrace.adapters.ebrd import EBRD_NOTICES_URL
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.idb import IDB_DATASTORE_API
@@ -194,6 +195,26 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "scope": ["global", "afdb"],
                 "authority": "African Development Bank Group",
                 "documents": "official detail and tender files",
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="ebrd",
+            engine="official-html+detail",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="ebrd-ecepp-procurement-notices",
+                    url=EBRD_NOTICES_URL,
+                    kind="list",
+                )
+            ],
+            health=health.get("ebrd", {}),
+            discovery_rules={
+                "scope": ["global", "ebrd"],
+                "authority": "European Bank for Reconstruction and Development",
+                "coverage": "ECEPP project procurement",
                 "same_domain": True,
             },
         ),
