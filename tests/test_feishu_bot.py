@@ -47,6 +47,8 @@ class FeishuBotTests(unittest.TestCase):
                 "TENDERTRACE_SECRETS_DIR": str(root / "secrets"),
                 "TENDERTRACE_SCHEDULER_ENABLED": "false",
                 "FEISHU_ENABLED": "true",
+                "FEISHU_APP_ID": "test-app-id",
+                "FEISHU_APP_SECRET": "test-app-secret",
                 "FEISHU_CALLBACK_VERIFICATION_TOKEN": "verification-token",
             }
             previous = {key: os.environ.get(key) for key in values}
