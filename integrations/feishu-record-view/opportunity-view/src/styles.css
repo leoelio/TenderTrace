@@ -6,7 +6,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 280px; }
-button, input { font: inherit; }
+button, input, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
 main {
@@ -94,6 +94,48 @@ section { padding: 16px 0; border-bottom: 1px solid #e8edf4; }
 .market-section { gap: 9px; }
 .market-section > div { padding: 8px 0; border-top: 1px solid #eef2f6; }
 
+.workflow-section { display: grid; gap: 11px; }
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid rgba(215, 223, 235, .86);
+  border-left: 1px solid rgba(215, 223, 235, .86);
+  background: rgba(248, 250, 252, .72);
+  backdrop-filter: blur(12px);
+}
+.workflow-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border-right: 1px solid rgba(215, 223, 235, .86);
+  border-bottom: 1px solid rgba(215, 223, 235, .86);
+}
+.workflow-grid span, .decision-reason { color: #69758a; font-size: 10px; }
+.workflow-grid strong { overflow-wrap: anywhere; font-size: 12px; }
+.workflow-reason, .workflow-hint, .claim-gate p {
+  color: #58657a;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.workflow-reason { padding-left: 10px; border-left: 2px solid #9ebdff; }
+.claim-gate { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.claim-gate p { flex: 1; }
+.decision-reason { display: grid; gap: 6px; }
+.decision-reason textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 9px;
+  border: 1px solid #d7dfeb;
+  border-radius: 6px;
+  color: #172033;
+  background: rgba(255, 255, 255, .9);
+  line-height: 1.45;
+}
+.decision-reason textarea:focus { border-color: #1463ff; outline: 2px solid rgba(20, 99, 255, .1); }
+.workflow-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.workflow-actions button.danger { color: #b42318; border-color: #f3c7c3; background: #fffafa; }
+
 .supplier-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .supplier-list span { padding: 5px 7px; border: 1px solid #dfe6ef; border-radius: 5px; color: #445168; background: #f8fafc; font-size: 10px; }
 
@@ -134,5 +176,6 @@ footer { justify-content: flex-start; flex-wrap: wrap; padding-top: 16px; }
 @media (max-width: 420px) {
   main { padding: 12px; }
   .quality-grid { grid-template-columns: 1fr; }
+  .claim-gate { align-items: stretch; flex-direction: column; }
   footer > * { flex: 1 1 calc(50% - 6px); }
 }

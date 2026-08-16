@@ -129,9 +129,28 @@ class OpportunityApiTests(unittest.TestCase):
                             "Access-Control-Request-Method": "PATCH",
                         },
                     )
+                    unsafe_record_view_claim = client.post(
+                        "/api/opportunities/notice-api-1/actions",
+                        json={
+                            "action": "claim",
+                            "channel": "feishu_record_view",
+                            "actor_open_id": "base:user-1",
+                            "actor_name": "飞书分析师",
+                        },
+                    )
                     claimed = client.post(
                         "/api/opportunities/notice-api-1/actions",
                         json={"action": "claim", "actor_name": "测试负责人"},
+                    )
+                    record_view_hold = client.post(
+                        "/api/opportunities/notice-api-1/actions",
+                        json={
+                            "action": "hold",
+                            "channel": "feishu_record_view",
+                            "actor_open_id": "base:user-1",
+                            "actor_name": "飞书分析师",
+                            "reason": "等待伙伴补充授权证明",
+                        },
                     )
                     blocked = client.post(
                         "/api/opportunities/notice-api-1/actions",
@@ -177,8 +196,13 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(len(duplicate_facts.json()["audit"]), 1)
         self.assertEqual(cors.status_code, 200)
         self.assertIn("PATCH", cors.headers["access-control-allow-methods"])
+        self.assertEqual(unsafe_record_view_claim.status_code, 409)
+        self.assertIn("open_id", unsafe_record_view_claim.json()["detail"]["reasons"][0])
         self.assertEqual(claimed.json()["workflow"]["stage"], "qualifying")
         self.assertEqual(claimed.json()["workflow"]["owner_name"], "测试负责人")
+        self.assertEqual(record_view_hold.status_code, 200)
+        self.assertEqual(record_view_hold.json()["workflow"]["decision"], "hold")
+        self.assertEqual(record_view_hold.json()["workflow"]["decision_by"], "飞书分析师")
         self.assertEqual(blocked.status_code, 409)
         self.assertEqual(task_sync.status_code, 200)
         self.assertEqual(task_sync.json()["completed_count"], 1)

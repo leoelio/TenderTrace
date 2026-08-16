@@ -797,16 +797,47 @@ def create_app():
         action = str(request.get("action") or "").strip()
         if not action:
             raise HTTPException(status_code=400, detail="action is required")
+        channel = str(request.get("channel") or "web").strip()
+        if channel not in {"web", "feishu_record_view", "api"}:
+            raise HTTPException(status_code=400, detail="unsupported opportunity action channel")
+        actor_open_id = str(request.get("actor_open_id") or "").strip()
+        actor_name = str(request.get("actor_name") or "").strip()
+        if action == "claim" and actor_open_id.startswith("base:"):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Base 用户不能直接认领，请发送飞书机会卡后由成员点击认领",
+                    "action": action,
+                    "reasons": ["Base 用户标识不能替代 Task v2 所需的飞书 open_id"],
+                },
+            )
+        if channel == "feishu_record_view":
+            if action == "claim":
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": "记录视图不能直接认领，请发送飞书机会卡后由成员点击认领",
+                        "action": action,
+                        "reasons": ["Base 用户标识不能替代 Task v2 所需的飞书 open_id"],
+                    },
+                )
+            if not actor_open_id.startswith("base:"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="feishu_record_view requires a base-scoped actor id",
+                )
+        actor_open_id = actor_open_id or ("web:admin" if channel == "web" else "api")
+        actor_name = actor_name or ("admin" if channel == "web" else channel)
         try:
             workflow = apply_action(
                 settings,
                 notice_id,
                 action,
-                actor_open_id=str(request.get("actor_open_id") or "web:admin").strip(),
-                actor_name=str(request.get("actor_name") or "admin").strip(),
+                actor_open_id=actor_open_id,
+                actor_name=actor_name,
                 qualification=_mapping_value(opportunity.get("qualification")),
                 decision_reason=str(request.get("reason") or "").strip(),
-                payload={"channel": "web"},
+                payload={"channel": channel},
             )
         except WorkflowGateError as exc:
             raise HTTPException(
@@ -830,7 +861,7 @@ def create_app():
             event_type="opportunity_action",
             target=notice_id,
             label=workflow.stage_label,
-            metadata={"action": action, "channel": "web"},
+            metadata={"action": action, "channel": channel},
         )
         return {
             "status": "updated",

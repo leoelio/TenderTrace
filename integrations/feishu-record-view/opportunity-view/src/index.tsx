@@ -1,6 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BadgeCheck, ExternalLink, RefreshCw, Send, Settings, UploadCloud, X } from "lucide-react";
+import {
+  Archive,
+  BadgeCheck,
+  CheckCircle2,
+  CirclePause,
+  CircleX,
+  ExternalLink,
+  Flag,
+  RefreshCw,
+  Send,
+  Settings,
+  Trophy,
+  UploadCloud,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { bitable } from "@lark-opdev/block-bitable-api";
 import "./styles.css";
 
@@ -41,6 +56,53 @@ type RecordContext = {
   recordId: string;
   values: Record<string, string>;
 };
+
+type Workflow = {
+  stage: string;
+  stage_label: string;
+  owner_name: string;
+  owner_open_id: string;
+  feishu_task_guid: string;
+  feishu_task_status: string;
+  qualification_score: number;
+  qualification_status: string;
+  decision: string;
+  decision_reason: string;
+  decision_by: string;
+  due_at: string;
+};
+
+type Qualification = {
+  score: number;
+  status: string;
+  blockers?: Record<string, string[]>;
+};
+
+type OpportunityWorkspace = {
+  opportunity: {
+    intelligence?: Intelligence;
+    workflow?: Workflow;
+    qualification?: Qualification;
+    action_state?: Record<string, unknown>;
+  };
+};
+
+type WorkflowAction = {
+  action: string;
+  label: string;
+  icon: LucideIcon;
+  decision?: boolean;
+  tone?: string;
+};
+
+class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
 
 const fieldLabels: Record<string, string> = {
   title: "标题",
@@ -103,9 +165,43 @@ async function request(path: string, options: RequestInit = {}) {
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail || `TenderTrace API ${response.status}`);
+    const detail = payload.detail;
+    const message = typeof detail === "string"
+      ? detail
+      : Array.isArray(detail?.reasons) && detail.reasons.length
+        ? detail.reasons.join("；")
+        : detail?.message || payload.message || `TenderTrace API ${response.status}`;
+    throw new ApiError(response.status, message);
   }
   return response.json();
+}
+
+function workflowActions(workflow: Workflow): WorkflowAction[] {
+  if (workflow.stage === "identified" || workflow.stage === "archived") return [];
+  if (workflow.stage === "qualifying") {
+    return [
+      { action: "pursue", label: "确认机会", icon: Flag },
+      { action: "hold", label: "暂缓", icon: CirclePause, decision: true },
+      { action: "reject", label: "No-Go", icon: CircleX, decision: true, tone: "danger" },
+    ];
+  }
+  if (workflow.stage === "pursuing") {
+    return [
+      workflow.decision === "go"
+        ? { action: "prepare_bid", label: "进入投标准备", icon: CheckCircle2 }
+        : { action: "approve_bid", label: "批准 Go", icon: CheckCircle2, decision: true },
+      { action: "hold", label: "暂缓", icon: CirclePause, decision: true },
+      { action: "reject", label: "No-Go", icon: CircleX, decision: true, tone: "danger" },
+    ];
+  }
+  if (workflow.stage === "bidding") {
+    return [
+      { action: "mark_won", label: "标记中标", icon: Trophy },
+      { action: "mark_lost", label: "标记失标", icon: CircleX, tone: "danger" },
+      { action: "hold", label: "暂缓", icon: CirclePause, decision: true },
+    ];
+  }
+  return [{ action: "archive", label: "归档", icon: Archive }];
 }
 
 function payloadFrom(values: Record<string, string>) {
@@ -128,8 +224,12 @@ function QualityLine({ label, value }: { label: string; value: number }) {
 function App() {
   const [context, setContext] = useState<RecordContext | null>(null);
   const [intelligence, setIntelligence] = useState<Intelligence | null>(null);
+  const [workspace, setWorkspace] = useState<OpportunityWorkspace | null>(null);
+  const [baseActorId, setBaseActorId] = useState("");
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
+  const [acting, setActing] = useState("");
+  const [decisionReason, setDecisionReason] = useState("");
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiBase, setApiBase] = useState(apiConfig().base);
@@ -140,12 +240,25 @@ function App() {
     setMessage("");
     try {
       const next = await currentRecord();
-      const result = await request("/api/opportunities/analyze", {
-        method: "POST",
-        body: JSON.stringify(payloadFrom(next.values)),
-      });
+      const nextNoticeId = next.values["公告ID"]?.trim() || "";
+      const workspaceRequest = nextNoticeId
+        ? request(`/api/opportunities/${encodeURIComponent(nextNoticeId)}/facts`).catch((error) => {
+            if (error instanceof ApiError && error.status === 404) return null;
+            throw error;
+          })
+        : Promise.resolve(null);
+      const [result, linkedWorkspace, userId] = await Promise.all([
+        request("/api/opportunities/analyze", {
+          method: "POST",
+          body: JSON.stringify(payloadFrom(next.values)),
+        }),
+        workspaceRequest,
+        bitable.bridge.getBaseUserId().catch(() => ""),
+      ]);
       setContext(next);
-      setIntelligence(result);
+      setWorkspace(linkedWorkspace);
+      setBaseActorId(userId);
+      setIntelligence(linkedWorkspace?.opportunity?.intelligence || result);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "加载失败");
     } finally {
@@ -165,6 +278,9 @@ function App() {
     .filter((name) => Boolean(context?.values[name]?.trim())).length;
   const factStatus = context?.values["事实核验状态"] || "待核验";
   const factEvidenceReady = Boolean(context?.values["事实核验证据"]?.trim());
+  const workflow = workspace?.opportunity?.workflow || null;
+  const qualification = workspace?.opportunity?.qualification || null;
+  const availableActions = workflow ? workflowActions(workflow) : [];
   const quality = intelligence?.scores || {};
   const marketBenchmark = intelligence?.market_context?.benchmark;
   const marketContextSignals = intelligence?.market_context?.signals || [];
@@ -196,7 +312,7 @@ function App() {
       "信息完整度": String(quality.completeness || 0),
       "信息可信度": String(quality.credibility || 0),
       "时效评分": String(quality.freshness || 0),
-      "销售阶段": intelligence.stage,
+      "销售阶段": workflow?.stage_label || intelligence.stage,
       "项目目标": intelligence.project_target,
       "建议策略": intelligence.strategy,
       "跟进建议": intelligence.recommended_actions.map((item) => `${item.role}：${item.action}`).join("\n"),
@@ -233,9 +349,36 @@ function App() {
         method: "POST",
         body: JSON.stringify({ notice_id: noticeId }),
       });
-      setMessage("机会情报已发送到默认飞书会话");
+      setMessage(workflow?.stage === "identified" ? "认领卡已发送，请在飞书会话中点击认领" : "机会情报已发送到默认飞书会话");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "发送失败");
+    }
+  }
+
+  async function applyWorkflowAction(action: string) {
+    if (!noticeId || !baseActorId) {
+      setMessage(!noticeId ? "当前记录缺少公告ID" : "无法读取当前飞书成员标识，请刷新后重试");
+      return;
+    }
+    setActing(action);
+    try {
+      await request(`/api/opportunities/${encodeURIComponent(noticeId)}/actions`, {
+        method: "POST",
+        body: JSON.stringify({
+          action,
+          actor_open_id: `base:${baseActorId}`,
+          actor_name: context?.values["负责人"] || context?.values["事实核验人"] || "飞书记录视图用户",
+          reason: decisionReason.trim(),
+          channel: "feishu_record_view",
+        }),
+      });
+      await load();
+      setDecisionReason("");
+      setMessage("机会阶段已更新，并同步到飞书台账");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "机会动作执行失败");
+    } finally {
+      setActing("");
     }
   }
 
@@ -334,6 +477,65 @@ function App() {
           <section className="decision-section">
             <div><span>项目目标</span><strong>{intelligence.project_target}</strong></div>
             <div><span>建议策略</span><strong>{intelligence.strategy}</strong></div>
+          </section>
+
+          <section className="workflow-section">
+            <div className="section-title">
+              <strong>机会工作流</strong>
+              <span>{workflow ? workflow.stage_label : "未关联本地机会"}</span>
+            </div>
+            {workflow ? (
+              <>
+                <div className="workflow-grid">
+                  <div><span>负责人</span><strong>{workflow.owner_name || "待认领"}</strong></div>
+                  <div><span>资格评估</span><strong>{qualification?.score ?? workflow.qualification_score} · {qualification?.status || workflow.qualification_status}</strong></div>
+                  <div><span>飞书任务</span><strong>{workflow.feishu_task_status || "not_created"}</strong></div>
+                  <div><span>投标决策</span><strong>{workflow.decision || "待决策"}</strong></div>
+                </div>
+                {workflow.decision_reason && (
+                  <p className="workflow-reason">{workflow.decision_reason}{workflow.decision_by ? ` · ${workflow.decision_by}` : ""}</p>
+                )}
+                {workflow.stage === "identified" ? (
+                  <div className="claim-gate">
+                    <p>首次认领需由成员在飞书机会卡中确认，认领后才能正确分派任务。</p>
+                    <button className="primary" onClick={sendFeishu}><Send size={16} />发送认领卡</button>
+                  </div>
+                ) : availableActions.length ? (
+                  <>
+                    {availableActions.some((item) => item.decision) && (
+                      <label className="decision-reason">
+                        决策依据
+                        <textarea
+                          value={decisionReason}
+                          onChange={(event) => setDecisionReason(event.target.value)}
+                          placeholder="补充判断依据、待办条件或风险说明"
+                          rows={2}
+                        />
+                      </label>
+                    )}
+                    <div className="workflow-actions">
+                      {availableActions.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <button
+                            className={item.tone || ""}
+                            disabled={Boolean(acting)}
+                            key={item.action}
+                            onClick={() => applyWorkflowAction(item.action)}
+                          >
+                            <Icon size={15} />{acting === item.action ? "处理中" : item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : <p className="workflow-hint">当前阶段没有待执行动作。</p>}
+              </>
+            ) : (
+              <p className="workflow-hint">
+                当前行可进行即时研判，但只有从 TenderTrace 入库并带有公告ID的记录才能进入销售工作流。
+              </p>
+            )}
           </section>
 
           <section className="fact-verification">

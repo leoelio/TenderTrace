@@ -11,6 +11,9 @@ class WebStaticTests(unittest.TestCase):
         feishu_view = Path(
             "integrations/feishu-record-view/opportunity-view/src/index.tsx"
         ).read_text(encoding="utf-8")
+        feishu_styles = Path(
+            "integrations/feishu-record-view/opportunity-view/src/styles.css"
+        ).read_text(encoding="utf-8")
         feishu_webpack = Path(
             "integrations/feishu-record-view/opportunity-view/webpack.config.js"
         ).read_text(encoding="utf-8")
@@ -57,10 +60,15 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("onSelectionChange", feishu_view)
         self.assertIn("verifyFacts", feishu_view)
         self.assertIn("const current = await currentRecord()", feishu_view)
+        self.assertIn("bitable.bridge.getBaseUserId", feishu_view)
+        self.assertIn("/facts`).catch", feishu_view)
+        self.assertIn("/actions`,", feishu_view)
         self.assertIn('channel: "feishu_record_view"', feishu_view)
+        self.assertIn("发送认领卡", feishu_view)
         self.assertIn('method: "PATCH"', feishu_view)
         self.assertIn('"竞争情报"', feishu_view)
         self.assertIn('"需求覆盖率"', feishu_view)
+        self.assertIn(".workflow-grid", feishu_styles)
         self.assertIn("new BitableAppWebpackPlugin({ open: false })", feishu_webpack)
         self.assertIn("process.env.NODE_ENV = argv.mode", feishu_webpack)
         self.assertNotIn('argv.mode === "development"', feishu_webpack)
