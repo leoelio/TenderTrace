@@ -617,6 +617,76 @@
               </div>
             </form>
           </dialog>
+          <dialog id="opportunityOutcomeDialog" class="owner-assignment-dialog opportunity-outcome-dialog" aria-labelledby="opportunityOutcomeTitle">
+            <form id="opportunityOutcomeForm" class="owner-assignment-form">
+              <div class="owner-assignment-heading">
+                <div>
+                  <span>结果学习</span>
+                  <h2 id="opportunityOutcomeTitle">记录投标复盘</h2>
+                  <small id="opportunityOutcomeProject">-</small>
+                </div>
+                <button id="closeOpportunityOutcomeButton" class="icon-close-button" type="button" aria-label="关闭投标复盘">×</button>
+              </div>
+              <div class="owner-assignment-body outcome-form-grid">
+                <label>
+                  <span>成败主因</span>
+                  <select id="opportunityOutcomeReason" required>
+                    <option value="price">价格竞争力</option>
+                    <option value="technical_fit">技术匹配度</option>
+                    <option value="relationship">客户关系与影响力</option>
+                    <option value="delivery">交付与服务能力</option>
+                    <option value="compliance">合规与资质</option>
+                    <option value="qualification">资格条件</option>
+                    <option value="partner">伙伴协同</option>
+                    <option value="incumbent">既有供应商优势</option>
+                    <option value="execution">投标执行质量</option>
+                    <option value="other">其他已核实原因</option>
+                  </select>
+                </label>
+                <label>
+                  <span>中标供应商</span>
+                  <input id="opportunityOutcomeWinner" maxlength="200" autocomplete="off" placeholder="如已公布则填写" />
+                </label>
+                <label>
+                  <span>成交金额</span>
+                  <input id="opportunityOutcomeAmount" type="number" min="0.01" step="0.01" inputmode="decimal" />
+                </label>
+                <label>
+                  <span>币种</span>
+                  <input id="opportunityOutcomeCurrency" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" placeholder="CNY" />
+                </label>
+                <label class="outcome-wide-field">
+                  <span>结果复盘</span>
+                  <textarea id="opportunityOutcomeSummary" rows="3" maxlength="3000" required placeholder="记录胜负结论及其事实依据"></textarea>
+                </label>
+                <label class="outcome-wide-field">
+                  <span>经验沉淀</span>
+                  <textarea id="opportunityOutcomeLessons" rows="3" maxlength="3000" required placeholder="记录后续项目可复用的策略与改进点"></textarea>
+                </label>
+                <label>
+                  <span>客户反馈</span>
+                  <textarea id="opportunityOutcomeFeedback" rows="2" maxlength="2000"></textarea>
+                </label>
+                <label>
+                  <span>后续行动</span>
+                  <textarea id="opportunityOutcomeFollowUp" rows="2" maxlength="2000"></textarea>
+                </label>
+                <label>
+                  <span>证据链接</span>
+                  <input id="opportunityOutcomeEvidenceUrl" type="url" maxlength="1000" autocomplete="off" placeholder="结果公告或客户确认链接" />
+                </label>
+                <label>
+                  <span>证据摘录</span>
+                  <textarea id="opportunityOutcomeEvidenceText" rows="2" maxlength="3000" placeholder="没有公开链接时填写可审计的书面证据"></textarea>
+                </label>
+                <p id="opportunityOutcomeStatus" class="owner-directory-status">成交金额仅进入相同币种的历史基准。</p>
+              </div>
+              <div class="owner-assignment-actions">
+                <button id="cancelOpportunityOutcomeButton" class="ghost-button" type="button">取消</button>
+                <button id="submitOpportunityOutcomeButton" class="primary-button" type="submit">确认结果并沉淀</button>
+              </div>
+            </form>
+          </dialog>
         </section>
 
         <section id="historyView" class="view">

@@ -19,6 +19,9 @@ const state = {
   pendingOpportunityStakeholderId: "",
   pendingRelationshipActionNoticeId: "",
   pendingRelationshipActionStakeholderId: "",
+  pendingOpportunityOutcomeNoticeId: "",
+  pendingOpportunityOutcomeAction: "",
+  editingOpportunityOutcome: false,
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
@@ -170,6 +173,24 @@ const el = {
   submitRelationshipActionButton: document.querySelector("#submitRelationshipActionButton"),
   closeRelationshipActionButton: document.querySelector("#closeRelationshipActionButton"),
   cancelRelationshipActionButton: document.querySelector("#cancelRelationshipActionButton"),
+  opportunityOutcomeDialog: document.querySelector("#opportunityOutcomeDialog"),
+  opportunityOutcomeForm: document.querySelector("#opportunityOutcomeForm"),
+  opportunityOutcomeTitle: document.querySelector("#opportunityOutcomeTitle"),
+  opportunityOutcomeProject: document.querySelector("#opportunityOutcomeProject"),
+  opportunityOutcomeReason: document.querySelector("#opportunityOutcomeReason"),
+  opportunityOutcomeWinner: document.querySelector("#opportunityOutcomeWinner"),
+  opportunityOutcomeAmount: document.querySelector("#opportunityOutcomeAmount"),
+  opportunityOutcomeCurrency: document.querySelector("#opportunityOutcomeCurrency"),
+  opportunityOutcomeSummary: document.querySelector("#opportunityOutcomeSummary"),
+  opportunityOutcomeLessons: document.querySelector("#opportunityOutcomeLessons"),
+  opportunityOutcomeFeedback: document.querySelector("#opportunityOutcomeFeedback"),
+  opportunityOutcomeFollowUp: document.querySelector("#opportunityOutcomeFollowUp"),
+  opportunityOutcomeEvidenceUrl: document.querySelector("#opportunityOutcomeEvidenceUrl"),
+  opportunityOutcomeEvidenceText: document.querySelector("#opportunityOutcomeEvidenceText"),
+  opportunityOutcomeStatus: document.querySelector("#opportunityOutcomeStatus"),
+  submitOpportunityOutcomeButton: document.querySelector("#submitOpportunityOutcomeButton"),
+  closeOpportunityOutcomeButton: document.querySelector("#closeOpportunityOutcomeButton"),
+  cancelOpportunityOutcomeButton: document.querySelector("#cancelOpportunityOutcomeButton"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
   runSearchInput: document.querySelector("#runSearchInput"),
@@ -1382,13 +1403,14 @@ function renderOpportunities(payload) {
     const market = summary.market || {};
     const budget = market.budget || {};
     const purchaser = market.top_purchasers?.[0];
-    const stage = market.stage_distribution?.[0];
+    const learning = market.outcome_learning || {};
+    const topLossReason = learning.loss_reasons?.[0];
     el.opportunityMarket.className = "opportunity-market";
     el.opportunityMarket.innerHTML = [
       marketInsight("价格样本", market.budget_sample_count || 0, `${market.budget_coverage || 0}% 预算覆盖`),
       marketInsight("历史中位数", formatCny(budget.median_cny), `区间 ${formatCny(budget.min_cny)} - ${formatCny(budget.max_cny)}`),
       marketInsight("重点客户", purchaser?.name || "样本不足", purchaser ? `${purchaser.count} 条关联公告` : "待补充采购人"),
-      marketInsight("主要阶段", stage?.name || "待研判", stage ? `${stage.count} / ${market.notice_count || 0} 条` : "暂无阶段样本"),
+      marketInsight("复盘样本", learning.sample_count || 0, learning.win_rate == null ? "尚未形成胜率" : `胜率 ${learning.win_rate}%${topLossReason ? ` · ${topLossReason.name}` : ""}`),
     ].join("");
     if (el.opportunityTopicFilter) {
       const selected = market.selected_category || "";
@@ -1507,6 +1529,10 @@ function openOpportunityDetail(noticeId) {
   const suppliers = Array.isArray(competition.historical_suppliers)
     ? competition.historical_suppliers
     : [];
+  const confirmedCompetitors = Array.isArray(competition.confirmed_competitors)
+    ? competition.confirmed_competitors
+    : [];
+  const outcome = item.outcome || {};
   const factOverrides = Array.isArray(item.fact_overrides) ? item.fact_overrides : [];
   const team = item.team || {};
   const teamMembers = Array.isArray(team.members) ? team.members : [];
@@ -1695,8 +1721,32 @@ function openOpportunityDetail(noticeId) {
       ${detailLine("价格位置", benchmark.message || "同品类预算样本不足")}
       ${detailLine("竞争结论", competition.message || "同品类结果样本不足")}
       ${suppliers.length ? detailLine("历史竞争者", suppliers.slice(0, 4).map((value) => `${value.name}（${value.count} 次）`).join("、")) : ""}
+      ${confirmedCompetitors.length ? detailLine("内部复盘确认", confirmedCompetitors.slice(0, 4).map((value) => `${value.name}（${value.count} 次）`).join("、")) : ""}
       ${competition.evidence_excerpt ? `<blockquote>${escapeHtml(competition.evidence_excerpt)}</blockquote>` : ""}
     </section>
+    ${outcome.result ? `
+      <section class="opportunity-detail-section outcome-review-section">
+        <div class="opportunity-detail-section-title">
+          <div>
+            <h3>投标结果复盘</h3>
+            <small>${escapeHtml(outcome.recorded_by || "记录人待确认")} · ${escapeHtml(outcome.finalized_at || "时间待确认")}</small>
+          </div>
+          <button class="primary-lite-button" type="button" data-edit-opportunity-outcome="${escapeHtml(item.notice_id)}">修订复盘</button>
+        </div>
+        <div class="outcome-review-hero result-${escapeHtml(outcome.result)}">
+          <strong>${outcome.result === "won" ? "已中标" : "未中标"}</strong>
+          <span>${escapeHtml(outcome.reason_label || "主因待确认")}</span>
+        </div>
+        ${detailLine("中标供应商", outcome.winner_name || "未披露")}
+        ${detailLine("成交金额", outcome.award_amount ? `${formatNumber(outcome.award_amount)} ${outcome.currency || ""}` : "未披露")}
+        ${detailLine("结果结论", outcome.summary)}
+        ${detailLine("经验沉淀", outcome.lessons)}
+        ${outcome.customer_feedback ? detailLine("客户反馈", outcome.customer_feedback) : ""}
+        ${outcome.follow_up_action ? detailLine("后续行动", outcome.follow_up_action) : ""}
+        ${outcome.evidence_url ? `<a class="text-link" href="${escapeHtml(outcome.evidence_url)}" target="_blank" rel="noreferrer">查看结果证据</a>` : ""}
+        ${outcome.evidence_text ? `<blockquote>${escapeHtml(outcome.evidence_text)}</blockquote>` : ""}
+      </section>
+    ` : ""}
     <section class="opportunity-detail-section">
       <div class="opportunity-detail-section-title"><h3>需求覆盖</h3><span>${escapeHtml(review.covered_count || 0)} / ${escapeHtml(review.total_count || 0)} 项</span></div>
       <div class="requirement-dimensions">
@@ -2037,6 +2087,11 @@ function formatCny(value) {
   if (amount >= 100000000) return `${Number((amount / 100000000).toFixed(2))} 亿元`;
   if (amount >= 10000) return `${Number((amount / 10000).toFixed(1))} 万元`;
   return `${Math.round(amount)} 元`;
+}
+
+function formatNumber(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) : "-";
 }
 
 function qualityBar(label, value) {
@@ -3268,9 +3323,94 @@ async function completeRelationshipAction(noticeId, actionId) {
   showToast("行动结果已记录，资格门禁已重新计算");
 }
 
+function openOpportunityOutcomeDialog(noticeId, action = "", editing = false) {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (!item || !el.opportunityOutcomeDialog) return;
+  const existing = item.outcome || {};
+  const resolvedAction = action || (existing.result === "won" ? "mark_won" : "mark_lost");
+  const won = resolvedAction === "mark_won";
+  state.pendingOpportunityOutcomeNoticeId = noticeId;
+  state.pendingOpportunityOutcomeAction = resolvedAction;
+  state.editingOpportunityOutcome = Boolean(editing);
+  el.opportunityOutcomeTitle.textContent = editing ? "修订投标复盘" : won ? "记录中标复盘" : "记录失标复盘";
+  el.opportunityOutcomeProject.textContent = item.title || "未命名机会";
+  el.opportunityOutcomeReason.value = existing.reason_code || (won ? "technical_fit" : "price");
+  el.opportunityOutcomeWinner.value = existing.winner_name || "";
+  el.opportunityOutcomeAmount.value = existing.award_amount || "";
+  el.opportunityOutcomeCurrency.value = existing.currency || "";
+  el.opportunityOutcomeSummary.value = existing.summary || "";
+  el.opportunityOutcomeLessons.value = existing.lessons || "";
+  el.opportunityOutcomeFeedback.value = existing.customer_feedback || "";
+  el.opportunityOutcomeFollowUp.value = existing.follow_up_action || "";
+  el.opportunityOutcomeEvidenceUrl.value = existing.evidence_url || "";
+  el.opportunityOutcomeEvidenceText.value = existing.evidence_text || "";
+  el.opportunityOutcomeStatus.textContent = won
+    ? "中标结论将进入胜因分析、价格基准和后续策略知识库。"
+    : "失标结论将进入败因分布、竞争者画像和后续策略知识库。";
+  if (!el.opportunityOutcomeDialog.open) el.opportunityOutcomeDialog.showModal();
+}
+
+function closeOpportunityOutcomeDialog() {
+  state.pendingOpportunityOutcomeNoticeId = "";
+  state.pendingOpportunityOutcomeAction = "";
+  state.editingOpportunityOutcome = false;
+  el.opportunityOutcomeDialog?.close();
+}
+
+async function submitOpportunityOutcome(event) {
+  event.preventDefault();
+  const noticeId = state.pendingOpportunityOutcomeNoticeId;
+  const action = state.pendingOpportunityOutcomeAction;
+  const editing = state.editingOpportunityOutcome;
+  if (!noticeId || !action) return;
+  const amount = el.opportunityOutcomeAmount?.value.trim() || "";
+  const currency = el.opportunityOutcomeCurrency?.value.trim().toUpperCase() || "";
+  const evidenceUrl = el.opportunityOutcomeEvidenceUrl?.value.trim() || "";
+  const evidenceText = el.opportunityOutcomeEvidenceText?.value.trim() || "";
+  if (amount && !currency) throw new Error("填写成交金额时必须填写三位币种代码");
+  if (!evidenceUrl && !evidenceText) throw new Error("请填写结果证据链接或证据摘录");
+  const outcome = {
+    result: action === "mark_won" ? "won" : "lost",
+    reason_code: el.opportunityOutcomeReason?.value || "other",
+    winner_name: el.opportunityOutcomeWinner?.value.trim() || "",
+    award_amount: amount || null,
+    currency,
+    summary: el.opportunityOutcomeSummary?.value.trim() || "",
+    lessons: el.opportunityOutcomeLessons?.value.trim() || "",
+    customer_feedback: el.opportunityOutcomeFeedback?.value.trim() || "",
+    follow_up_action: el.opportunityOutcomeFollowUp?.value.trim() || "",
+    evidence_url: evidenceUrl,
+    evidence_text: evidenceText,
+  };
+  if (el.submitOpportunityOutcomeButton) el.submitOpportunityOutcomeButton.disabled = true;
+  try {
+    if (editing) {
+      await api(`/api/opportunities/${encodeURIComponent(noticeId)}/outcome`, {
+        method: "PUT",
+        body: JSON.stringify({ actor_name: "admin", outcome }),
+      });
+    } else {
+      await api(`/api/opportunities/${encodeURIComponent(noticeId)}/actions`, {
+        method: "POST",
+        body: JSON.stringify({ action, actor_name: "admin", outcome }),
+      });
+    }
+    closeOpportunityOutcomeDialog();
+    await refreshOpportunities();
+    if (el.opportunityDetailDialog?.open) openOpportunityDetail(noticeId);
+    showToast(editing ? "投标复盘已修订并同步" : "投标结果已确认，复盘样本已进入策略知识库");
+  } finally {
+    if (el.submitOpportunityOutcomeButton) el.submitOpportunityOutcomeButton.disabled = false;
+  }
+}
+
 async function applyOpportunityAction(noticeId, action) {
   const item = state.opportunities.find((value) => value.notice_id === noticeId);
   const descriptor = item?.action_contract?.actions?.find((value) => value.action === action);
+  if (descriptor?.requires_outcome) {
+    openOpportunityOutcomeDialog(noticeId, action);
+    return;
+  }
   let reason = "";
   if (descriptor?.accepts_reason) {
     const input = window.prompt(
@@ -3986,6 +4126,11 @@ function bindEvents() {
       ).catch(toastError("机会状态更新失败"));
       return;
     }
+    const editOutcomeTarget = event.target.closest("[data-edit-opportunity-outcome]");
+    if (editOutcomeTarget) {
+      openOpportunityOutcomeDialog(editOutcomeTarget.dataset.editOpportunityOutcome, "", true);
+      return;
+    }
     const addOpportunityTeamTarget = event.target.closest("[data-add-opportunity-team]");
     if (addOpportunityTeamTarget) {
       openOpportunityTeamDialog(addOpportunityTeamTarget.dataset.addOpportunityTeam).catch(
@@ -4152,6 +4297,19 @@ function bindEvents() {
   );
   el.closeRelationshipActionButton?.addEventListener("click", closeRelationshipActionDialog);
   el.cancelRelationshipActionButton?.addEventListener("click", closeRelationshipActionDialog);
+  el.opportunityOutcomeDialog?.addEventListener("click", (event) => {
+    if (event.target === el.opportunityOutcomeDialog) closeOpportunityOutcomeDialog();
+  });
+  el.opportunityOutcomeDialog?.addEventListener("close", () => {
+    state.pendingOpportunityOutcomeNoticeId = "";
+    state.pendingOpportunityOutcomeAction = "";
+    state.editingOpportunityOutcome = false;
+  });
+  el.opportunityOutcomeForm?.addEventListener("submit", (event) =>
+    submitOpportunityOutcome(event).catch(toastError("投标复盘保存失败")),
+  );
+  el.closeOpportunityOutcomeButton?.addEventListener("click", closeOpportunityOutcomeDialog);
+  el.cancelOpportunityOutcomeButton?.addEventListener("click", closeOpportunityOutcomeDialog);
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);
   el.queryInput?.addEventListener("input", () => {

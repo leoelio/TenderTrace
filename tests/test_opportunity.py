@@ -12,6 +12,7 @@ from tendertrace.opportunity import (
     _opportunity_action_state,
     analyze_opportunity_payload,
     build_market_context,
+    competition_context_for_notice,
     enrich_opportunity_intelligence,
     list_opportunities,
     market_benchmark_for_notice,
@@ -143,6 +144,46 @@ class OpportunityIntelligenceTests(unittest.TestCase):
         self.assertEqual(benchmark["status"], "ready")
         self.assertEqual(benchmark["position"], "above")
         self.assertIn("可比样本 3 条", benchmark["message"])
+
+    def test_confirmed_outcomes_form_separate_award_and_competitor_evidence(self) -> None:
+        notices = [
+            _market_notice("n1", "100万元", "客户甲"),
+            _market_notice("n2", "120万元", "客户乙"),
+        ]
+        market = build_market_context(
+            notices,
+            as_of=datetime(2026, 8, 15, 10, 0),
+            outcome_samples=[
+                {
+                    "category": "服务器",
+                    "result": "lost",
+                    "reason_label": "价格竞争力",
+                    "winner_name": "示例竞争公司",
+                    "award_amount": 900000,
+                    "currency": "CNY",
+                },
+                {
+                    "category": "服务器",
+                    "result": "won",
+                    "reason_label": "技术匹配度",
+                    "winner_name": "本公司",
+                    "award_amount": 1100000,
+                    "currency": "CNY",
+                },
+            ],
+        )
+        benchmark = market_benchmark_for_notice(notices[0], market)
+        competition = competition_context_for_notice(notices[0], market)
+
+        self.assertEqual(market["outcome_learning"]["sample_count"], 2)
+        self.assertEqual(market["outcome_learning"]["win_rate"], 50.0)
+        self.assertEqual(
+            market["category_award_benchmarks"]["服务器"]["median_cny"],
+            1_000_000,
+        )
+        self.assertEqual(benchmark["award_sample_count"], 2)
+        self.assertIn("内部复盘成交价", benchmark["message"])
+        self.assertEqual(competition["confirmed_competitors"][0]["name"], "示例竞争公司")
 
     def test_market_context_recovers_budget_and_purchaser_from_notice_text(self) -> None:
         first = replace(

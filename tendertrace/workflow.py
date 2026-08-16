@@ -12,6 +12,7 @@ from tendertrace.notice_change_reviews import (
     acknowledge_notice_change_reviews,
     change_review_summaries,
 )
+from tendertrace.opportunity_outcomes import record_outcome
 from tendertrace.qualification import action_blockers
 
 
@@ -149,10 +150,11 @@ def workflow_action_contract(
                 "blocked_reasons": blockers,
                 "accepts_reason": accepts_reason,
                 "requires_member_identity": requires_member_identity,
+                "requires_outcome": action in {"mark_won", "mark_lost"},
             }
         )
     return {
-        "version": 2,
+        "version": 3,
         "stage": workflow.stage,
         "stage_label": workflow.stage_label,
         "change_review_required": review_pending,
@@ -346,6 +348,20 @@ def apply_action(
         raise WorkflowGateError(action, blockers)
     if action == "prepare_bid" and current.decision != "go":
         raise WorkflowGateError(action, ["投标决策尚未通过 Go 审批"])
+    if action in {"mark_won", "mark_lost"}:
+        outcome_payload = (payload or {}).get("outcome")
+        if not isinstance(outcome_payload, dict):
+            raise WorkflowGateError(action, ["标记投标结果前必须提交结构化复盘"])
+        try:
+            record_outcome(
+                settings,
+                notice_id,
+                outcome_payload,
+                expected_result="won" if action == "mark_won" else "lost",
+                actor=actor_name or actor_open_id,
+            )
+        except (LookupError, ValueError) as exc:
+            raise WorkflowGateError(action, [str(exc)]) from exc
     owner = actor_open_id if action == "claim" and actor_open_id else None
     owner_name = actor_name if action == "claim" and actor_name else None
     decision = DECISION_ACTION.get(action)

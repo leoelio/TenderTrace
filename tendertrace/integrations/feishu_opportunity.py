@@ -213,6 +213,14 @@ def build_opportunity_card(
     )
     decision = _decision_label(workflow.decision)
     decision_sla = _decision_sla_text(_mapping(opportunity.get("action_state")))
+    outcome = _mapping(opportunity.get("outcome"))
+    outcome_text = (
+        f"{outcome.get('reason_label') or '已复盘'} · {outcome.get('summary') or ''}"
+        if outcome
+        else "待在机会台账记录证据与复盘"
+        if workflow.stage == "bidding"
+        else "当前阶段无需记录"
+    )
     action_rows = _card_action_rows(opportunity, workflow)
     return {
         "config": {"wide_screen_mode": True, "update_multi": True},
@@ -252,6 +260,7 @@ def build_opportunity_card(
                         f"逾期 {relationship_actions.get('overdue_count', 0)} · "
                         f"下一步 {next_relationship_action.get('title') or '待规划'}\n"
                         f"**决策 SLA** {decision_sla}\n"
+                        f"**投标结果** {outcome_text}\n"
                         f"**风险** {risk_text}"
                     ),
                 },
@@ -283,6 +292,8 @@ def _card_action_rows(
         _mapping(opportunity.get("change_review")),
     )
     for descriptor in contract["actions"]:
+        if descriptor.get("requires_outcome"):
+            continue
         target = primary if descriptor["group"] == "primary" else secondary
         enabled = bool(descriptor["enabled"])
         label = str(descriptor["label"])

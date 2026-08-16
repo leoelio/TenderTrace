@@ -81,6 +81,18 @@ REQUIRED_FIELDS = (
     "决策SLA时限",
     "决策等待小时",
     "决策截止时间",
+    "投标结果",
+    "成败主因",
+    "中标供应商",
+    "成交金额",
+    "成交币种",
+    "结果复盘",
+    "经验沉淀",
+    "客户反馈",
+    "后续行动",
+    "结果证据",
+    "复盘人",
+    "复盘时间",
     "线索正文",
     "伙伴提交人",
     "来源核验",
@@ -951,6 +963,18 @@ def _record_fields(
         "决策SLA时限": "",
         "决策等待小时": "0",
         "决策截止时间": "",
+        "投标结果": "",
+        "成败主因": "",
+        "中标供应商": "",
+        "成交金额": "",
+        "成交币种": "",
+        "结果复盘": "",
+        "经验沉淀": "",
+        "客户反馈": "",
+        "后续行动": "",
+        "结果证据": "",
+        "复盘人": "",
+        "复盘时间": "",
         "事实核验状态": "待核验",
         "事实核验证据": "",
         "事实核验备注": "",
@@ -1034,7 +1058,7 @@ def _opportunity_fact_fields(opportunity: dict[str, object]) -> dict[str, object
 
 
 def _workflow_fields(workflow: dict[str, object]) -> dict[str, object]:
-    return {
+    fields = {
         "机会负责人": str(workflow.get("owner_name") or ""),
         "协同状态": str(workflow.get("stage_label") or workflow.get("stage") or ""),
         "下一步行动": str(workflow.get("next_action") or ""),
@@ -1058,6 +1082,39 @@ def _workflow_fields(workflow: dict[str, object]) -> dict[str, object]:
         ),
         "决策等待小时": str(workflow.get("decision_wait_hours") or 0),
         "决策截止时间": str(workflow.get("decision_due_at") or ""),
+    }
+    outcome = workflow.get("outcome")
+    if isinstance(outcome, dict):
+        fields.update(_opportunity_outcome_fields(outcome))
+    return fields
+
+
+def _opportunity_outcome_fields(outcome: dict[str, object]) -> dict[str, object]:
+    result = {"won": "已中标", "lost": "未中标"}.get(
+        str(outcome.get("result") or ""),
+        "",
+    )
+    evidence = "\n".join(
+        value
+        for value in (
+            str(outcome.get("evidence_url") or ""),
+            str(outcome.get("evidence_text") or ""),
+        )
+        if value
+    )
+    return {
+        "投标结果": result,
+        "成败主因": str(outcome.get("reason_label") or ""),
+        "中标供应商": str(outcome.get("winner_name") or ""),
+        "成交金额": str(outcome.get("award_amount") or ""),
+        "成交币种": str(outcome.get("currency") or ""),
+        "结果复盘": str(outcome.get("summary") or ""),
+        "经验沉淀": str(outcome.get("lessons") or ""),
+        "客户反馈": str(outcome.get("customer_feedback") or ""),
+        "后续行动": str(outcome.get("follow_up_action") or ""),
+        "结果证据": evidence,
+        "复盘人": str(outcome.get("recorded_by") or ""),
+        "复盘时间": str(outcome.get("finalized_at") or ""),
     }
 
 

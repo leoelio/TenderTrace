@@ -15,6 +15,7 @@ from tendertrace.intent.topic import extract_topic
 from tendertrace.notice_changes import notice_change_summaries
 from tendertrace.notice_change_reviews import change_review_summaries
 from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
+from tendertrace.opportunity_outcomes import OpportunityOutcome, outcome_snapshots
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.opportunity_team import team_snapshots
 from tendertrace.opportunity_stakeholders import stakeholder_snapshots
@@ -182,8 +183,14 @@ def analyze_opportunity_with_market_context(
         as_of=as_of,
         trust_profiles=profiles,
     )
-    notices = [notice for _notice_id, notice in _recent_notices(settings, limit=500)]
-    market = build_market_context(notices, as_of=as_of, trust_profiles=profiles)
+    rows = _recent_notices(settings, limit=500)
+    outcomes = outcome_snapshots(settings, [notice_id for notice_id, _notice in rows])
+    market = build_market_context(
+        [notice for _notice_id, notice in rows],
+        as_of=as_of,
+        trust_profiles=profiles,
+        outcome_samples=_outcome_market_samples(rows, outcomes),
+    )
     normalized = _normalized_payload(payload)
     _attach_market_context(intelligence, normalized, market)
     return intelligence
@@ -199,6 +206,7 @@ def build_market_context(
     *,
     as_of: datetime | date | None = None,
     trust_profiles: dict[str, dict[str, object]] | None = None,
+    outcome_samples: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     entries = [
         _market_entry(
@@ -231,6 +239,28 @@ def build_market_context(
             category_suppliers.setdefault(category, Counter())[supplier] += 1
     high_credibility = sum(1 for item in entries if int(item["credibility"] or 0) >= 80)
     budget_coverage = round(len(budgets) / len(entries) * 100, 1) if entries else 0.0
+    outcome_samples = outcome_samples or []
+    outcome_awards: dict[str, list[float]] = {}
+    outcome_suppliers: dict[str, Counter[str]] = {}
+    loss_reasons: Counter[str] = Counter()
+    result_counts: Counter[str] = Counter()
+    for sample in outcome_samples:
+        category = str(sample.get("category") or "")
+        result = str(sample.get("result") or "")
+        supplier = str(sample.get("winner_name") or "")
+        amount = sample.get("award_amount")
+        reason_label = str(sample.get("reason_label") or "")
+        if result:
+            result_counts[result] += 1
+        if result == "lost" and reason_label:
+            loss_reasons[reason_label] += 1
+        if category and amount and sample.get("currency") == "CNY":
+            outcome_awards.setdefault(category, []).append(float(amount))
+        if category and supplier:
+            outcome_suppliers.setdefault(category, Counter())[supplier] += 1
+    category_award_benchmarks = {
+        category: _budget_stats(values) for category, values in outcome_awards.items()
+    }
     signals: list[str] = []
     if budgets:
         overall = _budget_stats(budgets)
@@ -252,18 +282,39 @@ def build_market_context(
         signals.append(f"竞争样本：{supplier} 在本地结果公告中出现 {count} 次")
     if entries and budget_coverage < 30:
         signals.append("数据提示：预算覆盖率低于 30%，价格判断仅作线索参考")
+    if outcome_samples:
+        signals.append(
+            f"内部复盘：{len(outcome_samples)} 条已确认结果，"
+            f"中标 {result_counts.get('won', 0)} 条，未中标 {result_counts.get('lost', 0)} 条"
+        )
     return {
         "notice_count": len(entries),
         "budget_sample_count": len(budgets),
         "budget_coverage": budget_coverage,
         "budget": overall,
         "category_benchmarks": category_benchmarks,
+        "category_award_benchmarks": category_award_benchmarks,
         "category_distribution": _counter_items(category_counts, limit=20),
         "competition_sample_count": sum(suppliers.values()),
         "top_suppliers": _counter_items(suppliers),
         "category_competitors": {
             category: _counter_items(counter, limit=8)
             for category, counter in category_suppliers.items()
+        },
+        "outcome_learning": {
+            "sample_count": len(outcome_samples),
+            "won_count": result_counts.get("won", 0),
+            "lost_count": result_counts.get("lost", 0),
+            "win_rate": (
+                round(result_counts.get("won", 0) / len(outcome_samples) * 100, 1)
+                if outcome_samples
+                else None
+            ),
+            "loss_reasons": _counter_items(loss_reasons, limit=8),
+            "category_competitors": {
+                category: _counter_items(counter, limit=8)
+                for category, counter in outcome_suppliers.items()
+            },
         },
         "top_purchasers": _counter_items(purchasers),
         "top_regions": _counter_items(regions),
@@ -298,9 +349,14 @@ def list_opportunities(
     limit = max(1, min(int(limit), 200))
     trust_profiles = source_trust_profiles(settings)
     all_rows = _recent_notices(settings, limit=500)
+    all_outcomes = outcome_snapshots(
+        settings,
+        [notice_id for notice_id, _notice in all_rows],
+    )
     all_market = build_market_context(
         [notice for _notice_id, notice in all_rows],
         trust_profiles=trust_profiles,
+        outcome_samples=_outcome_market_samples(all_rows, all_outcomes),
     )
     market_rows = (
         [
@@ -313,7 +369,11 @@ def list_opportunities(
     )
     rows = market_rows[:500]
     market_notices = [notice for _notice_id, notice in market_rows]
-    market = build_market_context(market_notices, trust_profiles=trust_profiles)
+    market = build_market_context(
+        market_notices,
+        trust_profiles=trust_profiles,
+        outcome_samples=_outcome_market_samples(market_rows, all_outcomes),
+    )
     market["available_categories"] = all_market.get("category_distribution", [])
     market["selected_category"] = topic or ""
     items: list[dict[str, object]] = []
@@ -361,6 +421,11 @@ def list_opportunities(
             "team": teams[notice_id],
             "stakeholder_map": stakeholder_maps[notice_id],
             "relationship_actions": relationship_actions[notice_id],
+            "outcome": (
+                all_outcomes[notice_id].to_dict()
+                if notice_id in all_outcomes
+                else {}
+            ),
             "change_summary": change_summaries.get(notice_id, {}),
             "change_review": review_summaries.get(notice_id, {}),
         }
@@ -438,9 +503,15 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     structured = _mapping(payload.get("structured_fields"))
     trust_profiles = source_trust_profiles(settings)
     intelligence = _analyze(payload, as_of=None, trust_profiles=trust_profiles)
+    market_rows = _recent_notices(settings, limit=500)
+    outcomes = outcome_snapshots(
+        settings,
+        [item_id for item_id, _item in market_rows],
+    )
     market = build_market_context(
-        [item for _notice_id, item in _recent_notices(settings, limit=500)],
+        [item for _notice_id, item in market_rows],
         trust_profiles=trust_profiles,
+        outcome_samples=_outcome_market_samples(market_rows, outcomes),
     )
     _attach_market_context(intelligence, payload, market)
     workflow = workflow_snapshots(settings, [notice_id])[notice_id]
@@ -468,6 +539,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "team": team,
         "stakeholder_map": stakeholder_map,
         "relationship_actions": relationship_actions,
+        "outcome": outcomes.get(notice_id).to_dict() if notice_id in outcomes else {},
     }
     item["change_summary"] = notice_change_summaries(settings, [notice_id]).get(
         notice_id,
@@ -963,6 +1035,29 @@ def _recent_notices(settings: Settings, *, limit: int) -> list[tuple[str, Notice
     ]
 
 
+def _outcome_market_samples(
+    rows: list[tuple[str, Notice]],
+    outcomes: dict[str, OpportunityOutcome],
+) -> list[dict[str, object]]:
+    samples: list[dict[str, object]] = []
+    for notice_id, notice in rows:
+        outcome = outcomes.get(notice_id)
+        if outcome is None:
+            continue
+        samples.append(
+            {
+                "notice_id": notice_id,
+                "category": _primary_category(_notice_payload(notice)),
+                "result": outcome.result,
+                "reason_label": outcome.reason_label,
+                "winner_name": outcome.winner_name,
+                "award_amount": outcome.award_amount,
+                "currency": outcome.currency,
+            }
+        )
+    return samples
+
+
 def _market_entry(
     payload: dict[str, Any],
     *,
@@ -1022,6 +1117,10 @@ def _market_benchmark(payload: dict[str, Any], market: dict[str, object]) -> dic
     amount = parse_budget_cny(structured.get("budget"))
     category_map = _mapping(market.get("category_benchmarks"))
     stats = _mapping(category_map.get(category)) if category else {}
+    award_map = _mapping(market.get("category_award_benchmarks"))
+    award_stats = _mapping(award_map.get(category)) if category else {}
+    award_sample_count = int(award_stats.get("sample_count") or 0)
+    award_median_cny = award_stats.get("median_cny")
     sample_count = int(stats.get("sample_count") or 0)
     median_cny = stats.get("median_cny")
     if not category:
@@ -1032,12 +1131,20 @@ def _market_benchmark(payload: dict[str, Any], market: dict[str, object]) -> dic
             "message": "尚未识别可比采购品类，暂不生成价格判断",
         }
     if sample_count < 2 or not median_cny:
+        outcome_message = (
+            f"；内部复盘已确认 {award_sample_count} 条成交价，"
+            f"中位数 {_format_cny(award_median_cny)}"
+            if award_sample_count and award_median_cny
+            else ""
+        )
         return {
-            "status": "insufficient",
+            "status": "partial" if outcome_message else "insufficient",
             "category": category,
             "sample_count": sample_count,
             "amount_cny": amount,
-            "message": f"{category} 有效预算样本少于 2 条，暂不生成价格位置判断",
+            "award_sample_count": award_sample_count,
+            "award_median_cny": award_median_cny,
+            "message": f"{category} 有效预算样本少于 2 条，暂不生成预算位置判断{outcome_message}",
         }
     median_value = float(median_cny)
     position = "unknown"
@@ -1058,10 +1165,18 @@ def _market_benchmark(payload: dict[str, Any], market: dict[str, object]) -> dic
         "median_cny": median_value,
         "min_cny": stats.get("min_cny"),
         "max_cny": stats.get("max_cny"),
+        "award_sample_count": award_sample_count,
+        "award_median_cny": award_median_cny,
         "position": position,
         "message": (
             f"{category} 可比样本 {sample_count} 条，中位数 {_format_cny(median_value)}；"
             f"{position_label}"
+            + (
+                f"；内部复盘成交价 {award_sample_count} 条，中位数 "
+                f"{_format_cny(award_median_cny)}"
+                if award_sample_count and award_median_cny
+                else ""
+            )
         ),
     }
 
@@ -1099,6 +1214,14 @@ def _competition_context(
         if isinstance(item, dict) and item.get("name")
     ] if isinstance(raw_suppliers, list) else []
     sample_count = sum(int(item["count"]) for item in historical_suppliers)
+    outcome_learning = _mapping(market.get("outcome_learning"))
+    outcome_category_map = _mapping(outcome_learning.get("category_competitors"))
+    raw_confirmed = outcome_category_map.get(category) if category else []
+    confirmed_competitors = [
+        {"name": str(item.get("name") or ""), "count": int(item.get("count") or 0)}
+        for item in raw_confirmed
+        if isinstance(item, dict) and item.get("name")
+    ] if isinstance(raw_confirmed, list) else []
     supplier = str(current.get("supplier") or "")
     if supplier:
         amount = current.get("award_amount") or "金额待确认"
@@ -1108,6 +1231,17 @@ def _competition_context(
             f"{item['name']}（{item['count']} 次）" for item in historical_suppliers[:3]
         )
         message = f"同品类本地结果样本 {sample_count} 条，活跃供应商：{leaders}"
+        if confirmed_competitors:
+            confirmed = "、".join(
+                f"{item['name']}（{item['count']} 次）" for item in confirmed_competitors[:3]
+            )
+            message += f"；内部复盘确认：{confirmed}"
+    elif confirmed_competitors:
+        confirmed = "、".join(
+            f"{item['name']}（{item['count']} 次）" for item in confirmed_competitors[:3]
+        )
+        confirmed_count = sum(item["count"] for item in confirmed_competitors)
+        message = f"内部复盘已确认同品类结果 {confirmed_count} 条：{confirmed}"
     elif current.get("status") == "result_unparsed":
         message = "当前公告属于结果/合同阶段，但未可靠识别成交供应商"
     else:
@@ -1116,6 +1250,7 @@ def _competition_context(
         **current,
         "category": category,
         "historical_suppliers": historical_suppliers,
+        "confirmed_competitors": confirmed_competitors,
         "sample_count": sample_count,
         "message": message,
     }

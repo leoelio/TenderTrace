@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 
 DDL = (
@@ -387,6 +387,27 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS opportunity_outcomes (
+        notice_id TEXT PRIMARY KEY,
+        result TEXT NOT NULL,
+        reason_code TEXT NOT NULL,
+        winner_name TEXT,
+        award_amount REAL,
+        currency TEXT,
+        summary TEXT NOT NULL,
+        lessons TEXT NOT NULL,
+        customer_feedback TEXT,
+        follow_up_action TEXT,
+        evidence_url TEXT,
+        evidence_text TEXT,
+        recorded_by TEXT,
+        finalized_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS opportunity_team_members (
         id TEXT PRIMARY KEY,
         notice_id TEXT NOT NULL,
@@ -583,6 +604,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_status ON delivery_attempts(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_workflows_stage ON opportunity_workflows(stage, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_events_notice ON opportunity_events(notice_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_outcomes_result ON opportunity_outcomes(result, finalized_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_team_notice ON opportunity_team_members(notice_id, status, role)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_team_sync ON opportunity_team_members(feishu_sync_status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_stakeholders_notice ON opportunity_stakeholders(notice_id, status, role)",

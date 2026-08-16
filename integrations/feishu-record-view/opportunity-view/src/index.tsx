@@ -42,6 +42,7 @@ type Intelligence = {
     message?: string;
     evidence_excerpt?: string;
     historical_suppliers?: Array<{ name: string; count: number }>;
+    confirmed_competitors?: Array<{ name: string; count: number }>;
   };
   requirement_review?: {
     coverage_score: number;
@@ -163,7 +164,25 @@ type OpportunityWorkspace = {
     team?: OpportunityTeam;
     stakeholder_map?: StakeholderMap;
     relationship_actions?: RelationshipActionPlan;
+    outcome?: OpportunityOutcome;
   };
+};
+
+type OpportunityOutcome = {
+  result: "won" | "lost" | "";
+  reason_code: string;
+  reason_label?: string;
+  winner_name: string;
+  award_amount: number | null;
+  currency: string;
+  summary: string;
+  lessons: string;
+  customer_feedback: string;
+  follow_up_action: string;
+  evidence_url: string;
+  evidence_text: string;
+  recorded_by?: string;
+  finalized_at?: string;
 };
 
 type WorkflowAction = {
@@ -175,6 +194,7 @@ type WorkflowAction = {
   blocked_reasons: string[];
   accepts_reason: boolean;
   requires_member_identity: boolean;
+  requires_outcome?: boolean;
 };
 
 type ActionContract = {
@@ -306,6 +326,19 @@ function App() {
   const [verifying, setVerifying] = useState(false);
   const [acting, setActing] = useState("");
   const [decisionReason, setDecisionReason] = useState("");
+  const [outcomeDraft, setOutcomeDraft] = useState<OpportunityOutcome>({
+    result: "",
+    reason_code: "price",
+    winner_name: "",
+    award_amount: null,
+    currency: "",
+    summary: "",
+    lessons: "",
+    customer_feedback: "",
+    follow_up_action: "",
+    evidence_url: "",
+    evidence_text: "",
+  });
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiBase, setApiBase] = useState(apiConfig().base);
@@ -333,6 +366,20 @@ function App() {
       ]);
       setContext(next);
       setWorkspace(linkedWorkspace);
+      const linkedOutcome = linkedWorkspace?.opportunity?.outcome;
+      setOutcomeDraft({
+        result: linkedOutcome?.result || "",
+        reason_code: linkedOutcome?.reason_code || "price",
+        winner_name: linkedOutcome?.winner_name || "",
+        award_amount: linkedOutcome?.award_amount ?? null,
+        currency: linkedOutcome?.currency || "",
+        summary: linkedOutcome?.summary || "",
+        lessons: linkedOutcome?.lessons || "",
+        customer_feedback: linkedOutcome?.customer_feedback || "",
+        follow_up_action: linkedOutcome?.follow_up_action || "",
+        evidence_url: linkedOutcome?.evidence_url || "",
+        evidence_text: linkedOutcome?.evidence_text || "",
+      });
       setBaseActorId(userId);
       setIntelligence(linkedWorkspace?.opportunity?.intelligence || result);
     } catch (error) {
@@ -360,9 +407,11 @@ function App() {
   const team = workspace?.opportunity?.team || null;
   const stakeholderMap = workspace?.opportunity?.stakeholder_map || null;
   const relationshipActions = workspace?.opportunity?.relationship_actions || null;
+  const outcome = workspace?.opportunity?.outcome || null;
   const availableActions = workspace?.opportunity?.action_contract?.actions || [];
   const claimAction = availableActions.find((item) => item.requires_member_identity);
-  const directActions = availableActions.filter((item) => !item.requires_member_identity);
+  const directActions = availableActions.filter((item) => !item.requires_member_identity && !item.requires_outcome);
+  const outcomeActions = availableActions.filter((item) => item.requires_outcome);
   const quality = intelligence?.scores || {};
   const trust = intelligence?.trust_assessment;
   const marketBenchmark = intelligence?.market_context?.benchmark;
@@ -460,6 +509,54 @@ function App() {
       setMessage(action === "acknowledge_change" ? "公告变更已复核，请重新完成投标决策" : "机会阶段已更新，并同步到飞书台账");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "机会动作执行失败");
+    } finally {
+      setActing("");
+    }
+  }
+
+  async function submitOutcome(action: string, editing = false) {
+    if (!noticeId || !baseActorId) {
+      setMessage(!noticeId ? "当前记录缺少公告ID" : "无法读取当前飞书成员标识，请刷新后重试");
+      return;
+    }
+    if (!outcomeDraft.summary.trim() || !outcomeDraft.lessons.trim()) {
+      setMessage("请完整填写结果复盘和经验沉淀");
+      return;
+    }
+    if (!outcomeDraft.evidence_url.trim() && !outcomeDraft.evidence_text.trim()) {
+      setMessage("请填写结果证据链接或证据摘录");
+      return;
+    }
+    if (outcomeDraft.award_amount && !/^[A-Za-z]{3}$/.test(outcomeDraft.currency)) {
+      setMessage("填写成交金额时必须填写三位币种代码");
+      return;
+    }
+    const result = action === "mark_won" ? "won" : "lost";
+    const payload = {
+      ...outcomeDraft,
+      result,
+      currency: outcomeDraft.currency.toUpperCase(),
+    };
+    setActing(action);
+    try {
+      await request(
+        editing
+          ? `/api/opportunities/${encodeURIComponent(noticeId)}/outcome`
+          : `/api/opportunities/${encodeURIComponent(noticeId)}/actions`,
+        {
+          method: editing ? "PUT" : "POST",
+          body: JSON.stringify({
+            ...(editing ? {} : { action, channel: "feishu_record_view" }),
+            actor_open_id: `base:${baseActorId}`,
+            actor_name: context?.values["负责人"] || context?.values["事实核验人"] || "飞书记录视图用户",
+            outcome: payload,
+          }),
+        },
+      );
+      await load();
+      setMessage(editing ? "投标复盘已修订并同步到台账" : "投标结果已确认并进入策略学习样本");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "投标复盘保存失败");
     } finally {
       setActing("");
     }
@@ -668,6 +765,72 @@ function App() {
               </p>
             )}
           </section>
+
+          {(outcomeActions.length > 0 || outcome) && (
+            <section className="outcome-section">
+              <div className="section-title">
+                <strong>投标结果复盘</strong>
+                <span>{outcome ? `${outcome.result === "won" ? "已中标" : "未中标"} · ${outcome.reason_label || "已记录"}` : "结果待确认"}</span>
+              </div>
+              <div className="outcome-grid">
+                <label>成败主因
+                  <select value={outcomeDraft.reason_code} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, reason_code: event.target.value })}>
+                    <option value="price">价格竞争力</option>
+                    <option value="technical_fit">技术匹配度</option>
+                    <option value="relationship">客户关系与影响力</option>
+                    <option value="delivery">交付与服务能力</option>
+                    <option value="compliance">合规与资质</option>
+                    <option value="qualification">资格条件</option>
+                    <option value="partner">伙伴协同</option>
+                    <option value="incumbent">既有供应商优势</option>
+                    <option value="execution">投标执行质量</option>
+                    <option value="other">其他已核实原因</option>
+                  </select>
+                </label>
+                <label>中标供应商
+                  <input value={outcomeDraft.winner_name} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, winner_name: event.target.value })} />
+                </label>
+                <label>成交金额
+                  <input type="number" min="0.01" step="0.01" value={outcomeDraft.award_amount ?? ""} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, award_amount: event.target.value ? Number(event.target.value) : null })} />
+                </label>
+                <label>币种
+                  <input maxLength={3} placeholder="CNY" value={outcomeDraft.currency} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, currency: event.target.value.toUpperCase() })} />
+                </label>
+                <label className="wide">结果复盘
+                  <textarea rows={3} value={outcomeDraft.summary} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, summary: event.target.value })} />
+                </label>
+                <label className="wide">经验沉淀
+                  <textarea rows={3} value={outcomeDraft.lessons} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, lessons: event.target.value })} />
+                </label>
+                <label>客户反馈
+                  <textarea rows={2} value={outcomeDraft.customer_feedback} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, customer_feedback: event.target.value })} />
+                </label>
+                <label>后续行动
+                  <textarea rows={2} value={outcomeDraft.follow_up_action} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, follow_up_action: event.target.value })} />
+                </label>
+                <label>证据链接
+                  <input type="url" value={outcomeDraft.evidence_url} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, evidence_url: event.target.value })} />
+                </label>
+                <label>证据摘录
+                  <textarea rows={2} value={outcomeDraft.evidence_text} onChange={(event) => setOutcomeDraft({ ...outcomeDraft, evidence_text: event.target.value })} />
+                </label>
+              </div>
+              {outcomeActions.length ? (
+                <div className="outcome-actions">
+                  {outcomeActions.map((item) => (
+                    <button className={item.action === "mark_won" ? "primary" : ""} disabled={Boolean(acting)} key={item.action} onClick={() => submitOutcome(item.action)}>
+                      {item.action === "mark_won" ? <Trophy size={15} /> : <CircleX size={15} />}
+                      {acting === item.action ? "处理中" : item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : outcome ? (
+                <button disabled={Boolean(acting)} onClick={() => submitOutcome(outcome.result === "won" ? "mark_won" : "mark_lost", true)}>
+                  <RefreshCw size={15} />{acting ? "处理中" : "更新复盘"}
+                </button>
+              ) : null}
+            </section>
+          )}
 
           <section className="fact-verification">
             <div className="section-title"><strong>事实核验</strong><span>{factStatus}</span></div>

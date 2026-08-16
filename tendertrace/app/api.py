@@ -90,6 +90,7 @@ from tendertrace.opportunity import (
     list_opportunities,
 )
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
+from tendertrace.opportunity_outcomes import record_outcome
 from tendertrace.opportunity_relationship_actions import (
     create_relationship_action,
     relationship_action as get_relationship_action,
@@ -1138,7 +1139,10 @@ def create_app():
                 actor_name=actor_name,
                 qualification=_mapping_value(opportunity.get("qualification")),
                 decision_reason=str(request.get("reason") or "").strip(),
-                payload={"channel": channel},
+                payload={
+                    "channel": channel,
+                    "outcome": request.get("outcome"),
+                },
             )
         except WorkflowGateError as exc:
             raise HTTPException(
@@ -1169,6 +1173,51 @@ def create_app():
             "workflow": workflow.to_dict(),
             "qualification": refreshed,
             "bitable_status": bitable.status,
+        }
+
+    @app.put("/api/opportunities/{notice_id}/outcome")
+    def opportunity_outcome(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        workflow = get_workflow(settings, notice_id)
+        if workflow.stage not in {"won", "lost"}:
+            raise HTTPException(
+                status_code=409,
+                detail="submit the outcome together with mark_won or mark_lost",
+            )
+        try:
+            outcome = record_outcome(
+                settings,
+                notice_id,
+                _mapping_value(request.get("outcome")),
+                expected_result=workflow.stage,
+                actor=str(request.get("actor_name") or "admin").strip(),
+            )
+        except (LookupError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        refreshed = get_opportunity(settings, notice_id)
+        assert refreshed is not None
+        bitable = update_opportunity_workflow_in_bitable(
+            settings,
+            notice_id=notice_id,
+            workflow=_workflow_sync_payload(workflow, refreshed),
+        )
+        record_activity(
+            settings,
+            event_type="opportunity_outcome_updated",
+            target=notice_id,
+            label="投标结果复盘已更新",
+            metadata={"result": outcome.result, "bitable_status": bitable.status},
+        )
+        return {
+            "status": "updated",
+            "outcome": outcome.to_dict(),
+            "bitable_status": bitable.status,
+            "bitable_message": bitable.message,
         }
 
     @app.post("/api/integrations/feishu/callback")
@@ -2302,6 +2351,7 @@ def _workflow_sync_payload(workflow, opportunity: dict[str, object]) -> dict[str
             "decision_due_at": action_state.get("decision_due_at") or "",
         }
     )
+    payload["outcome"] = _mapping_value(opportunity.get("outcome"))
     return payload
 
 

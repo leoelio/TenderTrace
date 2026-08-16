@@ -275,6 +275,7 @@ def _workflow_sync_payload(workflow, opportunity: dict[str, object]) -> dict[str
             "decision_due_at": action_state.get("decision_due_at") or "",
         }
     )
+    payload["outcome"] = _mapping(opportunity.get("outcome"))
     return payload
 
 

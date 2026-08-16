@@ -10,6 +10,7 @@ from tendertrace.integrations.feishu_opportunity import (
     build_opportunity_card,
     start_opportunity_collaboration,
 )
+from tendertrace.opportunity_outcomes import get_outcome
 from tendertrace.workflow import (
     WorkflowGateError,
     apply_action,
@@ -227,6 +228,48 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertEqual(approved.decision_by, "销售经理")
         self.assertEqual(bidding.stage, "bidding")
 
+    def test_terminal_stage_requires_structured_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            ready = {
+                "score": 82,
+                "status": "ready",
+                "blockers": {"pursue": [], "approve_bid": []},
+            }
+            apply_action(settings, "notice-1", "claim", actor_open_id="ou_owner")
+            apply_action(settings, "notice-1", "pursue", qualification=ready)
+            apply_action(settings, "notice-1", "approve_bid", qualification=ready)
+            apply_action(settings, "notice-1", "prepare_bid", qualification=ready)
+
+            with self.assertRaisesRegex(WorkflowGateError, "结构化复盘"):
+                apply_action(settings, "notice-1", "mark_lost", qualification=ready)
+
+            completed = apply_action(
+                settings,
+                "notice-1",
+                "mark_lost",
+                actor_name="销售负责人",
+                qualification=ready,
+                payload={
+                    "outcome": {
+                        "result": "lost",
+                        "reason_code": "price",
+                        "winner_name": "示例竞争公司",
+                        "award_amount": 880000,
+                        "currency": "CNY",
+                        "summary": "价格评分差距导致未中标。",
+                        "lessons": "提前完成成本拆解和伙伴询价。",
+                        "evidence_url": "https://example.com/result",
+                    }
+                },
+            )
+            outcome = get_outcome(settings, "notice-1")
+
+        self.assertEqual(completed.stage, "lost")
+        self.assertIsNotNone(outcome)
+        self.assertEqual(outcome.result, "lost")
+
     def test_stage_and_qualification_gates_reject_invalid_progression(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))
@@ -309,7 +352,7 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertIn("客户关系", str(card))
         self.assertIn("关系风险", str(card))
         self.assertEqual(actions, ["claim", "hold", "reject"])
-        self.assertEqual(identified_contract["version"], 2)
+        self.assertEqual(identified_contract["version"], 3)
         self.assertTrue(identified_contract["actions"][0]["requires_member_identity"])
         self.assertEqual(qualifying_contract["actions"][0]["action"], "pursue")
         self.assertFalse(qualifying_contract["actions"][0]["enabled"])

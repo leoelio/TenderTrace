@@ -330,6 +330,20 @@ class FeishuBitableTests(unittest.TestCase):
                     "decision_wait_hours": 31.5,
                     "decision_due_at": "2026-08-15T09:00:00+00:00",
                     "updated_at": "2026-08-15T10:00:00",
+                    "outcome": {
+                        "result": "lost",
+                        "reason_label": "价格竞争力",
+                        "winner_name": "示例竞争公司",
+                        "award_amount": 880000,
+                        "currency": "CNY",
+                        "summary": "价格评分差距导致未中标。",
+                        "lessons": "提前完成成本拆解与伙伴询价。",
+                        "customer_feedback": "价格项差距明显。",
+                        "follow_up_action": "两周内完成报价复盘。",
+                        "evidence_url": "https://example.com/result",
+                        "recorded_by": "销售经理",
+                        "finalized_at": "2026-08-16T09:00:00+08:00",
+                    },
                 },
                 http_client_factory=FakeFeishuClient,
             )
@@ -347,6 +361,12 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["决策SLA状态"], "已超时升级")
         self.assertEqual(fields["决策SLA时限"], "24 小时")
         self.assertEqual(fields["决策等待小时"], "31.5")
+        self.assertEqual(fields["投标结果"], "未中标")
+        self.assertEqual(fields["成败主因"], "价格竞争力")
+        self.assertEqual(fields["中标供应商"], "示例竞争公司")
+        self.assertEqual(fields["成交金额"], "880000")
+        self.assertIn("example.com/result", fields["结果证据"])
+        self.assertEqual(fields["复盘人"], "销售经理")
         self.assertNotIn("标题", fields)
 
     def test_fact_update_recomputes_business_fields_on_existing_record(self) -> None:
