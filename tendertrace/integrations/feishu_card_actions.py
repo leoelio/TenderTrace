@@ -4,13 +4,13 @@ from typing import Any, Callable
 
 from tendertrace.config import Settings
 from tendertrace.delivery.feishu_bitable import update_opportunity_workflow_in_bitable
+from tendertrace.scheduling.ingest_subscriptions import IngestSubscription
 from tendertrace.integrations.feishu_opportunity import build_opportunity_card
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.memory import (
-    build_weekly_report,
     record_activity,
-    record_advice_feedback,
 )
+from tendertrace.memory_actions import apply_memory_advice_feedback
 from tendertrace.opportunity import get_opportunity
 from tendertrace.workflow import WorkflowGateError, apply_action, update_workflow
 
@@ -24,11 +24,16 @@ def process_feishu_card_action(
     payload: dict[str, object],
     *,
     bitable_updater: Callable[..., object] = update_opportunity_workflow_in_bitable,
+    schedule_ingest: Callable[[IngestSubscription], None] | None = None,
 ) -> dict[str, object]:
     event = _mapping(payload.get("event")) or payload
     value = _mapping(_mapping(event.get("action")).get("value"))
     if value.get("advice_id"):
-        return process_memory_advice_card_action(settings, payload)
+        return process_memory_advice_card_action(
+            settings,
+            payload,
+            schedule_ingest=schedule_ingest,
+        )
     return process_opportunity_card_action(
         settings,
         payload,
@@ -117,6 +122,8 @@ def process_opportunity_card_action(
 def process_memory_advice_card_action(
     settings: Settings,
     payload: dict[str, object],
+    *,
+    schedule_ingest: Callable[[IngestSubscription], None] | None = None,
 ) -> dict[str, object]:
     event = _mapping(payload.get("event")) or payload
     value = _mapping(_mapping(event.get("action")).get("value"))
@@ -135,7 +142,7 @@ def process_memory_advice_card_action(
     actor_open_id = str(operator_id.get("open_id") or operator.get("open_id") or "")
     actor_name = str(operator.get("name") or actor_open_id or "飞书用户")
     user_id = str(value.get("user_id") or "admin")
-    feedback = record_advice_feedback(
+    result = apply_memory_advice_feedback(
         settings,
         advice_id=advice_id,
         status=status,
@@ -143,21 +150,31 @@ def process_memory_advice_card_action(
         source="feishu",
         actor=actor_name,
         context={"event_id": _event_id(payload), "actor_open_id": actor_open_id},
+        schedule_ingest=schedule_ingest,
     )
+    feedback = result.feedback
     record_activity(
         settings,
         event_type="advice_feedback",
         target=advice_id,
         label=status,
-        metadata={"source": "feishu", "actor_open_id": actor_open_id},
+        metadata={
+            "source": "feishu",
+            "actor_open_id": actor_open_id,
+            "automation_status": result.automation.get("status") or "not_applicable",
+        },
         user_id=user_id,
     )
-    report = build_weekly_report(settings, user_id=user_id)
     labels = {"accepted": "已采纳", "completed": "已完成", "dismissed": "已忽略"}
+    automation_message = str(result.automation.get("message") or "")
     return {
-        "toast": {"type": "success", "content": f"建议{labels[status]}"},
-        "card": build_memory_weekly_card(report),
+        "toast": {
+            "type": "success",
+            "content": automation_message or f"建议{labels[status]}",
+        },
+        "card": build_memory_weekly_card(result.report),
         "feedback": feedback,
+        "automation": result.automation,
     }
 
 

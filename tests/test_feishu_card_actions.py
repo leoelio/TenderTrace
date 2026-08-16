@@ -12,7 +12,7 @@ from tendertrace.integrations.feishu_card_actions import (
     process_feishu_card_action,
     process_opportunity_card_action,
 )
-from tendertrace.memory import build_weekly_report
+from tendertrace.memory import build_weekly_report, record_activity
 
 
 class FeishuCardActionTests(unittest.TestCase):
@@ -88,6 +88,54 @@ class FeishuCardActionTests(unittest.TestCase):
         self.assertEqual(refreshed["recommendation_plan"][0]["feedback_status"], "accepted")
         self.assertIn("已采纳", result["toast"]["content"])
         self.assertEqual(result["card"]["header"]["title"]["content"], "TenderTrace 使用与机会周报")
+
+    def test_memory_knowledge_advice_creates_scheduled_ingest_from_feishu(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            query = "最近1个月苏州充电桩招标信息"
+            record_activity(
+                settings,
+                event_type="run_start",
+                target="feishu",
+                label=query,
+                metadata={"query": query},
+            )
+            report = build_weekly_report(settings)
+            advice = next(
+                item for item in report["recommendation_plan"] if item["kind"] == "knowledge_base"
+            )
+            scheduled: list[str] = []
+            payload = {
+                "header": {"event_id": "memory-ingest-event"},
+                "event": {
+                    "operator": {
+                        "name": "张三",
+                        "operator_id": {"open_id": "ou_owner"},
+                    },
+                    "action": {
+                        "value": {
+                            "action": "memory_advice_accept",
+                            "advice_id": advice["id"],
+                            "user_id": "admin",
+                        }
+                    },
+                },
+            }
+
+            result = process_feishu_card_action(
+                settings,
+                payload,
+                schedule_ingest=lambda subscription: scheduled.append(subscription.id),
+            )
+            with connection(settings) as conn:
+                count = conn.execute("SELECT COUNT(*) FROM ingest_subscriptions").fetchone()[0]
+
+        self.assertEqual(result["automation"]["status"], "created")
+        self.assertTrue(result["automation"]["scheduled"])
+        self.assertEqual(count, 1)
+        self.assertEqual(len(scheduled), 1)
+        self.assertIn("后台采集", result["toast"]["content"])
 
 
 def _payload(action: str) -> dict[str, object]:

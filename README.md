@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P33</strong> · UN Procurement · Opportunity Briefing · Enterprise Glass UI
+  <strong>Current stage: P34</strong> · Adaptive Knowledge Collection · Feishu Action Loop · Enterprise Glass UI
 </p>
 
 ---
@@ -31,12 +31,12 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 托管抓取：统一阻断识别、`Retry-After`、指数退避、HTTP 优先、Playwright 动态页恢复、静态资源拦截、批量详情抓取和页面快照。
 - 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码；会员检索会提交真实主题并监听同域 API 鉴权，过期会话明确标记为 `login_expired`，不会伪装成零结果。
 - 本地优先检索：公告入库后写入 SQLite FTS5，使用 jieba 分词和 BM25 排序。
-- 后台采集订阅：采集订阅与用户报告订阅分离，只负责持续养大 `notices` 库。
+- 后台采集订阅：采集订阅与用户报告订阅分离，只负责持续养大 `notices` 库；主题与区域经过规范化并使用稳定身份，重复请求不会创建重复采集计划。
 - 增量推送：用户订阅通过 `sent_history` 保证已经发送过的公告不重复出现在后续 Word。
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经预检后进入本地公告库、FTS 和证据链；系统核验公网原文、保存内容哈希与正文摘录，并回写稳定指纹、入库及核验状态。系统自身同步记录不会循环导入。
-- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。
+- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。飞书周报中的知识库建议可直接创建并调度后台采集计划。
 - 飞书接收目标：连接中心同时读取机器人可见会话和应用授权通讯录成员，可将群聊或成员设为统一默认目标，报告、周报、经营晨报和来源告警复用该偏好。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
@@ -57,7 +57,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - Word 报告：输出标题、发布时间、来源链接、核心内容、附件链接、多源覆盖和抓取健康。
 - 模型增强：支持规则模式、本地 Ollama 模式、OpenAI 兼容云端模式。
 - Agent 评测：覆盖 RAG、Agent、Harness、Recall Proxy、金标 Recall@K；人工金标未完成时固定标记“未就绪”，代理分不替代严格召回验收。
-- 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议。
+- 用户记忆库：记录查询、点击、下载、订阅和运行行为，生成知识画像、风险信号和可执行建议；采纳知识库建议会把核心区域/主题转成幂等 APScheduler 采集订阅，并在 Web 与飞书展示真实执行结果和覆盖状态。
 - 可选向量检索：安装 `.[vector]` 后可用 BGE 类模型生成本地向量，与 FTS 做 RRF 融合。
 
 ## 技术栈
@@ -469,8 +469,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P30
-- 164 unit tests pass, including 421 subtests.
+- Current stage: P34
+- 283 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -510,12 +510,12 @@ The current architecture is local-first: background ingestion continuously store
 - Managed fetching with `Retry-After`, exponential backoff, block detection, HTTP-first execution, resource-light Playwright recovery, and traceable fetch statistics.
 - Login-state vault based on Playwright `storage_state`; credentials are never stored in code. Member search submits the actual topic and treats same-origin API authentication failures as `login_expired` instead of silently returning zero results.
 - Local-first retrieval with SQLite FTS5, jieba tokenization, and BM25 ranking.
-- Background ingest subscriptions separated from user report subscriptions.
+- Background ingest subscriptions separated from user report subscriptions, with normalized pools and deterministic identity to prevent duplicate collection plans.
 - Incremental scheduled delivery with `sent_history` deduplication.
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
-- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream.
+- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream. Knowledge-base advice in weekly cards can create and schedule adaptive background ingestion directly.
 - A unified Feishu delivery target picker that combines bot-visible chats and authorized directory members; reports, weekly digests, operations briefings, and source alerts reuse the selected target.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
@@ -536,7 +536,7 @@ The current architecture is local-first: background ingestion continuously store
 - Word report generation with title, publish time, source link, core content, and attachment links.
 - Rule-only, local Ollama, and OpenAI-compatible cloud model enhancement modes.
 - Agent evaluation covering RAG, agent execution, intent harness, recall proxy, and gold Recall@K; evaluation stays incomplete until the manual gold set is fully annotated.
-- User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then generates preference profiles, risk signals, and actionable advice.
+- User memory knowledge base that records queries, clicks, downloads, subscriptions, and runs, then converts accepted topic/region advice into idempotent APScheduler ingestion plans with visible execution and coverage state in both Web and Feishu.
 - Optional vector retrieval via `sentence-transformers`, fused with FTS by RRF.
 
 ## Tech Stack
@@ -905,8 +905,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P30
-- 164 unit tests pass, including 421 subtests.
+- Current stage: P34
+- 283 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

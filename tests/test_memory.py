@@ -152,12 +152,31 @@ class MemoryTests(unittest.TestCase):
                         "metadata": {"view": "workbenchView"},
                     },
                 )
+                client.post(
+                    "/api/memory/events",
+                    json={
+                        "event_type": "run_start",
+                        "target": "web",
+                        "label": "苏州充电桩",
+                        "metadata": {"query": "最近1个月苏州充电桩招标信息"},
+                    },
+                )
                 report_response = client.get("/api/memory/weekly")
                 advice_id = report_response.json()["recommendation_plan"][0]["id"]
+                knowledge_advice_id = next(
+                    item["id"]
+                    for item in report_response.json()["recommendation_plan"]
+                    if item["kind"] == "knowledge_base"
+                )
                 feedback_response = client.post(
                     f"/api/memory/advice/{advice_id}/feedback",
                     json={"status": "completed", "source": "web"},
                 )
+                automation_response = client.post(
+                    f"/api/memory/advice/{knowledge_advice_id}/feedback",
+                    json={"status": "accepted", "source": "web"},
+                )
+                ingest_response = client.get("/api/ingest-subscriptions")
                 save_response = client.post("/api/memory/weekly", json={"days": 7})
                 profile_response = client.get("/api/memory/profile")
             finally:
@@ -177,6 +196,15 @@ class MemoryTests(unittest.TestCase):
             feedback_response.json()["report"]["recommendation_plan"][0]["feedback_status"],
             "completed",
         )
+        self.assertEqual(automation_response.status_code, 200)
+        self.assertEqual(automation_response.json()["automation"]["status"], "created")
+        self.assertFalse(automation_response.json()["automation"]["scheduled"])
+        self.assertIn("调度器未启用", automation_response.json()["automation"]["message"])
+        self.assertEqual(
+            automation_response.json()["report"]["knowledge_coverage"]["active_count"],
+            1,
+        )
+        self.assertEqual(len(ingest_response.json()["items"]), 1)
         self.assertEqual(save_response.status_code, 200)
         self.assertIn("saved_report_id", save_response.json())
         self.assertEqual(profile_response.status_code, 200)

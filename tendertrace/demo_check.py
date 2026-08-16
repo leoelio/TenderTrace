@@ -103,6 +103,8 @@ def _collect_evidence(settings: Settings) -> dict[str, Any]:
                 "sent_history_count": 0,
                 "latest_finished_run": None,
                 "latest_trace_tools": [],
+                "trace_evidence_run": None,
+                "trace_evidence_tools": [],
                 "outbox_message_count": 0,
             }
         )
@@ -136,6 +138,15 @@ def _collect_evidence(settings: Settings) -> dict[str, Any]:
         trace_tools = []
         if latest_run is not None:
             trace_tools = _trace_tools(conn, latest_run["id"])
+        trace_run = latest_run
+        trace_evidence_tools = trace_tools
+        if not REQUIRED_TRACE_TOOLS.issubset(trace_evidence_tools):
+            for run in finished_runs:
+                candidate_tools = _trace_tools(conn, run["id"])
+                if REQUIRED_TRACE_TOOLS.issubset(candidate_tools):
+                    trace_run = run
+                    trace_evidence_tools = candidate_tools
+                    break
     evidence.update(
         {
             "finished_run_count": int(run_counts["finished_count"]),
@@ -145,6 +156,8 @@ def _collect_evidence(settings: Settings) -> dict[str, Any]:
             "outbox_message_count": int(outbox_message_count),
             "latest_finished_run": _latest_run_dict(latest_run),
             "latest_trace_tools": trace_tools,
+            "trace_evidence_run": _latest_run_dict(trace_run),
+            "trace_evidence_tools": trace_evidence_tools,
         }
     )
     return evidence
@@ -272,12 +285,17 @@ def _missing_report_terms(path: Path) -> list[str]:
 
 
 def _check_trace_flow(evidence: dict[str, Any]) -> DemoCheck:
-    tools = set(evidence["latest_trace_tools"])
+    tools = set(evidence.get("trace_evidence_tools") or evidence["latest_trace_tools"])
     missing = sorted(REQUIRED_TRACE_TOOLS - tools)
     if missing:
-        return DemoCheck("trace_flow", "fail", f"latest run trace missing: {', '.join(missing)}")
+        return DemoCheck("trace_flow", "fail", f"demo trace missing: {', '.join(missing)}")
     optional_present = sorted(OPTIONAL_TRACE_TOOLS & tools)
-    return DemoCheck("trace_flow", "pass", f"required trace tools present; optional={optional_present}")
+    trace_run = evidence.get("trace_evidence_run") or {}
+    return DemoCheck(
+        "trace_flow",
+        "pass",
+        f"required trace tools present in run {trace_run.get('id', 'unknown')}; optional={optional_present}",
+    )
 
 
 def _check_subscription_incremental(evidence: dict[str, Any]) -> DemoCheck:

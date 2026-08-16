@@ -150,6 +150,7 @@ const el = {
   memoryDailyMetrics: document.querySelector("#memoryDailyMetrics"),
   memoryProfile: document.querySelector("#memoryProfile"),
   memoryGeneratedAdvice: document.querySelector("#memoryGeneratedAdvice"),
+  memoryIngestCoverage: document.querySelector("#memoryIngestCoverage"),
   memoryQueries: document.querySelector("#memoryQueries"),
   memorySuggestions: document.querySelector("#memorySuggestions"),
   memoryEvents: document.querySelector("#memoryEvents"),
@@ -1745,6 +1746,7 @@ function renderMemory(report) {
   const generatedAdvice = report.generated_advice || {};
   const riskSignals = report.risk_signals || [];
   const opportunities = report.opportunity_summary || {};
+  const knowledgeCoverage = report.knowledge_coverage || {};
   const opportunityLevels = opportunities.levels || {};
   renderMemoryDigest(report);
   if (el.memorySummary) {
@@ -1771,8 +1773,8 @@ function renderMemory(report) {
   ]);
   renderMetricCard(el.memorySubscriptionMetrics, "知识偏好", [
     ["新增订阅", summary.subscriptions_created ?? 0],
+    ["智能采集", knowledgeCoverage.active_count ?? 0],
     ["重复查询", queryPatterns.repeat_queries?.length ?? 0],
-    ["定时意图", queryPatterns.scheduled_intent_count ?? 0],
     ["澄清风险", queryPatterns.clarify_risk_count ?? 0],
   ]);
   renderMetricCard(el.memoryDailyMetrics, "机会质量", [
@@ -1783,6 +1785,7 @@ function renderMemory(report) {
   ]);
   renderMemoryProfile(profile, opportunities);
   renderGeneratedAdvice(generatedAdvice, recommendationPlan);
+  renderIngestCoverage(knowledgeCoverage);
   renderMemoryList(
     el.memoryQueries,
     report.top_queries || [],
@@ -1822,6 +1825,33 @@ function renderMemory(report) {
     "暂无分析",
   );
   renderSmartStart();
+}
+
+function renderIngestCoverage(coverage = {}) {
+  if (!el.memoryIngestCoverage) return;
+  const items = Array.isArray(coverage.items) ? coverage.items : [];
+  if (!items.length) {
+    el.memoryIngestCoverage.className = "ingest-coverage-list empty-state";
+    el.memoryIngestCoverage.textContent = "暂无智能采集计划";
+    return;
+  }
+  el.memoryIngestCoverage.className = "ingest-coverage-list";
+  el.memoryIngestCoverage.innerHTML = items
+    .map(
+      (item) => `
+        <div class="ingest-coverage-row">
+          <div>
+            <strong>${escapeHtml(item.name || "智能采集")}</strong>
+            <span>${escapeHtml((item.regions || []).join("、") || "全部区域")} · ${escapeHtml((item.topics || []).join("、") || "全部主题")}</span>
+          </div>
+          <div>
+            <b>${escapeHtml(cronText(item.cron || ""))}</b>
+            <span>${escapeHtml(item.last_run_at ? `最近运行 ${compactDateTimeText(item.last_run_at)}` : "等待首次运行")}</span>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
 }
 
 function renderSmartStart() {
@@ -2426,7 +2456,7 @@ async function updateAdviceFeedback(adviceId, status) {
   state.memory = result.report;
   renderMemory(state.memory);
   const label = { accepted: "建议已采纳", completed: "建议已完成", dismissed: "建议已忽略" }[status];
-  showToast(label || "建议状态已更新");
+  showToast(result.automation?.message || label || "建议状态已更新");
 }
 
 async function refreshFeishu() {
@@ -3045,6 +3075,10 @@ function cronText(value) {
   if (parts.length !== 5) return value || "-";
   const [minute, hour, day, month, weekday] = parts;
   const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  const intervalHours = hour.match(/^\*\/(\d+)$/u)?.[1];
+  if (minute === "0" && intervalHours && day === "*" && month === "*" && weekday === "*") {
+    return `每 ${intervalHours} 小时整点`;
+  }
   if (day === "*" && month === "*" && weekday === "*") return `每天 ${time}`;
   if (day === "*" && month === "*" && weekday !== "*") return `每周${weekdayText(weekday)} ${time}`;
   if (day !== "*" && month === "*" && weekday === "*") return `每月${day}日 ${time}`;

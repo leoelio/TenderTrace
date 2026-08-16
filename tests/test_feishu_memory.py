@@ -15,6 +15,11 @@ class FeishuMemoryCardTests(unittest.TestCase):
                 "downloads": 2,
                 "subscriptions_created": 1,
             },
+            "knowledge_coverage": {
+                "active_count": 1,
+                "topics": [{"name": "服务器", "count": 1}],
+                "regions": [{"name": "上海", "count": 1}],
+            },
             "generated_advice": {
                 "headline": "本周有 2 个 A 级机会需要优先分派",
                 "summary": "数据来自本周机会库。",
@@ -37,6 +42,7 @@ class FeishuMemoryCardTests(unittest.TestCase):
         self.assertIn("分派并复核 2 个 A 级机会", card_text)
         self.assertIn("memory_advice_accept", card_text)
         self.assertIn("memory_advice_complete", card_text)
+        self.assertIn("智能采集", card_text)
         self.assertIn("advice-1", card_text)
 
 

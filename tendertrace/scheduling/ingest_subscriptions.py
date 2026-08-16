@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
@@ -75,6 +75,80 @@ def create_ingest_subscription(
     if subscription is None:
         raise RuntimeError("ingest subscription was not persisted")
     return subscription
+
+
+def ensure_ingest_subscription(
+    settings: Settings,
+    *,
+    name: str,
+    topics: list[str],
+    regions: list[str],
+    cron: str | None = None,
+    timezone: str | None = None,
+    window_days: int = 30,
+    max_pages: int = 1,
+    max_results: int = 20,
+) -> tuple[IngestSubscription, bool]:
+    init_db(settings)
+    normalized_topics = _normalize_pool(topics)
+    normalized_regions = _normalize_pool(regions)
+    _validate_pool(normalized_topics, "topics")
+    _validate_pool(normalized_regions, "regions")
+    _validate_positive(window_days, "window_days")
+    _validate_positive(max_pages, "max_pages")
+    _validate_positive(max_results, "max_results")
+    for subscription in list_ingest_subscriptions(settings):
+        if _same_pool(subscription.topics, normalized_topics) and _same_pool(
+            subscription.regions, normalized_regions
+        ):
+            return subscription, False
+
+    identity = json.dumps(
+        {
+            "regions": sorted(value.casefold() for value in normalized_regions),
+            "topics": sorted(value.casefold() for value in normalized_topics),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    subscription_id = str(uuid5(NAMESPACE_URL, f"tendertrace:adaptive-ingest:{identity}"))
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO ingest_subscriptions(
+                id, name, topics_json, regions_json, cron, timezone,
+                window_days, max_pages, max_results, status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                topics_json = excluded.topics_json,
+                regions_json = excluded.regions_json,
+                cron = excluded.cron,
+                timezone = excluded.timezone,
+                window_days = excluded.window_days,
+                max_pages = excluded.max_pages,
+                max_results = excluded.max_results,
+                status = 'active',
+                updated_at = datetime('now')
+            """,
+            (
+                subscription_id,
+                name.strip() or "adaptive-ingest",
+                json_dumps(normalized_topics),
+                json_dumps(normalized_regions),
+                cron or settings.ingest_cron,
+                timezone or settings.timezone,
+                window_days,
+                max_pages,
+                max_results,
+            ),
+        )
+    subscription = get_ingest_subscription(settings, subscription_id)
+    if subscription is None:
+        raise RuntimeError("adaptive ingest subscription was not persisted")
+    return subscription, True
 
 
 def get_ingest_subscription(
@@ -197,6 +271,25 @@ def _loads_list(value: str) -> list[str]:
 def _validate_pool(values: list[str], name: str) -> None:
     if not values or not all(str(item).strip() for item in values):
         raise ValueError(f"{name} must contain at least one non-empty value")
+
+
+def _normalize_pool(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = str(value).strip()
+        key = item.casefold()
+        if not item or key in seen:
+            continue
+        seen.add(key)
+        normalized.append(item)
+    return normalized
+
+
+def _same_pool(left: list[str], right: list[str]) -> bool:
+    return {value.strip().casefold() for value in left} == {
+        value.strip().casefold() for value in right
+    }
 
 
 def _validate_positive(value: int, name: str) -> None:

@@ -80,6 +80,7 @@ def build_weekly_report(
     runs = _load_runs(settings, start_date, end_date)
     subscriptions = _load_subscription_count(settings, start_date, end_date)
     opportunity_summary = _load_opportunity_summary(settings, start_date, end_date)
+    knowledge_coverage = _load_ingest_coverage(settings)
 
     event_counts = Counter(event["event_type"] for event in events)
     daily = _daily_rows(start_date, end_date, events, runs)
@@ -130,6 +131,7 @@ def build_weekly_report(
         "downloads": _compact_events(downloads, limit=10),
         "recent_events": _compact_events(list(reversed(events)), limit=12),
         "knowledge_profile": knowledge_profile,
+        "knowledge_coverage": knowledge_coverage,
         "opportunity_summary": opportunity_summary,
         "risk_signals": risk_signals,
         "recommendation_plan": recommendation_plan,
@@ -339,6 +341,44 @@ def _load_subscription_count(settings: Settings, start_date: date, end_date: dat
             (start_date.isoformat(), end_date.isoformat()),
         ).fetchone()
     return int(row["count"] if row else 0)
+
+
+def _load_ingest_coverage(settings: Settings) -> dict[str, object]:
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, name, topics_json, regions_json, cron, timezone, last_run_at
+            FROM ingest_subscriptions
+            WHERE status = 'active'
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 12
+            """
+        ).fetchall()
+    topics: Counter[str] = Counter()
+    regions: Counter[str] = Counter()
+    items: list[dict[str, object]] = []
+    for row in rows:
+        topic_values = _string_list(_loads_json(row["topics_json"], []))
+        region_values = _string_list(_loads_json(row["regions_json"], []))
+        topics.update(topic_values)
+        regions.update(region_values)
+        items.append(
+            {
+                "id": str(row["id"]),
+                "name": str(row["name"]),
+                "topics": topic_values,
+                "regions": region_values,
+                "cron": str(row["cron"]),
+                "timezone": str(row["timezone"]),
+                "last_run_at": str(row["last_run_at"] or ""),
+            }
+        )
+    return {
+        "active_count": len(items),
+        "topics": _counter_rows(topics, limit=8),
+        "regions": _counter_rows(regions, limit=8),
+        "items": items,
+    }
 
 
 def _load_opportunity_summary(
@@ -890,6 +930,12 @@ def _feedback_row(row: Any) -> dict[str, object]:
         "created_at": str(row["created_at"] or ""),
         "updated_at": str(row["updated_at"] or ""),
     }
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _profile_snapshot(report: dict[str, object]) -> dict[str, object]:

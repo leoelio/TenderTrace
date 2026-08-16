@@ -7,6 +7,7 @@ def build_memory_weekly_card(report: dict[str, object]) -> dict[str, Any]:
     period = _mapping(report.get("period"))
     summary = _mapping(report.get("summary"))
     advice = _mapping(report.get("generated_advice"))
+    coverage = _mapping(report.get("knowledge_coverage"))
     plan = [item for item in report.get("recommendation_plan") or [] if isinstance(item, dict)]
     elements: list[dict[str, Any]] = [
         {
@@ -28,6 +29,17 @@ def build_memory_weekly_card(report: dict[str, object]) -> dict[str, Any]:
                 "content": (
                     f"**{advice.get('headline') or '本周行动建议'}**\n"
                     f"{advice.get('summary') or '继续积累真实使用记录。'}"
+                ),
+            },
+        },
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": (
+                    f"**智能采集** {coverage.get('active_count', 0)} 个覆盖计划 · "
+                    f"主题 {_counter_names(coverage.get('topics'))} · "
+                    f"区域 {_counter_names(coverage.get('regions'))}"
                 ),
             },
         },
@@ -118,3 +130,10 @@ def _status_suffix(status: str) -> str:
 
 def _mapping(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _counter_names(value: object) -> str:
+    if not isinstance(value, list):
+        return "待建立"
+    names = [str(item.get("name") or "") for item in value if isinstance(item, dict)]
+    return "、".join(name for name in names[:3] if name) or "待建立"

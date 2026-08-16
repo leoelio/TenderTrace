@@ -7,6 +7,7 @@ from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.scheduling.ingest_subscriptions import (
     create_ingest_subscription,
+    ensure_ingest_subscription,
     list_ingest_subscriptions,
     run_ingest_subscription,
 )
@@ -36,6 +37,34 @@ class StaticIngestAdapter:
 
 
 class IngestSubscriptionTests(unittest.TestCase):
+    def test_ensure_ingest_subscription_is_normalized_and_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+
+            first, first_created = ensure_ingest_subscription(
+                settings,
+                name="苏州充电桩智能采集",
+                topics=[" 充电桩 ", "充电桩"],
+                regions=["苏州"],
+            )
+            second, second_created = ensure_ingest_subscription(
+                settings,
+                name="重复请求不会新建",
+                topics=["充电桩"],
+                regions=[" 苏州 "],
+            )
+            with connection(settings) as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM ingest_subscriptions WHERE status = 'active'"
+                ).fetchone()[0]
+
+        self.assertTrue(first_created)
+        self.assertFalse(second_created)
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(first.topics, ["充电桩"])
+        self.assertEqual(first.regions, ["苏州"])
+        self.assertEqual(count, 1)
+
     def test_ingest_subscription_is_separate_from_user_subscription(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

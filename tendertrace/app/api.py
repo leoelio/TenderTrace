@@ -70,9 +70,9 @@ from tendertrace.memory import (
     build_weekly_report,
     load_memory_profile,
     persist_weekly_report,
-    record_advice_feedback,
     record_activity,
 )
+from tendertrace.memory_actions import apply_memory_advice_feedback
 from tendertrace.opportunity import (
     analyze_opportunity_with_market_context,
     get_opportunity,
@@ -150,6 +150,10 @@ def create_app():
     app = FastAPI(title="TenderTrace", version="0.1.0", lifespan=lifespan)
     app.state.scheduler = None
     app.state.feishu_executor = None
+
+    def schedule_adaptive_ingest(subscription) -> None:
+        schedule_ingest_subscription(app.state.scheduler, settings, subscription)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=(
@@ -822,8 +826,13 @@ def create_app():
         challenge = str(request.get("challenge") or "")
         if challenge:
             return {"challenge": challenge}
+        schedule_callback = schedule_adaptive_ingest if app.state.scheduler is not None else None
         try:
-            return process_feishu_card_action(settings, request)
+            return process_feishu_card_action(
+                settings,
+                request,
+                schedule_ingest=schedule_callback,
+            )
         except OpportunityNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
@@ -1309,8 +1318,9 @@ def create_app():
         context = request.get("context")
         if context is not None and not isinstance(context, dict):
             raise HTTPException(status_code=400, detail="context must be an object")
+        schedule_callback = schedule_adaptive_ingest if app.state.scheduler is not None else None
         try:
-            feedback = record_advice_feedback(
+            result = apply_memory_advice_feedback(
                 settings,
                 advice_id=advice_id,
                 status=str(request.get("status") or ""),
@@ -1319,21 +1329,25 @@ def create_app():
                 actor=str(request.get("actor") or ""),
                 note=str(request.get("note") or ""),
                 context=context,
+                schedule_ingest=schedule_callback,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        feedback = result.feedback
         record_activity(
             settings,
             event_type="advice_feedback",
             target=advice_id,
             label=str(feedback.get("status") or ""),
-            metadata={"source": feedback.get("source") or "web"},
+            metadata={
+                "source": feedback.get("source") or "web",
+                "automation_status": result.automation.get("status") or "not_applicable",
+            },
             user_id=user_id,
         )
         return {
             "status": "updated",
-            "feedback": feedback,
-            "report": build_weekly_report(settings, user_id=user_id),
+            **result.to_dict(),
         }
 
     @app.post("/api/memory/weekly/send-feishu")

@@ -118,6 +118,33 @@ class DemoCheckTests(unittest.TestCase):
         checks = {check.name: check for check in report.checks}
         self.assertNotEqual(checks["word_outbox"].status, "fail")
 
+    def test_demo_check_uses_recent_full_trace_when_latest_run_is_local_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = Settings.load(root)
+            init_db(settings)
+            report_path = _write_report(settings.outputs_dir / "local_202607061302.docx")
+            settings.outbox_dir.mkdir(parents=True, exist_ok=True)
+            (settings.outbox_dir / report_path.name).write_bytes(report_path.read_bytes())
+            _insert_run(settings, "run-full", "full collection", report_path)
+            _insert_demo_trace(settings, "run-full")
+            _insert_run(settings, "run-local", "local retrieval", report_path)
+            _insert_local_trace(settings, "run-local")
+            with connection(settings) as conn:
+                conn.execute(
+                    "UPDATE runs SET finished_at = '2026-07-06 13:01:00' WHERE id = 'run-full'"
+                )
+                conn.execute(
+                    "UPDATE runs SET finished_at = '2026-07-06 13:02:00' WHERE id = 'run-local'"
+                )
+
+            report = run_demo_check(settings)
+
+        checks = {check.name: check for check in report.checks}
+        self.assertEqual(report.evidence["latest_finished_run"]["id"], "run-local")
+        self.assertEqual(report.evidence["trace_evidence_run"]["id"], "run-full")
+        self.assertEqual(checks["trace_flow"].status, "pass")
+
 
 def _write_report(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,6 +198,25 @@ def _insert_demo_trace(settings: Settings, run_id: str) -> None:
         "adapter.multi.collect",
         "pipeline.clean_dedup",
         "pipeline.attachment_extract",
+        "pipeline.evidence_validate",
+        "report.docx_writer",
+    ]
+    with connection(settings) as conn:
+        for seq, tool in enumerate(tools, start=1):
+            conn.execute(
+                """
+                INSERT INTO trace_events(run_id, seq, event_type, node, payload_json)
+                VALUES (?, ?, 'tool_called', 'demo', ?)
+                """,
+                (run_id, seq, json_dumps({"tool": tool})),
+            )
+
+
+def _insert_local_trace(settings: Settings, run_id: str) -> None:
+    tools = [
+        "intent.rule_parser",
+        "retrieval.local_fts",
+        "pipeline.clean_dedup",
         "pipeline.evidence_validate",
         "report.docx_writer",
     ]
