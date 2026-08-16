@@ -11,6 +11,7 @@ from tendertrace.db import connection
 from tendertrace.delivery.ledger import record_delivery_attempt
 from tendertrace.delivery.preferences import resolve_feishu_receiver
 from tendertrace.integrations.feishu import FeishuClient, FeishuError
+from tendertrace.integrations.feishu_source_incidents import upsert_source_incident
 from tendertrace.source_map import build_source_map
 
 
@@ -168,19 +169,28 @@ def create_source_incident_task(
         )
     alert_key = _artifact_key(issues, reference)
     artifact_key = alert_key.replace("source_health:", "source_health_task:", 1)
+    due_at = reference + timedelta(hours=settings.source_incident_sla_hours)
     existing_task = _sent_external_id(settings, "source_health_task", artifact_key)
     if existing_task and not force:
+        assigned = _default_receiver_is_member(settings)
+        upsert_source_incident(
+            settings,
+            snapshot=snapshot,
+            artifact_key=artifact_key,
+            task_guid=existing_task,
+            assigned=assigned,
+            due_at=due_at,
+        )
         return SourceIncidentTaskResult(
             status="skipped",
             issue_count=len(issues),
             artifact_key=artifact_key,
             task_guid=existing_task,
-            assigned=_default_receiver_is_member(settings),
+            assigned=assigned,
             reason="same source incident task already created today",
         )
     target_id, target_type = resolve_feishu_receiver(settings)
     assignee_open_id = str(target_id or "") if target_type == "open_id" else ""
-    due_at = reference + timedelta(hours=settings.source_incident_sla_hours)
     feishu = client or FeishuClient(settings)
     try:
         response = feishu.create_task(
@@ -201,6 +211,14 @@ def create_source_incident_task(
             artifact_key=artifact_key,
             status="sent",
             external_id=task_guid,
+        )
+        upsert_source_incident(
+            settings,
+            snapshot=snapshot,
+            artifact_key=artifact_key,
+            task_guid=task_guid,
+            assigned=bool(assignee_open_id),
+            due_at=due_at,
         )
     except (FeishuError, ValueError) as exc:
         record_delivery_attempt(

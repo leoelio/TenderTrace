@@ -1019,6 +1019,11 @@ body.theme-dark .intent-preview .clarify-chip {
   font-size: 14px;
 }
 
+.source-alert-summary .source-incident-state {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
 .source-alert-actions {
   display: flex;
   align-items: center;

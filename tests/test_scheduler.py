@@ -13,6 +13,7 @@ from tendertrace.scheduling.scheduler import (
     schedule_opportunity_briefing,
     schedule_opportunity_escalation,
     schedule_source_health_alert,
+    schedule_source_incident_sync,
     schedule_subscription,
 )
 from tendertrace.scheduling.subscriptions import Subscription
@@ -189,6 +190,27 @@ class SchedulerTests(unittest.TestCase):
         self.assertTrue(job["replace_existing"])
         self.assertTrue(job["coalesce"])
         self.assertEqual(job["max_instances"], 1)
+
+    def test_source_incident_sync_reuses_task_sync_schedule(self) -> None:
+        scheduler = FakeScheduler()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "FEISHU_ENABLED=true\n"
+                "FEISHU_APP_ID=cli_test\n"
+                "FEISHU_APP_SECRET=secret\n"
+                "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true\n"
+                "TENDERTRACE_FEISHU_TASK_SYNC_CRON=*/5 * * * *\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        schedule_source_incident_sync(scheduler, settings)
+
+        job = scheduler.jobs[0]["kwargs"]
+        self.assertEqual(job["id"], "feishu:source-incident-sync")
+        self.assertTrue(job["replace_existing"])
+        self.assertTrue(job["coalesce"])
 
 
 if __name__ == "__main__":

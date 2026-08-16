@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 
 DDL = (
@@ -408,6 +408,25 @@ DDL = (
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS source_incidents (
+        artifact_key TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'open',
+        severity TEXT NOT NULL DEFAULT 'warning',
+        issue_count INTEGER NOT NULL DEFAULT 0,
+        source_sites_json TEXT NOT NULL DEFAULT '[]',
+        snapshot_json TEXT NOT NULL DEFAULT '{}',
+        feishu_task_guid TEXT NOT NULL,
+        assigned INTEGER NOT NULL DEFAULT 0,
+        due_at TEXT NOT NULL,
+        task_completed_at TEXT,
+        synced_at TEXT,
+        resolved_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
 )
 
 
@@ -451,6 +470,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_source_incidents_status ON source_incidents(status, updated_at)",
 )
 
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {

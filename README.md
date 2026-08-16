@@ -46,7 +46,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 机会经营晨报：把机会等级、负责人缺口、资格门禁、截止时间、决策 SLA、市场信号和来源健康合并成可操作飞书卡片；支持工作日自动发送、同日状态去重和卡片内直接推进机会。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
 - 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
-- 来源 SLO 闭环：依据登录态、真实运行可靠度和最近成功时间识别异常；Web 可发送去重飞书告警，也可一键创建带负责人和处置 SLA 的 Task v2 任务，同日相同状态不会重复创建。
+- 来源 SLO 闭环：依据登录态、真实运行可靠度和最近成功时间识别异常；Web 可发送去重飞书告警，也可一键创建带负责人和处置 SLA 的 Task v2 任务。事件进入本地处置台账，只有飞书任务完成且来源真实恢复才关闭。
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
 - 竞争情报：从结果/合同公告提取成交供应商、成交金额和证据摘录，聚合同品类历史供应商；无法可靠提取时明确标记样本不足。
 - 需求审阅：按技术规格、兼容集成、交付实施、验收、服务、资质、评分和安全 8 个维度检查当前采集文本，并给出待核对项与优化建议。
@@ -355,6 +355,8 @@ python -m tendertrace embed-notices
 - `GET /api/sources/alerts`：读取基于真实运行记录计算的来源 SLO 快照。
 - `POST /api/sources/alerts/send-feishu`：把当前来源异常发送到飞书；非强制调用按当日状态指纹去重。
 - `POST /api/sources/alerts/create-feishu-task`：为当前来源异常创建飞书处置任务；默认成员作为负责人，并按当日状态指纹去重。
+- `GET /api/sources/incidents`：读取来源异常处置台账，不返回飞书任务标识。
+- `POST /api/sources/incidents/sync`：回收飞书任务状态并重新验证实际来源 SLO，识别处理中、逾期、待关闭、核验失败和已解决。
 - `GET /api/integrations/feishu/users`：仅返回应用通讯录授权范围内可分配的成员，不返回手机号、邮箱等敏感字段。
 
 设置页的“飞书连接中心”可以从机器人已加入的会话中选择默认接收目标。立即运行或订阅勾选“同时发送飞书”后，生成的 Word 会自动投递；每次成功或失败都会记录时间、文件和错误原因。若平台返回 `232025`，需要先在应用后台启用机器人能力并发布新版本；若返回 `232034`，需要确认当前租户已经安装已发布应用。
@@ -365,7 +367,7 @@ python -m tendertrace embed-notices
 
 机会经营晨报默认关闭自动发送。设置 `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` 汇总本地真实机会与来源健康记录并投递到默认会话；Web 机会情报页也可手动触发。卡片中的认领、确认、Go 和投标准备动作复用同一套状态图、资格门禁和回调审计，不维护第二份流程状态。
 
-来源健康自动告警默认关闭。设置 `TENDERTRACE_SOURCE_ALERT_ENABLED=true` 后，系统按 `TENDERTRACE_SOURCE_ALERT_CRON` 检查登录态、可靠度阈值和最近成功时间，并将异常来源发送到默认飞书接收目标。可靠度与新鲜度阈值分别由 `TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY` 和 `TENDERTRACE_SOURCE_ALERT_STALE_HOURS` 控制；未产生真实运行记录的来源保持“待观察”，不会因零样本误报。数据源页可把当前异常转成飞书 Task v2 处置任务，使用默认授权成员作为负责人，截止时间由 `TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS` 控制；任务使用当日来源状态指纹作为幂等键。
+来源健康自动告警默认关闭。设置 `TENDERTRACE_SOURCE_ALERT_ENABLED=true` 后，系统按 `TENDERTRACE_SOURCE_ALERT_CRON` 检查登录态、可靠度阈值和最近成功时间，并将异常来源发送到默认飞书接收目标。可靠度与新鲜度阈值分别由 `TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY` 和 `TENDERTRACE_SOURCE_ALERT_STALE_HOURS` 控制；未产生真实运行记录的来源保持“待观察”，不会因零样本误报。数据源页可把当前异常转成飞书 Task v2 处置任务，使用默认授权成员作为负责人，截止时间由 `TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS` 控制；任务使用当日来源状态指纹作为幂等键。处置事件会持久化到本地，启用 `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` 后与销售机会任务共用同步周期；飞书任务完成但来源仍异常时保持打开，避免形式化关闭。
 
 飞书任务状态支持双向回收。机会页的“同步任务状态”会读取已关联任务的完成时间与截止时间，识别进行中、已完成和已逾期状态，并幂等回写本地 workflow、审计事件和多维表格。设置 `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_FEISHU_TASK_SYNC_CRON` 自动执行；启用前需为应用开通任务读取或任务读写权限。
 
@@ -521,7 +523,7 @@ The current architecture is local-first: background ingestion continuously store
 - Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
 - Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. A stage-specific decision clock drives SLA escalation queues and deduplicated manual or scheduled Feishu summaries.
 - Actionable Feishu opportunity briefings that combine grade, owner gaps, qualification gates, deadlines, decision SLA, market signals, and source health, with weekday automation, daily state deduplication, and in-card workflow actions.
-- A source SLO workflow derived from login state, observed reliability, and last-success freshness, with deduplicated alerts plus one-click Task v2 incident creation, owner assignment, and a configurable resolution SLA.
+- A source SLO workflow derived from login state, observed reliability, and last-success freshness, with deduplicated alerts, Task v2 incidents, owner assignment, a configurable SLA, and evidence-based closure only after both task completion and real source recovery.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
 - Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
@@ -794,6 +796,8 @@ Available Web APIs:
 - `GET /api/sources/alerts`: inspect the source SLO snapshot computed from observed runs.
 - `POST /api/sources/alerts/send-feishu`: send current source issues to Feishu, deduplicated by daily state unless forced.
 - `POST /api/sources/alerts/create-feishu-task`: create an idempotent Task v2 incident for current source issues and assign the configured member when available.
+- `GET /api/sources/incidents`: list the local source-incident ledger without exposing Feishu task identifiers.
+- `POST /api/sources/incidents/sync`: synchronize Task v2 state and re-evaluate the affected sources before resolving an incident.
 - `GET /api/integrations/feishu/message-events`: inspect inbound run, subscription, failure, and recovery audits.
 - `GET /api/integrations/feishu/users`: list only assignable users inside the app's authorized contact scope; mobile numbers and email addresses are not returned.
 
@@ -807,7 +811,7 @@ Scheduled opportunity briefings are disabled by default. Set `TENDERTRACE_OPPORT
 
 Feishu task status can be synchronized back into TenderTrace. The Opportunity Intelligence view reads completion and due timestamps for linked tasks, classifies them as open, completed, or overdue, and idempotently updates the local workflow, audit ledger, and Bitable record. Enable scheduled synchronization with `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true` and `TENDERTRACE_FEISHU_TASK_SYNC_CRON`; the Feishu app needs task read or task write permission.
 
-Automated source-health delivery is disabled by default. Set `TENDERTRACE_SOURCE_ALERT_ENABLED=true` to evaluate login state, observed reliability, and last-success freshness on `TENDERTRACE_SOURCE_ALERT_CRON`. The reliability and freshness thresholds are controlled by `TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY` and `TENDERTRACE_SOURCE_ALERT_STALE_HOURS`. Sources without observed runs remain pending and do not generate zero-sample alerts. The Data Sources view can convert current issues into a Feishu Task v2 incident, assign the configured authorized member, and set its deadline from `TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS`; the daily source-state fingerprint prevents duplicate tasks.
+Automated source-health delivery is disabled by default. Set `TENDERTRACE_SOURCE_ALERT_ENABLED=true` to evaluate login state, observed reliability, and last-success freshness on `TENDERTRACE_SOURCE_ALERT_CRON`. The reliability and freshness thresholds are controlled by `TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY` and `TENDERTRACE_SOURCE_ALERT_STALE_HOURS`. Sources without observed runs remain pending and do not generate zero-sample alerts. The Data Sources view can convert current issues into a Feishu Task v2 incident, assign the configured authorized member, and set its deadline from `TENDERTRACE_SOURCE_INCIDENT_SLA_HOURS`; the daily source-state fingerprint prevents duplicate tasks. Incidents are persisted locally and reuse `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` for periodic synchronization. Completing a task does not resolve the incident while its source still violates the SLO.
 
 Feishu conversations can also be the native natural-language entry point. Enable the bot capability, subscribe to `im.message.receive_v1`, install the optional dependency with `python -m pip install -e .[feishu]`, then run `python -m tendertrace feishu-bot-listen`. The official long connection does not require exposing the local service. Immediate questions run retrieval, generate Word, and deliver it to the originating chat; questions containing a delivery time or cadence create an incremental subscription bound to that chat. Every event is persisted and deduplicated by both event and message ID, and unfinished or stale work is recovered after restart. When `TENDERTRACE_SCHEDULER_ENABLED` is enabled, this CLI also owns subscription scheduling; only one scheduler-enabled process may use a given database.
 

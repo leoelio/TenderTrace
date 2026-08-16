@@ -42,6 +42,11 @@ from tendertrace.integrations.feishu_source_alerts import (
     create_source_incident_task,
     send_source_health_alert,
 )
+from tendertrace.integrations.feishu_source_incidents import (
+    ACTIVE_SOURCE_INCIDENT_STATUSES,
+    list_source_incidents,
+    sync_source_incidents,
+)
 from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
@@ -201,7 +206,33 @@ def create_app():
             receiver_configured and receiver_type == "open_id"
         )
         snapshot["incident_sla_hours"] = settings.source_incident_sla_hours
+        active_incidents = list_source_incidents(
+            settings,
+            statuses=ACTIVE_SOURCE_INCIDENT_STATUSES,
+            limit=200,
+        )
+        latest_incidents = list_source_incidents(settings, limit=1)
+        snapshot["incident_summary"] = {
+            "active_count": len(active_incidents),
+            "latest": (
+                active_incidents[0].safe_dict()
+                if active_incidents
+                else latest_incidents[0].safe_dict()
+                if latest_incidents
+                else None
+            ),
+        }
         return snapshot
+
+    @app.get("/api/sources/incidents")
+    def source_incidents(limit: int = 20) -> dict[str, object]:
+        incidents = list_source_incidents(settings, limit=limit)
+        return {
+            "items": [incident.safe_dict() for incident in incidents],
+            "active_count": sum(
+                incident.status in ACTIVE_SOURCE_INCIDENT_STATUSES for incident in incidents
+            ),
+        }
 
     @app.post("/api/sources/alerts/send-feishu")
     def send_source_alerts(request: dict[str, object] = Body(default={})) -> dict[str, object]:
@@ -240,6 +271,26 @@ def create_app():
             target="sources",
             label=f"{result.issue_count} 个来源异常处置",
             metadata={"status": result.status, "assigned": result.assigned},
+        )
+        return result.to_dict()
+
+    @app.post("/api/sources/incidents/sync")
+    def sync_source_incident_tasks(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            result = sync_source_incidents(
+                settings,
+                limit=int(request.get("limit") or 100),
+            )
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="source_incident_sync",
+            target="source_incidents",
+            label=f"同步 {result.scanned_count} 个来源处置任务",
+            metadata=result.to_dict(),
         )
         return result.to_dict()
 
@@ -285,6 +336,11 @@ def create_app():
             else str(message["default_receive_id_type"] or "")
         )
         report_ready = bool(message["configured"] and receiver_configured)
+        active_source_incidents = list_source_incidents(
+            settings,
+            statuses=ACTIVE_SOURCE_INCIDENT_STATUSES,
+            limit=200,
+        )
         issues: list[dict[str, str]] = []
         if not message["configured"]:
             issues.append({"code": "message_app", "message": "消息应用尚未启用或凭据不完整"})
@@ -362,6 +418,8 @@ def create_app():
                     "ready": bool(message["configured"]),
                     "assigned": bool(receiver_configured and receiver_type == "open_id"),
                     "sla_hours": settings.source_incident_sla_hours,
+                    "active_count": len(active_source_incidents),
+                    "sync_enabled": settings.feishu_task_sync_enabled,
                 },
                 "deadline_calendar": {
                     "ready": bool(message["configured"] and settings.feishu_calendar_id),

@@ -15,6 +15,7 @@ from tendertrace.integrations.feishu_source_alerts import (
     create_source_incident_task,
     send_source_health_alert,
 )
+from tendertrace.integrations.feishu_source_incidents import list_source_incidents
 
 
 class _FakeClient:
@@ -137,6 +138,7 @@ class FeishuSourceAlertTests(unittest.TestCase):
                 snapshot_loader=snapshot_loader,
                 now=now,
             )
+            incidents = list_source_incidents(settings)
 
         self.assertEqual(first.status, "sent")
         self.assertEqual(first.task_guid, "incident-1")
@@ -146,6 +148,9 @@ class FeishuSourceAlertTests(unittest.TestCase):
         self.assertTrue(duplicate.assigned)
         self.assertIn("already created", duplicate.reason)
         self.assertEqual(len(client.tasks), 1)
+        self.assertEqual(len(incidents), 1)
+        self.assertEqual(incidents[0].status, "open")
+        self.assertEqual(incidents[0].source_sites, ("qianlima", "ggzy"))
         task = client.tasks[0]
         self.assertEqual(task["assignee_open_id"], "ou_owner")
         self.assertEqual(task["due_timestamp_ms"], "1786860000000")
