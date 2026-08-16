@@ -167,6 +167,9 @@ def build_opportunity_card(
     deadline = str(opportunity.get("bid_deadline") or "待核对")
     owner = workflow.owner_name or "待认领"
     risks = intelligence.get("risks") if isinstance(intelligence.get("risks"), list) else []
+    trust = _mapping(intelligence.get("trust_assessment"))
+    trust_basis = trust.get("basis") if isinstance(trust.get("basis"), list) else []
+    trust_text = "；".join(str(item) for item in trust_basis[:2]) or "来源证据待补充"
     risk_text = "；".join(str(item) for item in risks[:2]) or "暂无高风险信号"
     qualification = qualification or assess_qualification(
         opportunity,
@@ -209,6 +212,7 @@ def build_opportunity_card(
                     "tag": "lark_md",
                     "content": (
                         f"**下一步** {next_action}\n"
+                        f"**可信依据** {trust.get('verification_label') or '证据待核验'} · {trust_text}\n"
                         f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
                         f"**变更复核** {change_review_text}\n"
                         f"**决策 SLA** {decision_sla}\n"

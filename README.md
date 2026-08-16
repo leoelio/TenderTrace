@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P44</strong> · Material Change Governance · Decision Revalidation · Enterprise Glass UI
+  <strong>Current stage: P45</strong> · Evidence-grade Source Trust · Sales Gate Integration · Enterprise Glass UI
 </p>
 
 ---
@@ -46,6 +46,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 机会经营晨报：把机会等级、负责人缺口、资格门禁、截止时间、决策 SLA、市场信号和来源健康合并成可操作飞书卡片；支持工作日自动发送、按接收会话独立去重和卡片内直接推进机会。
 - 行动队列：按机会等级、负责人缺失和投标截止时间动态排序，集中展示待认领重点、七日内截止与已启动协同线索。
 - 来源可观测性：逐源统计真实尝试、正确跳过、运行命中、请求成功率、延迟和综合可靠性，国际/国内范围路由不再污染失败率。
+- 来源可信度：把来源权威性、真实采集可靠度、原文证据、独立来源印证和附件快照合成为可解释评分；零运行样本明确标记为“未观察”，不会伪装成高可靠，低可信结论直接进入销售准入门禁。Web、飞书机会卡和多维表格记录视图展示同一依据。
 - 来源 SLO 闭环：依据登录态、真实运行可靠度和最近成功时间识别异常；Web 可发送去重飞书告警，也可一键创建带负责人和处置 SLA 的 Task v2 任务。事件进入本地处置台账，只有飞书任务完成且来源真实恢复才关闭。
 - 市场研判：使用最近 500 条本地公告形成同品类预算基准、客户集中度和采购阶段分布；样本不足时明确降级，不生成伪精确结论。
 - 竞争情报：从结果/合同公告提取成交供应商、成交金额和证据摘录，聚合同品类历史供应商；无法可靠提取时明确标记样本不足。
@@ -104,6 +105,7 @@ tendertrace/
   retrieval.py           # FTS5 / LIKE / 向量融合检索
   runner.py              # 一次完整运行流程
   source_map.py          # 数据源地图和来源健康统计
+  source_trust.py        # 来源权威性、运行可靠度与证据印证评分
   gold.py                # 金标 Recall@K 评测
   vector.py              # 可选向量构建与覆盖率
 web/dist/                # Web 工作台静态文件
@@ -492,8 +494,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P44
-- 303 unit tests pass, including 426 subtests.
+- Current stage: P45
+- 308 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -549,6 +551,7 @@ The current architecture is local-first: background ingestion continuously store
 - A source SLO workflow derived from login state, observed reliability, and last-success freshness, with deduplicated alerts, Task v2 incidents, owner assignment, a configurable SLA, and evidence-based closure only after both task completion and real source recovery.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
 - Per-source observability for real attempts, correct routing skips, run hit rate, request success, latency, and reliability.
+- Evidence-grade source trust that combines source authority, observed collection reliability, grounded snapshots, independent-source corroboration, and attachment evidence. Zero-run sources remain explicitly unobserved, while low trust feeds the same sales qualification gate used by Web and Feishu.
 - Local market benchmarks from the latest 500 notices, including comparable-category budgets, purchaser concentration, and procurement-stage distribution; insufficient samples are surfaced explicitly.
 - Competition intelligence extracted from result and contract notices, including awarded suppliers, amounts, evidence excerpts, and comparable-category supplier history.
 - An eight-dimension requirement review covering specifications, integration, delivery, acceptance, service, qualifications, scoring, and security; missing evidence is explicitly labeled for verification.
@@ -599,6 +602,7 @@ tendertrace/
   vault/                 # Qianlima storage_state vault
   db.py                  # SQLite schema and migrations
   memory.py              # User memory, knowledge profile, and generated advice
+  source_trust.py        # Source authority, observed reliability, and evidence trust
   retrieval.py           # FTS5 / LIKE / vector-fused retrieval
   workflow.py            # Opportunity stages, owners, Feishu IDs, and action audit
   runner.py              # End-to-end run orchestration
@@ -951,8 +955,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P44
-- 303 unit tests pass, including 426 subtests.
+- Current stage: P45
+- 308 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

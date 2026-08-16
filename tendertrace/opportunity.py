@@ -17,6 +17,7 @@ from tendertrace.notice_change_reviews import change_review_summaries
 from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overrides
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.retrieval import parse_date
+from tendertrace.source_trust import assess_notice_trust, source_trust_profiles
 from tendertrace.workflow import workflow_action_contract, workflow_snapshots
 
 
@@ -81,9 +82,13 @@ def enrich_opportunity_intelligence(
     notices: list[Notice],
     *,
     as_of: datetime | date | None = None,
+    trust_profiles: dict[str, dict[str, object]] | None = None,
 ) -> OpportunityResult:
-    enriched = [_with_intelligence(notice, as_of=as_of) for notice in notices]
-    market = build_market_context(enriched, as_of=as_of)
+    enriched = [
+        _with_intelligence(notice, as_of=as_of, trust_profiles=trust_profiles)
+        for notice in notices
+    ]
+    market = build_market_context(enriched, as_of=as_of, trust_profiles=trust_profiles)
     levels = {level: 0 for _threshold, level, _label in LEVELS}
     scores: list[int] = []
     for notice in enriched:
@@ -110,8 +115,13 @@ def analyze_opportunity_payload(
     payload: dict[str, Any],
     *,
     as_of: datetime | date | None = None,
+    trust_profiles: dict[str, dict[str, object]] | None = None,
 ) -> dict[str, object]:
-    return _analyze(_normalized_payload(payload), as_of=as_of)
+    return _analyze(
+        _normalized_payload(payload),
+        as_of=as_of,
+        trust_profiles=trust_profiles,
+    )
 
 
 def _normalized_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -145,6 +155,14 @@ def _normalized_payload(payload: dict[str, Any]) -> dict[str, Any]:
         or fields.get("duplicate_count")
         or payload.get("关联来源数")
         or 1,
+        "source_sites": payload.get("source_sites") or fields.get("source_sites") or [],
+        "related_sources": payload.get("related_sources")
+        or fields.get("related_sources")
+        or evidence.get("related_sources")
+        or [],
+        "attachment_snapshots": payload.get("attachment_snapshots")
+        or fields.get("attachment_snapshots")
+        or [],
     }
     return _infer_payload_fields(normalized)
 
@@ -155,9 +173,14 @@ def analyze_opportunity_with_market_context(
     *,
     as_of: datetime | date | None = None,
 ) -> dict[str, object]:
-    intelligence = analyze_opportunity_payload(payload, as_of=as_of)
+    profiles = source_trust_profiles(settings)
+    intelligence = analyze_opportunity_payload(
+        payload,
+        as_of=as_of,
+        trust_profiles=profiles,
+    )
     notices = [notice for _notice_id, notice in _recent_notices(settings, limit=500)]
-    market = build_market_context(notices, as_of=as_of)
+    market = build_market_context(notices, as_of=as_of, trust_profiles=profiles)
     normalized = _normalized_payload(payload)
     _attach_market_context(intelligence, normalized, market)
     return intelligence
@@ -172,8 +195,16 @@ def build_market_context(
     notices: list[Notice],
     *,
     as_of: datetime | date | None = None,
+    trust_profiles: dict[str, dict[str, object]] | None = None,
 ) -> dict[str, object]:
-    entries = [_market_entry(_notice_payload(notice), as_of=as_of) for notice in notices]
+    entries = [
+        _market_entry(
+            _notice_payload(notice),
+            as_of=as_of,
+            trust_profiles=trust_profiles,
+        )
+        for notice in notices
+    ]
     budgets = [float(item["budget_cny"]) for item in entries if item["budget_cny"]]
     categories: dict[str, list[float]] = {}
     for item in entries:
@@ -262,8 +293,12 @@ def list_opportunities(
     sort: str = "priority",
 ) -> dict[str, object]:
     limit = max(1, min(int(limit), 200))
+    trust_profiles = source_trust_profiles(settings)
     all_rows = _recent_notices(settings, limit=500)
-    all_market = build_market_context([notice for _notice_id, notice in all_rows])
+    all_market = build_market_context(
+        [notice for _notice_id, notice in all_rows],
+        trust_profiles=trust_profiles,
+    )
     market_rows = (
         [
             (notice_id, notice)
@@ -275,7 +310,7 @@ def list_opportunities(
     )
     rows = market_rows[:500]
     market_notices = [notice for _notice_id, notice in market_rows]
-    market = build_market_context(market_notices)
+    market = build_market_context(market_notices, trust_profiles=trust_profiles)
     market["available_categories"] = all_market.get("category_distribution", [])
     market["selected_category"] = topic or ""
     items: list[dict[str, object]] = []
@@ -292,7 +327,7 @@ def list_opportunities(
     )
     for notice_id, notice in rows:
         payload = _notice_payload(notice)
-        intelligence = _analyze(payload, as_of=None)
+        intelligence = _analyze(payload, as_of=None, trust_profiles=trust_profiles)
         if level and str(intelligence.get("level") or "").upper() != level.upper():
             continue
         _attach_market_context(intelligence, payload, market)
@@ -392,9 +427,11 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     notice = apply_fact_overrides(notice, overrides)
     payload = _notice_payload(notice)
     structured = _mapping(payload.get("structured_fields"))
-    intelligence = _analyze(payload, as_of=None)
+    trust_profiles = source_trust_profiles(settings)
+    intelligence = _analyze(payload, as_of=None, trust_profiles=trust_profiles)
     market = build_market_context(
-        [item for _notice_id, item in _recent_notices(settings, limit=500)]
+        [item for _notice_id, item in _recent_notices(settings, limit=500)],
+        trust_profiles=trust_profiles,
     )
     _attach_market_context(intelligence, payload, market)
     workflow = workflow_snapshots(settings, [notice_id])[notice_id]
@@ -849,11 +886,18 @@ def _recent_notices(settings: Settings, *, limit: int) -> list[tuple[str, Notice
     ]
 
 
-def _market_entry(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[str, object]:
+def _market_entry(
+    payload: dict[str, Any],
+    *,
+    as_of: datetime | date | None,
+    trust_profiles: dict[str, dict[str, object]] | None = None,
+) -> dict[str, object]:
     payload = _infer_payload_fields(payload)
     structured = _mapping(payload.get("structured_fields"))
     evidence = _mapping(payload.get("evidence"))
-    credibility, _basis = _credibility_score(payload, evidence)
+    credibility = int(
+        assess_notice_trust(payload, evidence, profiles=trust_profiles).get("score") or 0
+    )
     competition = _competition_signal(payload)
     return {
         "category": _primary_category(payload),
@@ -1112,8 +1156,17 @@ def _format_cny(value: object) -> str:
     return f"{amount:.0f} 元"
 
 
-def _with_intelligence(notice: Notice, *, as_of: datetime | date | None) -> Notice:
-    intelligence = _analyze(_notice_payload(notice), as_of=as_of)
+def _with_intelligence(
+    notice: Notice,
+    *,
+    as_of: datetime | date | None,
+    trust_profiles: dict[str, dict[str, object]] | None = None,
+) -> Notice:
+    intelligence = _analyze(
+        _notice_payload(notice),
+        as_of=as_of,
+        trust_profiles=trust_profiles,
+    )
     return Notice(
         id=notice.id,
         source_site=notice.source_site,
@@ -1144,6 +1197,9 @@ def _notice_payload(notice: Notice) -> dict[str, Any]:
         "structured_fields": _mapping(fields.get("structured_fields")),
         "evidence": _mapping(fields.get("evidence")),
         "duplicate_count": fields.get("duplicate_count") or 1,
+        "source_sites": fields.get("source_sites") or [],
+        "related_sources": fields.get("related_sources") or [],
+        "attachment_snapshots": fields.get("attachment_snapshots") or [],
     }
     return _infer_payload_fields(payload)
 
@@ -1171,14 +1227,21 @@ def _notice_from_row(row: Any) -> Notice:
     )
 
 
-def _analyze(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[str, object]:
+def _analyze(
+    payload: dict[str, Any],
+    *,
+    as_of: datetime | date | None,
+    trust_profiles: dict[str, dict[str, object]] | None = None,
+) -> dict[str, object]:
     structured = _mapping(payload.get("structured_fields"))
     evidence = _mapping(payload.get("evidence"))
     reference_date = _as_date(as_of)
     publish_date = parse_date(str(payload.get("publish_time") or ""))
     freshness, age_days = _freshness_score(publish_date, reference_date)
     completeness, missing_fields = _completeness_score(payload, structured, evidence)
-    credibility, credibility_basis = _credibility_score(payload, evidence)
+    trust = assess_notice_trust(payload, evidence, profiles=trust_profiles)
+    credibility = int(trust.get("score") or 0)
+    credibility_basis = [str(value) for value in trust.get("basis", [])]
     readiness, readiness_basis = _readiness_score(structured, reference_date)
     score = round(
         freshness * 0.20 + completeness * 0.25 + credibility * 0.30 + readiness * 0.25
@@ -1215,6 +1278,7 @@ def _analyze(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[
         "competition": competition,
         "requirement_review": requirement_review,
         "market_signals": _market_signals(payload, structured),
+        "trust_assessment": trust,
         "basis": {
             "credibility": credibility_basis,
             "readiness": readiness_basis,
@@ -1222,7 +1286,7 @@ def _analyze(payload: dict[str, Any], *, as_of: datetime | date | None) -> dict[
             "source_url": str(payload.get("source_url") or ""),
         },
         "evaluated_at": reference_date.isoformat(),
-        "engine": "tendertrace_opportunity_rules_v3",
+        "engine": "tendertrace_opportunity_rules_v4",
     }
 
 
@@ -1259,23 +1323,6 @@ def _completeness_score(
     score = sum(weight for _label, value, weight in checks if _present(value))
     missing = [label for label, value, _weight in checks if not _present(value)]
     return score, missing
-
-
-def _credibility_score(
-    payload: dict[str, Any], evidence: dict[str, Any]
-) -> tuple[int, list[str]]:
-    raw_quality = evidence.get("quality_score")
-    try:
-        quality = max(0.0, min(float(raw_quality), 1.0))
-    except (TypeError, ValueError):
-        quality = 0.35 if evidence else 0.15
-    url = str(payload.get("source_url") or "")
-    source_score = 20 if url.startswith("https://") else 12 if url.startswith("http://") else 0
-    duplicate_count = _as_int(payload.get("duplicate_count"), default=1)
-    corroboration = 15 if duplicate_count >= 3 else 10 if duplicate_count == 2 else 4
-    score = round(quality * 65 + source_score + corroboration)
-    basis = [f"证据质量 {quality:.0%}", f"来源协议 {source_score}/20", f"交叉来源 {duplicate_count} 个"]
-    return min(score, 100), basis
 
 
 def _readiness_score(structured: dict[str, Any], reference: date) -> tuple[int, list[str]]:

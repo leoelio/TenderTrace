@@ -17,6 +17,7 @@ from tendertrace.opportunity import (
     market_benchmark_for_notice,
     parse_budget_cny,
 )
+from tendertrace.qualification import assess_qualification
 
 
 class OpportunityIntelligenceTests(unittest.TestCase):
@@ -101,6 +102,15 @@ class OpportunityIntelligenceTests(unittest.TestCase):
         result = enrich_opportunity_intelligence(
             [notice],
             as_of=datetime(2026, 8, 15, 10, 0),
+            trust_profiles={
+                "ccgp": {
+                    "authority": "中国政府采购网",
+                    "source_class": "official_primary",
+                    "observed_runs": 10,
+                    "reliability_score": 0.95,
+                    "health_status": "healthy",
+                }
+            },
         )
 
         intelligence = result.notices[0].fields["opportunity_intelligence"]
@@ -251,6 +261,43 @@ class OpportunityIntelligenceTests(unittest.TestCase):
         self.assertIn("来源链接", intelligence["missing_fields"])
         self.assertTrue(any("证据" in item for item in intelligence["risks"]))
 
+    def test_failed_source_reliability_blocks_bid_approval(self) -> None:
+        notice = _notice()
+        payload = notice.to_dict()
+        payload["attachments"] = []
+        payload["fields"] = {
+            "structured_fields": notice.fields["structured_fields"],
+            "evidence": notice.fields["evidence"],
+        }
+        intelligence = analyze_opportunity_payload(
+            payload,
+            as_of=datetime(2026, 8, 15, 10, 0),
+            trust_profiles={
+                "ccgp": {
+                    "authority": "中国政府采购网",
+                    "source_class": "official_primary",
+                    "observed_runs": 10,
+                    "reliability_score": 0.1,
+                    "health_status": "unhealthy",
+                }
+            },
+        )
+        opportunity = {
+            "purchaser": notice.purchaser,
+            "bid_deadline": "2026-08-28",
+            "intelligence": intelligence,
+        }
+
+        qualification = assess_qualification(
+            opportunity,
+            {"owner_name": "张三"},
+            as_of=datetime(2026, 8, 15).date(),
+        ).to_dict()
+
+        self.assertLess(intelligence["scores"]["credibility"], 60)
+        self.assertEqual(qualification["status"], "blocked")
+        self.assertIn("信息可信度", qualification["blockers"]["approve_bid"])
+
     def test_local_opportunity_list_uses_persisted_notice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))
@@ -344,6 +391,7 @@ def _notice() -> Notice:
         attachments=[Attachment(name="采购需求", url="https://example.com/spec.pdf")],
         fields={
             "duplicate_count": 2,
+            "source_sites": ["ccgp", "ggzy"],
             "structured_fields": {
                 "project_no": "SH-2026-001",
                 "purchaser": "上海某单位",
@@ -356,6 +404,13 @@ def _notice() -> Notice:
                 "excerpt": "项目编号 SH-2026-001，预算120万元。",
                 "snapshot_sha256": "a" * 64,
             },
+            "attachment_snapshots": [
+                {
+                    "status": "extracted",
+                    "sha256": "b" * 64,
+                    "text_length": 1200,
+                }
+            ],
         },
     )
 

@@ -253,6 +253,12 @@ class OpportunityWorkflowTests(unittest.TestCase):
                 "notice_id": "notice-1",
                 "title": "服务器采购项目",
                 "source_url": "https://example.com/notice-1",
+                "intelligence": {
+                    "trust_assessment": {
+                        "verification_label": "多源已印证",
+                        "basis": ["来源：中国政府采购网", "近 10 次采集可靠度 95%"],
+                    }
+                },
             }
 
             card = build_opportunity_card(
@@ -293,6 +299,8 @@ class OpportunityWorkflowTests(unittest.TestCase):
             ]
 
         self.assertTrue(card["config"]["update_multi"])
+        self.assertIn("多源已印证", str(card))
+        self.assertIn("采集可靠度 95%", str(card))
         self.assertEqual(actions, ["claim", "hold", "reject"])
         self.assertEqual(identified_contract["version"], 2)
         self.assertTrue(identified_contract["actions"][0]["requires_member_identity"])

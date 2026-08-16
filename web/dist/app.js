@@ -1364,6 +1364,7 @@ function renderOpportunities(payload) {
           const changeSummary = item.change_summary || {};
           const changeReview = item.change_review || {};
           const scores = intelligence.scores || {};
+          const trust = intelligence.trust_assessment || {};
           const risks = Array.isArray(intelligence.risks) ? intelligence.risks : [];
           const qualification = item.qualification || {};
           const decision = workflow.decision || "pending";
@@ -1396,7 +1397,7 @@ function renderOpportunities(payload) {
               </div>
               <div class="opportunity-project">
                 <strong title="${escapeHtml(item.title || "")}">${escapeHtml(item.title || "未命名机会")}</strong>
-                <span>${escapeHtml(item.source_site || "未知来源")} · ${escapeHtml(item.publish_time || "时间待确认")}</span>
+                <span>${escapeHtml(item.source_site || "未知来源")} · ${escapeHtml(trust.verification_label || "证据待核验")} · ${escapeHtml(item.publish_time || "时间待确认")}</span>
               </div>
               <div class="opportunity-customer">
                 <strong>${escapeHtml(item.purchaser || "采购人待确认")}</strong>
@@ -1445,6 +1446,8 @@ function openOpportunityDetail(noticeId) {
   const qualificationGates = Array.isArray(qualification.gates) ? qualification.gates : [];
   const approvalBlockers = qualificationBlockers(qualification, "approve_bid");
   const scores = intelligence.scores || {};
+  const trust = intelligence.trust_assessment || {};
+  const trustComponents = Array.isArray(trust.components) ? trust.components : [];
   const market = intelligence.market_context || {};
   const benchmark = market.benchmark || {};
   const competition = intelligence.competition || market.competition || {};
@@ -1475,6 +1478,23 @@ function openOpportunityDetail(noticeId) {
       ${detailMetric("可信", scores.credibility || 0)}
       ${detailMetric("需求覆盖", review.coverage_score || 0)}
     </div>
+    <section class="opportunity-detail-section trust-assessment-section">
+      <div class="opportunity-detail-section-title">
+        <h3>来源与证据可信度</h3>
+        <span>${escapeHtml(trust.verification_label || "证据待核验")} · ${escapeHtml(trust.level_label || "待核验")}</span>
+      </div>
+      <div class="trust-component-grid">
+        ${trustComponents.map((component) => `
+          <div class="trust-component">
+            <span>${escapeHtml(component.label || "未命名维度")}</span>
+            <strong>${escapeHtml(component.score || 0)} / ${escapeHtml(component.maximum || 0)}</strong>
+            <small>${escapeHtml(component.evidence || "暂无依据")}</small>
+          </div>
+        `).join("")}
+      </div>
+      ${detailLine("权威来源", trust.authority || item.source_site || "来源未分类")}
+      ${detailLine("独立来源", `${trust.source_count || 1} 个${trust.source_count >= 2 ? "，已交叉印证" : "，尚无跨源印证"}`)}
+    </section>
     ${Number(changeSummary.count) > 0 ? `
       <section class="opportunity-detail-section opportunity-change-section">
         <div class="opportunity-detail-section-title">

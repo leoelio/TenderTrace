@@ -70,6 +70,8 @@ def build_source_map(settings: Settings) -> dict[str, object]:
             ],
             health=health.get("ccgp", {}),
             discovery_rules={
+                "authority": "中国政府采购网",
+                "source_class": "official_primary",
                 "allow": [r"/cggg/.+\.htm$", r"/cggg/.+\.(pdf|docx?|xlsx?|zip|rar)$"],
                 "deny": [r"/zcfg/", r"/xwzx/"],
                 "same_domain": True,
@@ -86,6 +88,8 @@ def build_source_map(settings: Settings) -> dict[str, object]:
             ],
             health=health.get("ggzy", {}),
             discovery_rules={
+                "authority": "全国公共资源交易平台",
+                "source_class": "official_primary",
                 "allow": [r"/information/deal/html/.+\.html$", r"\.(pdf|docx?|xlsx?|zip|rar)$"],
                 "deny": [],
                 "same_domain": True,
@@ -284,6 +288,8 @@ def build_source_map(settings: Settings) -> dict[str, object]:
             ],
             health=qianlima_health,
             discovery_rules={
+                "authority": "千里马招标网",
+                "source_class": "authenticated_aggregator",
                 "allow": [r"/bid-\d+\.html$", r"/notice/", r"\.(pdf|docx?|xlsx?|zip|rar)$"],
                 "deny": [r"/login", r"/register"],
                 "same_domain": False,

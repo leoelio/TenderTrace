@@ -39,6 +39,7 @@ from tendertrace.runtime.graph import TenderGraph
 from tendertrace.runtime.state import RunState
 from tendertrace.runtime.trace import SqliteTraceStore
 from tendertrace.scheduling.ledger import mark_sent, unsent_cluster_keys
+from tendertrace.source_trust import source_trust_profiles
 
 
 class NoticeAdapter(Protocol):
@@ -225,7 +226,11 @@ def run_once(
         context.emit_tool_call("pipeline.structured_fields", structured_result.stats)
         evidence_result = attach_evidence(notices)
         notices = evidence_result.notices
-        opportunity_result = enrich_opportunity_intelligence(notices, as_of=run_at)
+        opportunity_result = enrich_opportunity_intelligence(
+            notices,
+            as_of=run_at,
+            trust_profiles=source_trust_profiles(settings),
+        )
         notices = opportunity_result.notices
         deduped_count = len(notices)
         _persist_notices_and_clusters(settings, notices)

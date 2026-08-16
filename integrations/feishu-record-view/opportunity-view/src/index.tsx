@@ -30,6 +30,14 @@ type Intelligence = {
   project_target: string;
   strategy: string;
   market_signals: string[];
+  trust_assessment?: {
+    score: number;
+    level_label: string;
+    verification_label: string;
+    authority: string;
+    source_count: number;
+    basis: string[];
+  };
   competition?: {
     message?: string;
     evidence_excerpt?: string;
@@ -294,6 +302,7 @@ function App() {
   const claimAction = availableActions.find((item) => item.requires_member_identity);
   const directActions = availableActions.filter((item) => !item.requires_member_identity);
   const quality = intelligence?.scores || {};
+  const trust = intelligence?.trust_assessment;
   const marketBenchmark = intelligence?.market_context?.benchmark;
   const marketContextSignals = intelligence?.market_context?.signals || [];
   const competition = intelligence?.competition;
@@ -484,6 +493,15 @@ function App() {
             <QualityLine label="完整" value={quality.completeness} />
             <QualityLine label="可信" value={quality.credibility} />
             <QualityLine label="行动" value={quality.readiness} />
+          </section>
+
+          <section className="trust-summary">
+            <div className="section-title"><strong>来源可信依据</strong><span>{trust?.verification_label || "证据待核验"}</span></div>
+            <div className="trust-summary-grid">
+              <div><span>权威来源</span><strong>{trust?.authority || context?.values["来源"] || "待分类"}</strong></div>
+              <div><span>独立来源</span><strong>{trust?.source_count || 1} 个</strong></div>
+            </div>
+            <p>{trust?.basis?.slice(0, 2).join(" · ") || "尚未形成可审计的来源运行依据"}</p>
           </section>
 
           <section className="decision-section">

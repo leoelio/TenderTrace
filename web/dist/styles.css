@@ -3533,6 +3533,37 @@ body.theme-dark .smart-card strong {
   line-height: 1.55;
 }
 
+.trust-component-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 14px 0 4px;
+  border: 1px solid var(--line-soft);
+}
+
+.trust-component {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.trust-component + .trust-component {
+  border-left: 1px solid var(--line-soft);
+}
+
+.trust-component span,
+.trust-component small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.trust-component strong {
+  font-size: 13px;
+}
+
 .opportunity-facts-section {
   background: rgba(247, 250, 253, 0.72);
 }
@@ -3975,8 +4006,21 @@ body.theme-dark .grade-c {
 
   .opportunity-detail-metrics,
   .requirement-dimensions,
-  .qualification-gates {
+  .qualification-gates,
+  .trust-component-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trust-component + .trust-component {
+    border-left: 0;
+  }
+
+  .trust-component:nth-child(even) {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .trust-component:nth-child(n + 3) {
+    border-top: 1px solid var(--line-soft);
   }
 
   .opportunity-detail-metrics > div:nth-child(2) {
