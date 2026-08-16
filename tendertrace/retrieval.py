@@ -20,6 +20,7 @@ _INTERNATIONAL_SOURCE_SCOPES = {
     "ungm": {"global"},
     "worldbank": {"global", "worldbank"},
     "idb": {"global", "idb"},
+    "adb": {"global", "adb"},
     "contracts_finder": {"global", "uk"},
     "find_tender": {"global", "uk"},
 }

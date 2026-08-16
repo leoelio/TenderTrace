@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from tendertrace.adapters.adb import AdbAdapter
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
 from tendertrace.adapters.idb import IdbAdapter
@@ -62,6 +63,7 @@ class MultiSourceAdapter:
             UngmAdapter(),
             WorldBankAdapter(),
             IdbAdapter(),
+            AdbAdapter(),
             ContractsFinderAdapter(),
             FindTenderAdapter(),
         ]

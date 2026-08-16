@@ -31,6 +31,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.opportunity_briefing_cron, "45 8 * * 1-5")
         self.assertFalse(settings.feishu_task_sync_enabled)
         self.assertEqual(settings.feishu_task_sync_cron, "*/10 * * * *")
+        self.assertFalse(settings.source_alert_enabled)
+        self.assertEqual(settings.source_alert_cron, "15 */2 * * *")
+        self.assertEqual(settings.source_alert_min_reliability, 0.75)
+        self.assertEqual(settings.source_alert_stale_hours, 24)
         self.assertFalse(settings.api_token_present)
         self.assertIn("openai_key_configured", settings.safe_summary())
         self.assertIn("openai_api_style", settings.safe_summary())
@@ -47,6 +51,24 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(
             settings.safe_summary()["qualification_policy"]["briefing_enabled"]
         )
+        self.assertFalse(settings.safe_summary()["source_alert_enabled"])
+
+    def test_source_health_alert_requires_feishu_and_valid_ratio(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "TENDERTRACE_SOURCE_ALERT_ENABLED=true\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
+
+            (root / ".env.local").write_text(
+                "TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY=1.2\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                Settings.load(root)
 
     def test_opportunity_briefing_schedule_is_configurable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

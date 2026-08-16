@@ -12,6 +12,7 @@ from tendertrace.scheduling.scheduler import (
     schedule_ingest_subscription,
     schedule_opportunity_briefing,
     schedule_opportunity_escalation,
+    schedule_source_health_alert,
     schedule_subscription,
 )
 from tendertrace.scheduling.subscriptions import Subscription
@@ -166,6 +167,28 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(job["id"], "feishu:task-sync")
         self.assertTrue(job["replace_existing"])
         self.assertTrue(job["coalesce"])
+
+    def test_source_health_alert_registers_configured_cron_job(self) -> None:
+        scheduler = FakeScheduler()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env.local").write_text(
+                "FEISHU_ENABLED=true\n"
+                "FEISHU_APP_ID=cli_test\n"
+                "FEISHU_APP_SECRET=secret\n"
+                "TENDERTRACE_SOURCE_ALERT_ENABLED=true\n"
+                "TENDERTRACE_SOURCE_ALERT_CRON=15 */2 * * *\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+
+        schedule_source_health_alert(scheduler, settings)
+
+        job = scheduler.jobs[0]["kwargs"]
+        self.assertEqual(job["id"], "feishu:source-health-alert")
+        self.assertTrue(job["replace_existing"])
+        self.assertTrue(job["coalesce"])
+        self.assertEqual(job["max_instances"], 1)
 
 
 if __name__ == "__main__":

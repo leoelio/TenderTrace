@@ -44,6 +44,7 @@ class SourcesApiTests(unittest.TestCase):
             try:
                 client = TestClient(create_app())
                 response = client.get("/api/sources")
+                alert_response = client.get("/api/sources/alerts")
                 source_map_response = client.get("/api/source-map")
                 model_response = client.get("/api/model")
                 doctor_response = client.get("/api/model/doctor")
@@ -65,6 +66,7 @@ class SourcesApiTests(unittest.TestCase):
                 "ungm",
                 "worldbank",
                 "idb",
+                "adb",
                 "contracts_finder",
                 "find_tender",
                 "qianlima",
@@ -78,17 +80,21 @@ class SourcesApiTests(unittest.TestCase):
         self.assertEqual(items[5]["status"], "configured")
         self.assertEqual(items[6]["status"], "configured")
         self.assertEqual(items[7]["status"], "configured")
-        self.assertEqual(items[8]["status"], "login_required")
-        self.assertEqual(items[8]["validation"], "missing")
-        self.assertFalse(items[8]["ready"])
+        self.assertEqual(items[9]["status"], "login_required")
+        self.assertEqual(items[9]["validation"], "missing")
+        self.assertFalse(items[9]["ready"])
         self.assertIn("routes", items[0])
         self.assertIn("health", items[0])
         self.assertIn("discovery_rules", items[0])
+        self.assertEqual(alert_response.status_code, 200)
+        self.assertEqual(alert_response.json()["status"], "healthy")
+        self.assertEqual(alert_response.json()["issue_count"], 0)
+        self.assertFalse(alert_response.json()["delivery_ready"])
         self.assertEqual(source_map_response.status_code, 200)
         source_map_payload = source_map_response.json()
-        self.assertEqual(source_map_payload["source_count"], 9)
+        self.assertEqual(source_map_payload["source_count"], 10)
         self.assertFalse(source_map_payload["login_source_ready"])
-        self.assertTrue(source_map_payload["items"][8]["requires_login"])
+        self.assertTrue(source_map_payload["items"][9]["requires_login"])
         self.assertEqual(model_response.status_code, 200)
         model_payload = model_response.json()
         self.assertEqual(model_payload["mode"], "local")

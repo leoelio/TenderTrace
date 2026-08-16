@@ -172,6 +172,7 @@ class QianlimaAdapter:
             "worldbank",
             "uk",
             "idb",
+            "adb",
         }
 
     def collect(

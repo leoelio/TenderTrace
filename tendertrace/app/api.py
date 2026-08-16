@@ -37,6 +37,10 @@ from tendertrace.integrations.feishu_card_actions import (
 )
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
+from tendertrace.integrations.feishu_source_alerts import (
+    build_source_alert_snapshot,
+    send_source_health_alert,
+)
 from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
@@ -181,6 +185,37 @@ def create_app():
     def source_map() -> dict[str, object]:
         return build_source_map(settings)
 
+    @app.get("/api/sources/alerts")
+    def source_alerts() -> dict[str, object]:
+        snapshot = build_source_alert_snapshot(settings)
+        message = feishu_status(settings)
+        receiver = load_feishu_receiver(settings)
+        snapshot["delivery_ready"] = bool(
+            message.configured
+            and (receiver is not None or message.default_receive_id_configured)
+        )
+        return snapshot
+
+    @app.post("/api/sources/alerts/send-feishu")
+    def send_source_alerts(request: dict[str, object] = Body(default={})) -> dict[str, object]:
+        try:
+            result = send_source_health_alert(
+                settings,
+                force=bool(request.get("force", False)),
+                receive_id=str(request.get("receive_id") or "").strip(),
+                receive_id_type=str(request.get("receive_id_type") or "").strip(),
+            )
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="source_health_alert_send",
+            target="sources",
+            label=f"{result.issue_count} 个来源异常",
+            metadata={"status": result.status},
+        )
+        return result.to_dict()
+
     @app.get("/api/model")
     def model() -> dict[str, object]:
         return model_status(settings).to_dict()
@@ -283,6 +318,13 @@ def create_app():
                     "ready": bool(message["configured"]),
                     "automation_enabled": settings.feishu_task_sync_enabled,
                     "cron": settings.feishu_task_sync_cron,
+                },
+                "source_health_alert": {
+                    "ready": report_ready,
+                    "automation_enabled": settings.source_alert_enabled,
+                    "cron": settings.source_alert_cron,
+                    "minimum_reliability": settings.source_alert_min_reliability,
+                    "stale_hours": settings.source_alert_stale_hours,
                 },
                 "deadline_calendar": {
                     "ready": bool(message["configured"] and settings.feishu_calendar_id),

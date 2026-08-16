@@ -238,6 +238,7 @@ class CcgpAdapter:
             "worldbank",
             "uk",
             "idb",
+            "adb",
         }
 
     def list_urls(self, max_pages: int) -> list[str]:

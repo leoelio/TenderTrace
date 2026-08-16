@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 import json
 from typing import Any
 
+from tendertrace.adapters.adb import ADB_NOTICES_URL
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.idb import IDB_DATASTORE_API
@@ -152,6 +153,26 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "scope": ["global", "idb"],
                 "authority": "Inter-American Development Bank",
                 "license": "CC BY 4.0",
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="adb",
+            engine="official-html+pdf",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="adb-institutional-procurement-notices",
+                    url=ADB_NOTICES_URL,
+                    kind="list",
+                )
+            ],
+            health=health.get("adb", {}),
+            discovery_rules={
+                "scope": ["global", "adb"],
+                "authority": "Asian Development Bank",
+                "documents": "official PDF",
                 "same_domain": True,
             },
         ),

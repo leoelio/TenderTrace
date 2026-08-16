@@ -7,6 +7,7 @@ const state = {
   outbox: [],
   subscriptions: [],
   sources: [],
+  sourceAlerts: null,
   evaluation: null,
   memory: null,
   feishu: null,
@@ -130,6 +131,7 @@ const el = {
   runListHint: document.querySelector("#runListHint"),
   sourceList: document.querySelector("#sourceList"),
   sourcePageList: document.querySelector("#sourcePageList"),
+  sourceAlertSummary: document.querySelector("#sourceAlertSummary"),
   evaluationSummary: document.querySelector("#evaluationSummary"),
   ragMetrics: document.querySelector("#ragMetrics"),
   agentMetrics: document.querySelector("#agentMetrics"),
@@ -893,6 +895,33 @@ function renderSubscriptionCards(target, items) {
 function renderSources(items) {
   renderSourceList(el.sourceList, items);
   renderSourceList(el.sourcePageList, items);
+}
+
+function renderSourceAlerts(payload) {
+  if (!el.sourceAlertSummary) return;
+  const issues = Array.isArray(payload?.issues) ? payload.issues : [];
+  const policy = payload?.policy || {};
+  const deliveryReady = Boolean(payload?.delivery_ready);
+  el.sourceAlertSummary.className = `source-alert-summary ${issues.length ? "is-attention" : "is-healthy"}`;
+  el.sourceAlertSummary.innerHTML = `
+    <div>
+      <span>${issues.length ? "来源 SLO 需要处理" : "来源 SLO 正常"}</span>
+      <strong>${escapeHtml(payload?.source_count || 0)} 个来源 · ${escapeHtml(issues.length)} 个异常</strong>
+      <small>可靠度阈值 ${escapeHtml(percent(policy.minimum_reliability || 0))} · 新鲜度 ${escapeHtml(policy.stale_hours || 0)} 小时</small>
+    </div>
+    <div class="source-alert-actions">
+      ${issues.slice(0, 3).map((issue) => `<span class="badge badge-${issue.severity === "critical" ? "fail" : "warn"}">${escapeHtml(issue.site)}</span>`).join("")}
+      <button id="sendSourceAlertButton" class="primary-lite-button" type="button" ${issues.length ? "" : "disabled"}>${deliveryReady ? "发送飞书告警" : "配置接收目标"}</button>
+    </div>
+  `;
+  document.querySelector("#sendSourceAlertButton")?.addEventListener("click", () => {
+    if (!deliveryReady) {
+      showView("settingsView");
+      showToast("请先在飞书连接中心选择默认接收目标");
+      return;
+    }
+    sendSourceAlertsToFeishu().catch(toastError("来源告警发送失败"));
+  });
 }
 
 function renderSourceList(target, items) {
@@ -2033,6 +2062,13 @@ function renderFeishuOverview(payload) {
         ? `自动 ${features.task_sync.cron} · 完成与逾期状态回写机会台账`
         : "机会页手动同步，支持完成与逾期状态回写",
     ],
+    [
+      "来源健康告警",
+      features.source_health_alert,
+      features.source_health_alert?.automation_enabled
+        ? `自动 ${features.source_health_alert.cron} · 可靠度与新鲜度异常去重推送`
+        : `手动发送 · 可靠度阈值 ${percent(features.source_health_alert?.minimum_reliability || 0)} · 新鲜度 ${features.source_health_alert?.stale_hours || 0} 小时`,
+    ],
     ["截止日程", features.deadline_calendar, "投标截止自动进入日历"],
     ["状态回调", features.card_callback, "卡片动作回写台账与审计流"],
     ["智能体服务", features.agent_service, "独立智能体应用"],
@@ -2195,10 +2231,29 @@ async function refreshSubscriptions() {
 }
 
 async function refreshSources() {
-  const payload = await api("/api/sources");
+  const [payload, alerts] = await Promise.all([
+    api("/api/sources"),
+    api("/api/sources/alerts"),
+  ]);
   state.sources = payload.items || [];
+  state.sourceAlerts = alerts;
   renderSources(state.sources);
+  renderSourceAlerts(alerts);
   renderNotifications();
+}
+
+async function sendSourceAlertsToFeishu() {
+  const result = await api("/api/sources/alerts/send-feishu", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const message = result.status === "sent"
+    ? `已发送 ${result.issue_count} 个来源异常`
+    : result.issue_count
+      ? "相同来源状态今天已发送"
+      : "当前没有需要发送的来源异常";
+  showToast(message);
+  await Promise.all([refreshSources(), refreshFeishu()]);
 }
 
 async function refreshSourcesPanel() {

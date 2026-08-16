@@ -84,7 +84,7 @@ class RetrievalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))
             init_db(settings)
-            for source_site in ("ccgp", "worldbank", "find_tender"):
+            for source_site in ("ccgp", "worldbank", "adb", "find_tender"):
                 _insert_notice(
                     settings,
                     notice_id=f"{source_site}:server-hit",
@@ -116,7 +116,7 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual([notice.source_site for notice in uk.notices], ["find_tender"])
         self.assertEqual(
             {notice.source_site for notice in global_result.notices},
-            {"worldbank", "find_tender"},
+            {"worldbank", "adb", "find_tender"},
         )
         self.assertEqual([notice.source_site for notice in domestic.notices], ["ccgp"])
 

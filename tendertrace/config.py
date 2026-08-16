@@ -116,6 +116,10 @@ class Settings:
     feishu_callback_verification_token_present: bool
     feishu_task_sync_enabled: bool
     feishu_task_sync_cron: str
+    source_alert_enabled: bool
+    source_alert_cron: str
+    source_alert_min_reliability: float
+    source_alert_stale_hours: int
     feishu_agent_enabled: bool
     feishu_agent_base_url: str
     feishu_agent_app_id_present: bool
@@ -245,6 +249,21 @@ class Settings:
             raise ConfigError(
                 "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED=true requires FEISHU_ENABLED=true"
             )
+        source_alert_enabled = _parse_bool(
+            _first_value("TENDERTRACE_SOURCE_ALERT_ENABLED", env_files, "false")
+        )
+        if source_alert_enabled and not feishu_enabled:
+            raise ConfigError(
+                "TENDERTRACE_SOURCE_ALERT_ENABLED=true requires FEISHU_ENABLED=true"
+            )
+        source_alert_min_reliability = _parse_ratio(
+            _first_value("TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY", env_files, "0.75"),
+            "TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY",
+        )
+        source_alert_stale_hours = _parse_positive_int(
+            _first_value("TENDERTRACE_SOURCE_ALERT_STALE_HOURS", env_files, "24"),
+            "TENDERTRACE_SOURCE_ALERT_STALE_HOURS",
+        )
         feishu_agent_enabled = _parse_bool(
             _first_value("FEISHU_AGENT_ENABLED", env_files, "false")
         )
@@ -349,6 +368,12 @@ class Settings:
             feishu_task_sync_cron=_first_value(
                 "TENDERTRACE_FEISHU_TASK_SYNC_CRON", env_files, "*/10 * * * *"
             ),
+            source_alert_enabled=source_alert_enabled,
+            source_alert_cron=_first_value(
+                "TENDERTRACE_SOURCE_ALERT_CRON", env_files, "15 */2 * * *"
+            ),
+            source_alert_min_reliability=source_alert_min_reliability,
+            source_alert_stale_hours=source_alert_stale_hours,
             feishu_agent_enabled=feishu_agent_enabled,
             feishu_agent_base_url=_first_value(
                 "FEISHU_AGENT_BASE_URL",
@@ -511,6 +536,10 @@ class Settings:
             ),
             "feishu_task_sync_enabled": self.feishu_task_sync_enabled,
             "feishu_task_sync_cron": self.feishu_task_sync_cron,
+            "source_alert_enabled": self.source_alert_enabled,
+            "source_alert_cron": self.source_alert_cron,
+            "source_alert_min_reliability": self.source_alert_min_reliability,
+            "source_alert_stale_hours": self.source_alert_stale_hours,
             "feishu_agent_enabled": self.feishu_agent_enabled,
             "feishu_agent_base_url": self.feishu_agent_base_url,
             "feishu_agent_app_id_configured": self.feishu_agent_app_id_present,
@@ -636,6 +665,16 @@ def _parse_percentage(value: str, name: str) -> int:
         raise ConfigError(f"{name} must be an integer") from exc
     if not 0 <= parsed <= 100:
         raise ConfigError(f"{name} must be between 0 and 100")
+    return parsed
+
+
+def _parse_ratio(value: str, name: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be a number") from exc
+    if not 0 <= parsed <= 1:
+        raise ConfigError(f"{name} must be between 0 and 1")
     return parsed
 
 
