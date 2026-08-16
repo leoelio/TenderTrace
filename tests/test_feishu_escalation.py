@@ -133,6 +133,46 @@ class FeishuEscalationTests(unittest.TestCase):
         self.assertIn("变更复核逾期", str(client.cards[0]))
         self.assertIn("2026-08-15T08:00:00+00:00", str(client.cards[0]))
 
+    def test_relationship_action_overdue_is_counted_and_rendered(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            save_feishu_receiver(
+                settings,
+                receive_id="oc_test",
+                receive_id_type="chat_id",
+                label="销售管理群",
+            )
+            client = _FakeClient()
+            result = send_opportunity_escalation_summary(
+                settings,
+                client=client,
+                opportunity_loader=lambda *_args, **_kwargs: {
+                    "summary": {
+                        "action_queue": {
+                            "decision_sla_hours": 24,
+                            "escalations": [
+                                {
+                                    "notice_id": "notice-relationship-1",
+                                    "title": "服务器采购项目",
+                                    "owner": "方案专家",
+                                    "stage": "策略制定",
+                                    "issue_types": ["relationship_action"],
+                                    "relationship_action_due_at": (
+                                        "2026-08-15T09:00:00+08:00"
+                                    ),
+                                }
+                            ],
+                        }
+                    }
+                },
+                now=datetime(2026, 8, 16, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+            )
+
+        self.assertEqual(result.relationship_action_count, 1)
+        self.assertIn("关系行动逾期", str(client.cards[0]))
+        self.assertIn("方案专家", str(client.cards[0]))
+
 
 def _overdue_payload(*_args, **_kwargs) -> dict[str, object]:
     return {

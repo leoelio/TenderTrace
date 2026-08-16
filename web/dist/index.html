@@ -556,6 +556,67 @@
               </div>
             </form>
           </dialog>
+          <dialog id="relationshipActionDialog" class="owner-assignment-dialog relationship-action-dialog" aria-labelledby="relationshipActionDialogTitle">
+            <form id="relationshipActionForm" class="owner-assignment-form">
+              <div class="owner-assignment-heading">
+                <div>
+                  <span>行动闭环</span>
+                  <h2 id="relationshipActionDialogTitle">创建关系行动</h2>
+                  <small id="relationshipActionProject">-</small>
+                </div>
+                <button id="closeRelationshipActionButton" class="icon-close-button" type="button" aria-label="关闭关系行动创建">×</button>
+              </div>
+              <div class="owner-assignment-body relationship-action-form-grid">
+                <label>
+                  <span>关联关键人</span>
+                  <select id="relationshipActionStakeholder">
+                    <option value="">通用关系行动</option>
+                  </select>
+                </label>
+                <label>
+                  <span>内部责任人</span>
+                  <select id="relationshipActionAssignee">
+                    <option value="">暂未指定</option>
+                  </select>
+                </label>
+                <label class="relationship-action-wide-field">
+                  <span>行动目标</span>
+                  <input id="relationshipActionTitle" maxlength="500" autocomplete="off" required />
+                </label>
+                <label>
+                  <span>行动类型</span>
+                  <select id="relationshipActionType">
+                    <option value="engagement">客户沟通</option>
+                    <option value="discovery">信息验证</option>
+                    <option value="validation">决策确认</option>
+                    <option value="mitigation">风险化解</option>
+                    <option value="internal_alignment">内部协同</option>
+                  </select>
+                </label>
+                <label>
+                  <span>优先级</span>
+                  <select id="relationshipActionPriority">
+                    <option value="normal">普通</option>
+                    <option value="high">高</option>
+                    <option value="critical">紧急</option>
+                    <option value="low">低</option>
+                  </select>
+                </label>
+                <label>
+                  <span>完成时限</span>
+                  <input id="relationshipActionDueAt" type="datetime-local" required />
+                </label>
+                <label class="owner-option relationship-action-task-option">
+                  <input id="relationshipActionCreateFeishu" type="checkbox" checked />
+                  <span><strong>同步到飞书任务</strong><small>负责人已绑定 open_id 时自动指派，否则创建未指派任务</small></span>
+                </label>
+              </div>
+              <div class="owner-assignment-actions">
+                <button id="cancelRelationshipActionButton" class="ghost-button" type="button">取消</button>
+                <button id="submitRelationshipActionButton" class="primary-button" type="submit">创建行动</button>
+              </div>
+            </form>
+          </dialog>
         </section>
 
         <section id="historyView" class="view">

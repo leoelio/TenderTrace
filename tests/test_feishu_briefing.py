@@ -123,6 +123,8 @@ class FeishuBriefingTests(unittest.TestCase):
         self.assertIn("完成机会确认", card_text)
         self.assertIn("qualification", card_text)
         self.assertIn("qianlima", card_text)
+        self.assertIn("确认预算审批链路", card_text)
+        self.assertIn("关系行动待办 1 项", card_text)
 
 
 def _opportunity_payload(*_args, **_kwargs) -> dict[str, object]:
@@ -135,6 +137,9 @@ def _opportunity_payload(*_args, **_kwargs) -> dict[str, object]:
                 "qualification_ready": 1,
                 "decision_pending": 0,
                 "decision_overdue": 0,
+                "relationship_action_open": 1,
+                "relationship_action_overdue": 0,
+                "relationship_action_outcome_pending": 0,
             },
             "market": {"signals": ["服务器采购需求在本周集中释放"]},
         },
@@ -154,6 +159,11 @@ def _opportunity_payload(*_args, **_kwargs) -> dict[str, object]:
                     "blockers": {"approve_bid": ["qualification evidence missing"]}
                 },
                 "action_state": {"priority": 96},
+                "relationship_actions": {
+                    "open_count": 1,
+                    "overdue_count": 0,
+                    "next_action": {"title": "确认预算审批链路"},
+                },
             }
         ],
     }

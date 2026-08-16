@@ -11,6 +11,7 @@ from tendertrace.delivery.feishu_bitable import (
     check_feishu_bitable,
     sync_notices_to_bitable,
     update_opportunity_facts_in_bitable,
+    update_opportunity_relationship_actions_in_bitable,
     update_opportunity_team_in_bitable,
     update_opportunity_stakeholders_in_bitable,
     update_opportunity_workflow_in_bitable,
@@ -463,6 +464,43 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["关键关系风险"], "尚未识别内部支持者")
         self.assertEqual(fields["关系策略建议"], "识别并验证内部支持者")
         self.assertNotIn("访谈摘录", str(fields))
+        self.assertNotIn("标题", fields)
+
+    def test_relationship_action_update_sends_summary_without_task_identifiers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            result = update_opportunity_relationship_actions_in_bitable(
+                settings,
+                notice_id="existing",
+                action_plan={
+                    "completion_rate": 50,
+                    "overdue_count": 1,
+                    "next_action": {
+                        "title": "确认预算审批链路",
+                        "assignee_member_name": "张三",
+                        "due_at": "2026-08-18T09:00+08:00",
+                    },
+                    "items": [
+                        {
+                            "title": "确认预算审批链路",
+                            "assignee_member_name": "张三",
+                            "due_at": "2026-08-18T09:00+08:00",
+                            "effective_status": "overdue",
+                            "feishu_task_guid": "private-task-guid",
+                        }
+                    ],
+                },
+                http_client_factory=FakeFeishuClient,
+            )
+
+        self.assertEqual(result.status, "sent")
+        fields = FakeFeishuClient.updated_records[0][1]
+        self.assertIn("确认预算审批链路", fields["关系行动概览"])
+        self.assertEqual(fields["关系行动完成率"], "50%")
+        self.assertEqual(fields["关系行动逾期"], "1")
+        self.assertIn("张三", fields["下一关系行动"])
+        self.assertNotIn("private-task-guid", str(fields))
         self.assertNotIn("标题", fields)
 
     def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:

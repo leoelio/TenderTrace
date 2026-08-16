@@ -85,6 +85,10 @@ class OpportunityApiTests(unittest.TestCase):
                     return_value=SimpleNamespace(status="sent", message=""),
                 ), patch.object(
                     api_module,
+                    "update_opportunity_relationship_actions_in_bitable",
+                    return_value=SimpleNamespace(status="sent", message=""),
+                ), patch.object(
+                    api_module,
                     "sync_opportunity_team",
                     return_value=SimpleNamespace(
                         status="pending",
@@ -105,6 +109,21 @@ class OpportunityApiTests(unittest.TestCase):
                             "completion_notifications_skipped": 0,
                             "overdue_notifications_sent": 1,
                             "overdue_notifications_skipped": 0,
+                            "failed_count": 0,
+                            "failures": [],
+                        },
+                    ),
+                ), patch.object(
+                    api_module,
+                    "sync_relationship_action_tasks",
+                    return_value=SimpleNamespace(
+                        to_dict=lambda: {
+                            "status": "finished",
+                            "scanned_count": 1,
+                            "updated_count": 1,
+                            "completed_count": 0,
+                            "overdue_count": 1,
+                            "outcome_pending_count": 0,
                             "failed_count": 0,
                             "failures": [],
                         },
@@ -201,6 +220,29 @@ class OpportunityApiTests(unittest.TestCase):
                         "/api/opportunities/notice-api-1/stakeholders"
                     )
                     stakeholder_id = stakeholder_added.json()["stakeholder"]["id"]
+                    relationship_action_added = client.post(
+                        "/api/opportunities/notice-api-1/relationship-actions",
+                        json={
+                            "stakeholder_id": stakeholder_id,
+                            "title": "确认预算审批链路",
+                            "action_type": "validation",
+                            "priority": "high",
+                            "due_at": "2026-08-20T09:00:00+08:00",
+                            "source_type": "stakeholder_strategy",
+                            "source_ref": stakeholder_id,
+                        },
+                    )
+                    relationship_action_read = client.get(
+                        "/api/opportunities/notice-api-1/relationship-actions"
+                    )
+                    relationship_action_id = relationship_action_added.json()["action"]["id"]
+                    relationship_action_completed = client.patch(
+                        f"/api/opportunities/notice-api-1/relationship-actions/{relationship_action_id}",
+                        json={
+                            "status": "completed",
+                            "outcome_note": "客户已确认预算审批链路并形成会议纪要。",
+                        },
+                    )
                     stakeholder_removed = client.delete(
                         f"/api/opportunities/notice-api-1/stakeholders/{stakeholder_id}"
                     )
@@ -293,6 +335,14 @@ class OpportunityApiTests(unittest.TestCase):
             stakeholder_removed.json()["stakeholder_map"]["stakeholder_count"],
             0,
         )
+        self.assertEqual(relationship_action_added.status_code, 200)
+        self.assertEqual(relationship_action_added.json()["bitable_status"], "sent")
+        self.assertEqual(relationship_action_read.json()["open_count"], 1)
+        self.assertEqual(relationship_action_completed.status_code, 200)
+        self.assertEqual(
+            relationship_action_completed.json()["action_plan"]["completion_rate"],
+            100,
+        )
         self.assertEqual(record_view_hold.status_code, 200)
         self.assertEqual(record_view_hold.json()["workflow"]["decision"], "hold")
         self.assertEqual(record_view_hold.json()["workflow"]["decision_by"], "飞书分析师")
@@ -301,6 +351,10 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(task_sync.json()["completed_count"], 1)
         self.assertEqual(task_sync.json()["completion_notifications_sent"], 1)
         self.assertEqual(task_sync.json()["overdue_notifications_sent"], 1)
+        self.assertEqual(
+            task_sync.json()["relationship_actions"]["overdue_count"],
+            1,
+        )
         self.assertEqual(changes.status_code, 200)
         self.assertEqual(changes.json()["returned"], 0)
         self.assertEqual(change_alert.status_code, 200)

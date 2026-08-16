@@ -15,6 +15,7 @@ from tendertrace.db import connection, database_health, init_db
 from tendertrace.delivery.feishu_bitable import (
     check_feishu_bitable,
     update_opportunity_facts_in_bitable,
+    update_opportunity_relationship_actions_in_bitable,
     update_opportunity_team_in_bitable,
     update_opportunity_stakeholders_in_bitable,
     update_opportunity_workflow_in_bitable,
@@ -40,6 +41,10 @@ from tendertrace.integrations.feishu_card_actions import (
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_notice_changes import send_opportunity_change_alerts
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
+from tendertrace.integrations.feishu_relationship_actions import (
+    create_relationship_action_task,
+    sync_relationship_action_tasks,
+)
 from tendertrace.integrations.feishu_team import sync_opportunity_team
 from tendertrace.integrations.feishu_source_alerts import (
     build_source_alert_snapshot,
@@ -85,6 +90,11 @@ from tendertrace.opportunity import (
     list_opportunities,
 )
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
+from tendertrace.opportunity_relationship_actions import (
+    create_relationship_action,
+    relationship_action as get_relationship_action,
+    update_relationship_action,
+)
 from tendertrace.opportunity_team import remove_team_member, upsert_team_member
 from tendertrace.opportunity_stakeholders import (
     remove_stakeholder,
@@ -449,6 +459,11 @@ def create_app():
                     "automation_enabled": settings.feishu_task_sync_enabled,
                     "cron": settings.feishu_task_sync_cron,
                 },
+                "relationship_actions": {
+                    "ready": bool(message["configured"]),
+                    "automation_enabled": settings.feishu_task_sync_enabled,
+                    "cron": settings.feishu_task_sync_cron,
+                },
                 "source_health_alert": {
                     "ready": report_ready,
                     "automation_enabled": settings.source_alert_enabled,
@@ -682,6 +697,10 @@ def create_app():
                 settings,
                 limit=int(request.get("limit") or 200),
             )
+            relationship_result = sync_relationship_action_tasks(
+                settings,
+                limit=int(request.get("limit") or 200),
+            )
         except (FeishuError, ValueError, TypeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         record_activity(
@@ -691,7 +710,9 @@ def create_app():
             label=f"同步 {result.scanned_count} 个飞书任务",
             metadata=result.to_dict(),
         )
-        return result.to_dict()
+        payload = result.to_dict()
+        payload["relationship_actions"] = relationship_result.to_dict()
+        return payload
 
     @app.post("/api/opportunities/send-feishu")
     def send_opportunity_feishu(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -867,6 +888,120 @@ def create_app():
             notice_id,
             stakeholder.to_dict(),
             "removed",
+        )
+
+    @app.get("/api/opportunities/{notice_id}/relationship-actions")
+    def opportunity_relationship_actions(notice_id: str) -> dict[str, object]:
+        opportunity = get_opportunity(settings, notice_id)
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return _mapping_value(opportunity.get("relationship_actions"))
+
+    @app.post("/api/opportunities/{notice_id}/relationship-actions")
+    def add_opportunity_relationship_action(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        try:
+            action = create_relationship_action(
+                settings,
+                notice_id=notice_id,
+                stakeholder_id=str(request.get("stakeholder_id") or ""),
+                title=str(request.get("title") or ""),
+                action_type=str(request.get("action_type") or "engagement"),
+                priority=str(request.get("priority") or "normal"),
+                assignee_member_id=str(request.get("assignee_member_id") or ""),
+                due_at=str(request.get("due_at") or ""),
+                source_type=str(request.get("source_type") or "manual"),
+                source_ref=str(request.get("source_ref") or ""),
+                actor=str(request.get("actor") or "admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        task_result = None
+        task_error = ""
+        if bool(request.get("create_feishu_task", False)):
+            try:
+                task_result = create_relationship_action_task(settings, action.id)
+                action = task_result.action
+            except (FeishuError, ValueError, TypeError) as exc:
+                task_error = f"{type(exc).__name__}: {exc}"
+        return _relationship_action_mutation_response(
+            settings,
+            notice_id,
+            action.to_dict(),
+            "created",
+            task_result=task_result.to_dict() if task_result else None,
+            task_error=task_error,
+        )
+
+    @app.patch(
+        "/api/opportunities/{notice_id}/relationship-actions/{relationship_action_id}"
+    )
+    def update_opportunity_relationship_action(
+        notice_id: str,
+        relationship_action_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            current = get_relationship_action(settings, relationship_action_id)
+            if current.notice_id != notice_id:
+                raise LookupError("relationship action not found")
+            target_status = str(request.get("status") or "")
+            if (
+                current.feishu_task_guid
+                and current.status == "open"
+                and target_status in {"completed", "cancelled"}
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="请先在飞书任务中完成或关闭，系统同步后再补充结果",
+                )
+            action = update_relationship_action(
+                settings,
+                notice_id=notice_id,
+                action_id=relationship_action_id,
+                status=target_status,
+                outcome_note=str(request.get("outcome_note") or ""),
+                actor=str(request.get("actor") or "admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _relationship_action_mutation_response(
+            settings,
+            notice_id,
+            action.to_dict(),
+            "updated",
+        )
+
+    @app.post(
+        "/api/opportunities/{notice_id}/relationship-actions/{relationship_action_id}/feishu-task"
+    )
+    def create_opportunity_relationship_action_feishu_task(
+        notice_id: str,
+        relationship_action_id: str,
+    ) -> dict[str, object]:
+        try:
+            current = get_relationship_action(settings, relationship_action_id)
+            if current.notice_id != notice_id:
+                raise LookupError("relationship action not found")
+            result = create_relationship_action_task(settings, relationship_action_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _relationship_action_mutation_response(
+            settings,
+            notice_id,
+            result.action.to_dict(),
+            result.status,
+            task_result=result.to_dict(),
         )
 
     @app.get("/api/opportunities/{notice_id}/facts")
@@ -2107,6 +2242,50 @@ def _stakeholder_mutation_response(
         "stakeholder": stakeholder,
         "stakeholder_map": stakeholder_map,
         "qualification": opportunity.get("qualification"),
+        "bitable_status": bitable.status,
+        "bitable_message": bitable.message,
+    }
+
+
+def _relationship_action_mutation_response(
+    settings: Settings,
+    notice_id: str,
+    relationship_action: dict[str, object],
+    action: str,
+    *,
+    task_result: dict[str, object] | None = None,
+    task_error: str = "",
+) -> dict[str, object]:
+    opportunity = get_opportunity(settings, notice_id)
+    if opportunity is None:
+        raise LookupError("opportunity not found after relationship action update")
+    action_plan = _mapping_value(opportunity.get("relationship_actions"))
+    bitable = update_opportunity_relationship_actions_in_bitable(
+        settings,
+        notice_id=notice_id,
+        action_plan=action_plan,
+    )
+    record_activity(
+        settings,
+        event_type=f"opportunity_relationship_action_{action}",
+        target=notice_id,
+        label=str(relationship_action.get("title") or ""),
+        metadata={
+            "relationship_action_id": str(relationship_action.get("id") or ""),
+            "priority": str(relationship_action.get("priority") or "normal"),
+            "task_status": str(
+                relationship_action.get("feishu_task_status") or "not_created"
+            ),
+            "bitable_status": bitable.status,
+        },
+    )
+    return {
+        "status": "partial" if task_error else action,
+        "action": relationship_action,
+        "action_plan": action_plan,
+        "qualification": opportunity.get("qualification"),
+        "task": task_result or {},
+        "task_error": task_error,
         "bitable_status": bitable.status,
         "bitable_message": bitable.message,
     }

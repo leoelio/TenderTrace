@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P47</strong> · Stakeholder Intelligence · Evidence-backed Account Strategy · Relationship Risk Gates
+  <strong>Current stage: P48</strong> · Relationship Action Orchestration · Feishu Task v2 Sync · Outcome-based Qualification
 </p>
 
 ---
@@ -44,6 +44,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书团队协同：内部团队与伙伴成员以 Task v2 `follower` 身份增删，不与 `assignee` 负责人混淆；同步状态、失败原因和审计事件持久化，多维表格同步展示团队、伙伴、覆盖率和缺口。
 - 客户关系图谱：结构化维护经济决策人、技术决策人、采购执行人、内部支持者、业务使用者和关键阻力人；记录影响力、立场、关系强度、内部责任人、下一步行动及证据来源，不采集手机号或邮箱。
 - 关系策略闭环：关键人事实必须附证据来源与摘录；系统按销售阶段计算关系覆盖和健康度，识别高影响抵触者、立场未知与角色缺口，生成基于真实关系数据的行动建议并进入 Go 门禁。
+- 关系行动执行：把关系建议转成可分派、可截止、可审计的行动；行动可幂等同步到飞书 Task v2，远端完成状态回写本地，逾期行动和“已完成但未记录结果”共同阻断投标批准，避免把任务勾选误当成客户关系闭环。
 - 事实核验闭环：分析人员可在 Web 补充采购主体、项目编号、预算、截止时间和地区，并附原文链接与证据摘录；系统保留原始公告，以可审计覆盖层重算完整度、机会等级与销售准入，再同步飞书多维表格。
 - 销售准入：以负责人、采购主体、可信度、完整度、投标窗口、机会评分、需求覆盖、阶段团队覆盖和关键关系覆盖形成可解释门禁；阈值由运行配置管理，只有阶段、资料、团队与客户关系条件同时满足才允许推进。
 - 投标决策：Go/Hold/No-Go 与决策人、依据、时间持久化到 SQLite，并同步到 Web、飞书共享卡片和多维表格；策略制定阶段按独立阶段时钟执行决策 SLA，超时进入管理升级队列，可手动或定时发送幂等飞书摘要。
@@ -370,6 +371,10 @@ python -m tendertrace embed-notices
 - `GET /api/opportunities/{notice_id}/stakeholders`：读取阶段感知的客户关键人、关系覆盖、健康度、风险与策略行动。
 - `POST /api/opportunities/{notice_id}/stakeholders`：提交带来源证据的关键人事实并重算机会准入、策略及 Base 摘要。
 - `DELETE /api/opportunities/{notice_id}/stakeholders/{stakeholder_id}`：审计式移除关键人并刷新关系风险。
+- `GET /api/opportunities/{notice_id}/relationship-actions`：读取关系行动、闭环率、逾期、未分派与结果待补状态。
+- `POST /api/opportunities/{notice_id}/relationship-actions`：创建绑定关键人与内部负责人的关系行动，并可选同步飞书 Task v2。
+- `PATCH /api/opportunities/{notice_id}/relationship-actions/{action_id}`：更新本地行动结果；已绑定飞书的开放任务必须先在飞书完成。
+- `POST /api/opportunities/{notice_id}/relationship-actions/{action_id}/feishu-task`：幂等创建或复用飞书关系行动任务。
 - `GET /api/opportunities/changes`：读取公告修订账本，可按公告过滤。
 - `POST /api/opportunities/changes/send-feishu`：向机会负责人聚合发送尚未成功投递的公告变更。
 - `POST /api/opportunities/escalations/send-feishu`：发送决策超时与任务逾期的统一管理摘要；同一机会合并风险，并按每日风险集合去重。
@@ -506,8 +511,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P47
-- 321 automated tests pass, including 426 subtests.
+- Current stage: P48
+- 332 automated tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -560,6 +565,7 @@ The current architecture is local-first: background ingestion continuously store
 - Feishu Task v2 collaboration that keeps the owner as `assignee` and synchronizes internal or partner team members as `follower`; Bitable stores the team roster, partner organizations, coverage, and missing roles.
 - Evidence-backed stakeholder intelligence for economic and technical buyers, procurement contacts, champions, end users, and blockers. It tracks influence, stance, relationship strength, accountable team member, next action, and provenance without collecting phone numbers or email addresses.
 - Stage-aware account strategy that scores relationship coverage and health, detects high-influence resistance and unknown positions, derives actions from observed gaps, and feeds the same Go gate used by Web and Feishu.
+- Executable relationship actions turn account advice into assigned, deadline-bound, auditable work. Actions synchronize idempotently with Feishu Task v2, remote completion flows back to the local ledger, and both overdue work and completed work without an outcome block bid approval so a checked task is never mistaken for a closed customer loop.
 - Auditable fact verification for purchaser, project number, budget, deadline, and region. Evidence-backed overlays preserve the raw notice, recompute opportunity quality and qualification gates, and synchronize the resulting fields to Feishu Bitable.
 - Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, requirement coverage, team coverage, and stakeholder coverage. Stage transitions are rejected until workflow, evidence, staffing, and customer-relationship requirements pass.
 - Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. Decision SLA breaches and overdue Task v2 work merge into one opportunity-level management queue and a deduplicated Feishu summary.
@@ -849,6 +855,10 @@ Available Web APIs:
 - `GET /api/opportunities/{notice_id}/stakeholders`: inspect stage-aware stakeholders, relationship coverage, health, risks, and strategy actions.
 - `POST /api/opportunities/{notice_id}/stakeholders`: persist an evidence-backed stakeholder and recompute qualification, strategy, and the Bitable summary.
 - `DELETE /api/opportunities/{notice_id}/stakeholders/{stakeholder_id}`: audit stakeholder removal and refresh relationship risk.
+- `GET /api/opportunities/{notice_id}/relationship-actions`: inspect actions, completion rate, overdue work, unassigned work, and missing outcomes.
+- `POST /api/opportunities/{notice_id}/relationship-actions`: create a stakeholder-linked action with an internal owner and optional Feishu Task v2 synchronization.
+- `PATCH /api/opportunities/{notice_id}/relationship-actions/{action_id}`: record local action outcomes; open Feishu-bound work must be completed in Feishu first.
+- `POST /api/opportunities/{notice_id}/relationship-actions/{action_id}/feishu-task`: idempotently create or reuse the Feishu relationship task.
 - `GET /api/opportunities/changes`: inspect the durable notice-revision ledger, optionally filtered by notice.
 - `POST /api/opportunities/changes/send-feishu`: deliver pending notice changes to opportunity owners without duplicating successful deliveries.
 - `POST /api/opportunities/escalations/send-feishu`: send a unified decision-overdue and task-overdue management summary, merging risks per opportunity and deduplicating the daily risk set.
@@ -979,8 +989,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P47
-- 321 automated tests pass, including 426 subtests.
+- Current stage: P48
+- 332 automated tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

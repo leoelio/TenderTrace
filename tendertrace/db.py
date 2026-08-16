@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 
 DDL = (
@@ -437,6 +437,35 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS opportunity_relationship_actions (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        stakeholder_id TEXT,
+        action_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        action_type TEXT NOT NULL DEFAULT 'engagement',
+        priority TEXT NOT NULL DEFAULT 'normal',
+        assignee_member_id TEXT,
+        due_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        outcome_note TEXT,
+        source_type TEXT NOT NULL DEFAULT 'manual',
+        source_ref TEXT,
+        feishu_task_guid TEXT,
+        feishu_task_status TEXT NOT NULL DEFAULT 'not_created',
+        feishu_task_synced_at TEXT,
+        feishu_sync_error TEXT,
+        completed_at TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (notice_id, action_key),
+        FOREIGN KEY (notice_id) REFERENCES notices(id),
+        FOREIGN KEY (stakeholder_id) REFERENCES opportunity_stakeholders(id),
+        FOREIGN KEY (assignee_member_id) REFERENCES opportunity_team_members(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS opportunity_fact_overrides (
         id TEXT PRIMARY KEY,
         notice_id TEXT NOT NULL,
@@ -558,6 +587,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_opportunity_team_sync ON opportunity_team_members(feishu_sync_status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_stakeholders_notice ON opportunity_stakeholders(notice_id, status, role)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_stakeholders_risk ON opportunity_stakeholders(status, influence, stance)",
+    "CREATE INDEX IF NOT EXISTS idx_relationship_actions_notice ON opportunity_relationship_actions(notice_id, status, due_at)",
+    "CREATE INDEX IF NOT EXISTS idx_relationship_actions_sync ON opportunity_relationship_actions(feishu_task_status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",

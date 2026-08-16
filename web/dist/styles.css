@@ -4047,7 +4047,7 @@ body.theme-dark .grade-c {
 .stakeholder-matrix-head,
 .stakeholder-matrix-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1.2fr) minmax(92px, 0.72fr) minmax(90px, 0.7fr) minmax(170px, 1.5fr) 38px;
+  grid-template-columns: minmax(130px, 1.2fr) minmax(92px, 0.72fr) minmax(90px, 0.7fr) minmax(170px, 1.5fr) 70px;
   min-width: 0;
 }
 
@@ -4102,6 +4102,19 @@ body.theme-dark .grade-c {
   font-size: 18px;
 }
 
+.stakeholder-row-actions {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 4px !important;
+}
+
+.stakeholder-action-button {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+  font-size: 18px;
+}
+
 .stakeholder-empty {
   padding: 18px 10px;
   color: var(--muted);
@@ -4152,6 +4165,189 @@ body.theme-dark .grade-c {
   color: var(--text);
   background: var(--surface);
   font: inherit;
+}
+
+.relationship-action-section {
+  background: rgba(245, 248, 252, 0.52);
+}
+
+.relationship-action-section .opportunity-detail-section-title > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.relationship-action-section .opportunity-detail-section-title small,
+.relationship-action-matrix span,
+.relationship-action-matrix small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.relationship-action-heading-actions,
+.relationship-action-signals {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.relationship-action-health {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--success);
+  background: rgba(22, 163, 74, 0.09);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.relationship-action-health.is-overdue {
+  color: var(--danger);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.relationship-action-signals {
+  margin-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.relationship-action-signals > span {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border-right: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.relationship-action-signals > span:last-child {
+  border-right: 0;
+}
+
+.relationship-action-signals strong {
+  margin-left: 4px;
+  color: var(--text);
+}
+
+.relationship-action-matrix {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.relationship-action-matrix-head,
+.relationship-action-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.45fr) minmax(100px, 0.75fr) minmax(115px, 0.9fr) minmax(82px, 0.6fr) minmax(130px, 0.9fr);
+  min-width: 0;
+}
+
+.relationship-action-matrix-head {
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.relationship-action-matrix-head > span,
+.relationship-action-row > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.relationship-action-matrix-head > span:last-child,
+.relationship-action-row > div:last-child {
+  border-right: 0;
+}
+
+.relationship-action-row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.relationship-action-row.status-overdue {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.relationship-action-row > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.relationship-action-row strong {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.relationship-action-row.status-overdue > div:nth-child(4) strong {
+  color: var(--danger);
+}
+
+.relationship-action-row-actions {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px !important;
+}
+
+.relationship-action-row-actions .text-link {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.relationship-action-row-actions .text-link:hover {
+  border-color: rgba(18, 101, 214, 0.3);
+  background: var(--accent-soft);
+}
+
+.relationship-action-empty {
+  padding: 18px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.relationship-action-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.relationship-action-form-grid .relationship-action-wide-field {
+  grid-column: 1 / -1;
+}
+
+.relationship-action-form-grid input,
+.relationship-action-form-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+}
+
+.relationship-action-form-grid .relationship-action-task-option {
+  align-self: end;
+}
+
+.relationship-action-form-grid .relationship-action-task-option input {
+  width: 16px;
+  min-height: 16px;
+  padding: 0;
 }
 
 .stakeholder-form-grid input,
@@ -4218,6 +4414,41 @@ body.theme-dark .grade-c {
   }
 
   .stakeholder-form-grid .stakeholder-wide-field {
+    grid-column: auto;
+  }
+
+  .relationship-action-section .opportunity-detail-section-title,
+  .relationship-action-heading-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .relationship-action-matrix-head {
+    display: none;
+  }
+
+  .relationship-action-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .relationship-action-row > div {
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .relationship-action-row > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .relationship-action-row > div:first-child,
+  .relationship-action-row > div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .relationship-action-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relationship-action-form-grid .relationship-action-wide-field {
     grid-column: auto;
   }
 }

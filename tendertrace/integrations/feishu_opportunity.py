@@ -192,6 +192,8 @@ def build_opportunity_card(
         else "核心角色已覆盖"
     )
     stakeholder_map = _mapping(opportunity.get("stakeholder_map"))
+    relationship_actions = _mapping(opportunity.get("relationship_actions"))
+    next_relationship_action = _mapping(relationship_actions.get("next_action"))
     stakeholder_risks = stakeholder_map.get("risks")
     relationship_risk_text = (
         "；".join(
@@ -246,6 +248,9 @@ def build_opportunity_card(
                         f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
                         f"**变更复核** {change_review_text}\n"
                         f"**关系风险** {relationship_risk_text}\n"
+                        f"**关系行动** 待办 {relationship_actions.get('open_count', 0)} · "
+                        f"逾期 {relationship_actions.get('overdue_count', 0)} · "
+                        f"下一步 {next_relationship_action.get('title') or '待规划'}\n"
                         f"**决策 SLA** {decision_sla}\n"
                         f"**风险** {risk_text}"
                     ),

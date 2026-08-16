@@ -97,6 +97,13 @@ def assess_qualification(
     stakeholder_coverage = (
         _score(stakeholder_map.get("coverage_score")) if stakeholder_map else 100
     )
+    relationship_actions = _mapping(opportunity.get("relationship_actions"))
+    relationship_action_overdue = int(
+        relationship_actions.get("overdue_count") or 0
+    )
+    relationship_action_outcome_pending = int(
+        relationship_actions.get("outcome_pending_count") or 0
+    )
     gates = (
         _gate(
             "owner",
@@ -168,6 +175,18 @@ def assess_qualification(
             stakeholder_coverage >= policy.minimum_stakeholder_coverage,
             f"{stakeholder_coverage}/100",
             f"至少 {policy.minimum_stakeholder_coverage}/100",
+            ("approve_bid",),
+        ),
+        _gate(
+            "relationship_action_execution",
+            "关键关系行动闭环",
+            relationship_action_overdue == 0
+            and relationship_action_outcome_pending == 0,
+            (
+                f"逾期 {relationship_action_overdue} 项 · "
+                f"结果待补 {relationship_action_outcome_pending} 项"
+            ),
+            "不得存在逾期行动，已完成行动需记录结果",
             ("approve_bid",),
         ),
     )

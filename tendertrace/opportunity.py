@@ -18,6 +18,7 @@ from tendertrace.opportunity_facts import apply_fact_overrides, load_fact_overri
 from tendertrace.qualification import assess_qualification, policy_from_settings
 from tendertrace.opportunity_team import team_snapshots
 from tendertrace.opportunity_stakeholders import stakeholder_snapshots
+from tendertrace.opportunity_relationship_actions import relationship_action_snapshots
 from tendertrace.retrieval import parse_date
 from tendertrace.source_trust import assess_notice_trust, source_trust_profiles
 from tendertrace.workflow import workflow_action_contract, workflow_snapshots
@@ -321,6 +322,7 @@ def list_opportunities(
     workflows = workflow_snapshots(settings, [notice_id for notice_id, _notice in rows])
     teams = team_snapshots(settings, workflows)
     stakeholder_maps = stakeholder_snapshots(settings, workflows)
+    relationship_actions = relationship_action_snapshots(settings, list(workflows))
     change_summaries = notice_change_summaries(
         settings,
         [notice_id for notice_id, _notice in rows],
@@ -358,6 +360,7 @@ def list_opportunities(
             "workflow": workflow,
             "team": teams[notice_id],
             "stakeholder_map": stakeholder_maps[notice_id],
+            "relationship_actions": relationship_actions[notice_id],
             "change_summary": change_summaries.get(notice_id, {}),
             "change_review": review_summaries.get(notice_id, {}),
         }
@@ -443,6 +446,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
     workflow = workflow_snapshots(settings, [notice_id])[notice_id]
     team = team_snapshots(settings, {notice_id: workflow})[notice_id]
     stakeholder_map = stakeholder_snapshots(settings, {notice_id: workflow})[notice_id]
+    relationship_actions = relationship_action_snapshots(settings, [notice_id])[notice_id]
     item: dict[str, object] = {
         "notice_id": str(row["id"]),
         "title": notice.title,
@@ -463,6 +467,7 @@ def get_opportunity(settings: Settings, notice_id: str) -> dict[str, object] | N
         "workflow": workflow.to_dict(),
         "team": team,
         "stakeholder_map": stakeholder_map,
+        "relationship_actions": relationship_actions,
     }
     item["change_summary"] = notice_change_summaries(settings, [notice_id]).get(
         notice_id,
@@ -637,6 +642,11 @@ def _action_queue_summary(
     team_incomplete = 0
     stakeholder_incomplete = 0
     stakeholder_critical = 0
+    relationship_action_open = 0
+    relationship_action_completed = 0
+    relationship_action_overdue = 0
+    relationship_action_unassigned = 0
+    relationship_action_outcome_pending = 0
     decision_pending = 0
     decision_overdue = 0
     task_open = 0
@@ -674,6 +684,20 @@ def _action_queue_summary(
         stakeholder_map = _mapping(item.get("stakeholder_map"))
         stakeholder_incomplete += int(stakeholder_map.get("status") == "incomplete")
         stakeholder_critical += int(stakeholder_map.get("risk_level") == "critical")
+        relationship_actions = _mapping(item.get("relationship_actions"))
+        relationship_action_open += int(relationship_actions.get("open_count") or 0)
+        relationship_action_completed += int(
+            relationship_actions.get("completed_count") or 0
+        )
+        relationship_action_overdue += int(
+            relationship_actions.get("overdue_count") or 0
+        )
+        relationship_action_unassigned += int(
+            relationship_actions.get("unassigned_count") or 0
+        )
+        relationship_action_outcome_pending += int(
+            relationship_actions.get("outcome_pending_count") or 0
+        )
         if qualification.get("status") == "ready":
             qualification_ready += 1
         else:
@@ -689,18 +713,34 @@ def _action_queue_summary(
             "lost",
             "archived",
         }
+        relationship_action_is_overdue = (
+            int(relationship_actions.get("overdue_count") or 0) > 0
+            and stage not in {"won", "lost", "archived"}
+        )
         if decision_is_overdue:
             decision_overdue += 1
-        if decision_is_overdue or task_is_overdue or review_is_overdue:
+        if (
+            decision_is_overdue
+            or task_is_overdue
+            or review_is_overdue
+            or relationship_action_is_overdue
+        ):
             decision_due_at = str(action.get("decision_due_at") or "")
             task_due_at = str(workflow.get("due_at") or item.get("bid_deadline") or "")
             change_review_due_at = str(change_review.get("required_by") or "")
+            next_relationship_action = _mapping(
+                relationship_actions.get("next_action")
+            )
+            relationship_action_due_at = str(
+                next_relationship_action.get("due_at") or ""
+            )
             issue_types = [
                 issue_type
                 for issue_type, active in (
                     ("decision", decision_is_overdue),
                     ("task", task_is_overdue),
                     ("change_review", review_is_overdue),
+                    ("relationship_action", relationship_action_is_overdue),
                 )
                 if active
             ]
@@ -708,7 +748,11 @@ def _action_queue_summary(
                 {
                     "notice_id": str(item.get("notice_id") or ""),
                     "title": str(item.get("title") or ""),
-                    "owner": str(workflow.get("owner_name") or "待分配"),
+                    "owner": str(
+                        next_relationship_action.get("assignee_member_name")
+                        or workflow.get("owner_name")
+                        or "待分配"
+                    ),
                     "stage": str(workflow.get("stage_label") or stage),
                     "issue_type": "_".join(issue_types),
                     "issue_types": issue_types,
@@ -716,6 +760,11 @@ def _action_queue_summary(
                     "task_due_at": task_due_at if task_is_overdue else "",
                     "change_review_due_at": (
                         change_review_due_at if review_is_overdue else ""
+                    ),
+                    "relationship_action_due_at": (
+                        relationship_action_due_at
+                        if relationship_action_is_overdue
+                        else ""
                     ),
                     "wait_hours": (
                         float(action.get("decision_wait_hours") or 0)
@@ -727,6 +776,8 @@ def _action_queue_summary(
                         if decision_is_overdue
                         else task_due_at
                         if task_is_overdue
+                        else relationship_action_due_at
+                        if relationship_action_is_overdue
                         else change_review_due_at
                     ),
                 }
@@ -763,6 +814,11 @@ def _action_queue_summary(
         "team_incomplete": team_incomplete,
         "stakeholder_incomplete": stakeholder_incomplete,
         "stakeholder_critical": stakeholder_critical,
+        "relationship_action_open": relationship_action_open,
+        "relationship_action_completed": relationship_action_completed,
+        "relationship_action_overdue": relationship_action_overdue,
+        "relationship_action_unassigned": relationship_action_unassigned,
+        "relationship_action_outcome_pending": relationship_action_outcome_pending,
         "decision_pending": decision_pending,
         "decision_overdue": decision_overdue,
         "task_open": task_open,

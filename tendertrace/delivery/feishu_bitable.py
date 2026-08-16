@@ -59,6 +59,10 @@ REQUIRED_FIELDS = (
     "关系健康度",
     "关键关系风险",
     "关系策略建议",
+    "关系行动概览",
+    "关系行动完成率",
+    "关系行动逾期",
+    "下一关系行动",
     "协同状态",
     "下一步行动",
     "飞书任务ID",
@@ -503,6 +507,68 @@ def update_opportunity_stakeholders_in_bitable(
     )
 
 
+def update_opportunity_relationship_actions_in_bitable(
+    settings: Settings,
+    *,
+    notice_id: str,
+    action_plan: dict[str, object],
+    http_client_factory=httpx.Client,
+) -> FeishuBitableResult:
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        return FeishuBitableResult(
+            status="skipped",
+            message=f"missing Feishu settings: {', '.join(missing_settings)}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    try:
+        with _client_context(http_client_factory, settings.feishu_timeout) as client:
+            token = _tenant_access_token(settings, client)
+            fields = _list_fields(settings, client, token)
+            action_fields = _opportunity_relationship_action_fields(action_plan)
+            missing_fields = [name for name in action_fields if name not in fields]
+            if missing_fields:
+                return FeishuBitableResult(
+                    status="failed",
+                    message=f"missing Feishu fields: {', '.join(missing_fields)}",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            record_id = _record_id_for_notice(
+                _existing_records_by_notice_id(settings, client, token),
+                notice_id,
+            )
+            if not record_id:
+                return FeishuBitableResult(
+                    status="skipped",
+                    message="opportunity has not been synced to Feishu bitable",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            updated_count = _update_record(
+                settings,
+                client,
+                token,
+                record_id,
+                action_fields,
+            )
+    except Exception as exc:
+        return FeishuBitableResult(
+            status="failed",
+            message=f"{type(exc).__name__}: {exc}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    return FeishuBitableResult(
+        status="sent",
+        record_count=updated_count,
+        updated_count=updated_count,
+        app_token=settings.feishu_bitable_app_token,
+        table_id=settings.feishu_bitable_table_id,
+    )
+
+
 def list_feishu_bitable_records(
     settings: Settings,
     *,
@@ -866,6 +932,10 @@ def _record_fields(
         "关系健康度": "0/100",
         "关键关系风险": "",
         "关系策略建议": "",
+        "关系行动概览": "未建立行动计划",
+        "关系行动完成率": "0%",
+        "关系行动逾期": "0",
+        "下一关系行动": "",
         "协同状态": "线索识别",
         "下一步行动": "",
         "飞书任务ID": "",
@@ -1043,6 +1113,41 @@ def _opportunity_stakeholder_fields(
         "关系健康度": f"{int(stakeholder_map.get('relationship_score') or 0)}/100",
         "关键关系风险": "；".join(str(item.get("message") or "") for item in risks),
         "关系策略建议": "；".join(actions),
+    }
+
+
+def _opportunity_relationship_action_fields(
+    action_plan: dict[str, object],
+) -> dict[str, object]:
+    raw_items = action_plan.get("items")
+    items = (
+        [item for item in raw_items if isinstance(item, dict)]
+        if isinstance(raw_items, list)
+        else []
+    )
+    active = [
+        item
+        for item in items
+        if str(item.get("effective_status") or item.get("status") or "")
+        in {"open", "overdue"}
+    ]
+    next_action = action_plan.get("next_action")
+    next_item = next_action if isinstance(next_action, dict) else {}
+    overview = "；".join(
+        f"{item.get('title')}（{item.get('assignee_member_name') or '待分配'} / "
+        f"截止 {item.get('due_at') or '-'}）"
+        for item in active[:6]
+    )
+    return {
+        "关系行动概览": overview or "当前没有待执行关系行动",
+        "关系行动完成率": f"{int(action_plan.get('completion_rate') or 0)}%",
+        "关系行动逾期": str(int(action_plan.get("overdue_count") or 0)),
+        "下一关系行动": (
+            f"{next_item.get('title')} · {next_item.get('assignee_member_name') or '待分配'} · "
+            f"{next_item.get('due_at') or '-'}"
+            if next_item
+            else ""
+        ),
     }
 
 

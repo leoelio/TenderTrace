@@ -129,6 +129,29 @@ type StakeholderMap = {
   }>;
 };
 
+type RelationshipActionPlan = {
+  total_count: number;
+  open_count: number;
+  completed_count: number;
+  overdue_count: number;
+  unassigned_count: number;
+  outcome_pending_count: number;
+  completion_rate: number;
+  next_action: {
+    title?: string;
+    assignee_member_name?: string;
+    due_at?: string;
+    effective_status?: string;
+  };
+  items: Array<{
+    id: string;
+    title: string;
+    assignee_member_name: string;
+    due_at: string;
+    effective_status: string;
+  }>;
+};
+
 type OpportunityWorkspace = {
   opportunity: {
     intelligence?: Intelligence;
@@ -139,6 +162,7 @@ type OpportunityWorkspace = {
     change_review?: ChangeReview;
     team?: OpportunityTeam;
     stakeholder_map?: StakeholderMap;
+    relationship_actions?: RelationshipActionPlan;
   };
 };
 
@@ -335,6 +359,7 @@ function App() {
   const changeReview = workspace?.opportunity?.change_review || null;
   const team = workspace?.opportunity?.team || null;
   const stakeholderMap = workspace?.opportunity?.stakeholder_map || null;
+  const relationshipActions = workspace?.opportunity?.relationship_actions || null;
   const availableActions = workspace?.opportunity?.action_contract?.actions || [];
   const claimAction = availableActions.find((item) => item.requires_member_identity);
   const directActions = availableActions.filter((item) => !item.requires_member_identity);
@@ -563,6 +588,8 @@ function App() {
                   <div><span>合作伙伴</span><strong>{team?.partner_count ? `${team.partner_count} 名伙伴成员` : "暂无伙伴成员"}</strong></div>
                   <div><span>关键关系</span><strong>{stakeholderMap ? `${stakeholderMap.coverage_score}% 覆盖 · ${stakeholderMap.relationship_score} 健康` : "待建立"}</strong></div>
                   <div><span>关系风险</span><strong>{stakeholderMap?.risks?.length ? `${stakeholderMap.risks.length} 项 · ${stakeholderMap.risk_level}` : "暂无风险"}</strong></div>
+                  <div><span>关系行动</span><strong>{relationshipActions ? `${relationshipActions.open_count} 待办 · ${relationshipActions.overdue_count} 逾期` : "待规划"}</strong></div>
+                  <div><span>行动闭环</span><strong>{relationshipActions ? `${relationshipActions.completion_rate}% · ${relationshipActions.outcome_pending_count} 项结果待补` : "待建立"}</strong></div>
                 </div>
                 {team?.missing_roles?.length ? (
                   <p className="workflow-reason">当前阶段待补：{team.missing_roles.join("、")}</p>
@@ -579,6 +606,11 @@ function App() {
                 ) : null}
                 {stakeholderMap?.missing_roles?.length ? (
                   <p className="workflow-reason">关键关系待补：{stakeholderMap.missing_roles.join("、")}</p>
+                ) : null}
+                {relationshipActions?.next_action?.title ? (
+                  <p className="workflow-reason">
+                    下一关系行动：{relationshipActions.next_action.title} · {relationshipActions.next_action.assignee_member_name || "待分配"} · {relationshipActions.next_action.due_at || "截止待定"}
+                  </p>
                 ) : null}
                 {workflow.decision_reason && (
                   <p className="workflow-reason">{workflow.decision_reason}{workflow.decision_by ? ` · ${workflow.decision_by}` : ""}</p>

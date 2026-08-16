@@ -100,6 +100,31 @@ class QualificationAssessmentTests(unittest.TestCase):
         self.assertEqual(assessment.status, "blocked")
         self.assertIn("关键关系覆盖", assessment.blockers["approve_bid"])
 
+    def test_overdue_relationship_action_blocks_go_until_outcome_is_recorded(self) -> None:
+        opportunity = _opportunity()
+        opportunity["relationship_actions"] = {
+            "overdue_count": 1,
+            "outcome_pending_count": 0,
+        }
+
+        overdue = assess_qualification(
+            opportunity,
+            {"owner_name": "张三"},
+            as_of=date(2026, 8, 16),
+        )
+        opportunity["relationship_actions"] = {
+            "overdue_count": 0,
+            "outcome_pending_count": 1,
+        }
+        missing_outcome = assess_qualification(
+            opportunity,
+            {"owner_name": "张三"},
+            as_of=date(2026, 8, 16),
+        )
+
+        self.assertIn("关键关系行动闭环", overdue.blockers["approve_bid"])
+        self.assertIn("关键关系行动闭环", missing_outcome.blockers["approve_bid"])
+
 
 def _opportunity() -> dict[str, object]:
     return {

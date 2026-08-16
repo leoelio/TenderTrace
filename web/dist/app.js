@@ -17,6 +17,8 @@ const state = {
   pendingOpportunityId: "",
   pendingOpportunityTeamId: "",
   pendingOpportunityStakeholderId: "",
+  pendingRelationshipActionNoticeId: "",
+  pendingRelationshipActionStakeholderId: "",
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
@@ -155,6 +157,19 @@ const el = {
   submitOpportunityStakeholderButton: document.querySelector("#submitOpportunityStakeholderButton"),
   closeOpportunityStakeholderButton: document.querySelector("#closeOpportunityStakeholderButton"),
   cancelOpportunityStakeholderButton: document.querySelector("#cancelOpportunityStakeholderButton"),
+  relationshipActionDialog: document.querySelector("#relationshipActionDialog"),
+  relationshipActionForm: document.querySelector("#relationshipActionForm"),
+  relationshipActionProject: document.querySelector("#relationshipActionProject"),
+  relationshipActionStakeholder: document.querySelector("#relationshipActionStakeholder"),
+  relationshipActionTitle: document.querySelector("#relationshipActionTitle"),
+  relationshipActionType: document.querySelector("#relationshipActionType"),
+  relationshipActionPriority: document.querySelector("#relationshipActionPriority"),
+  relationshipActionAssignee: document.querySelector("#relationshipActionAssignee"),
+  relationshipActionDueAt: document.querySelector("#relationshipActionDueAt"),
+  relationshipActionCreateFeishu: document.querySelector("#relationshipActionCreateFeishu"),
+  submitRelationshipActionButton: document.querySelector("#submitRelationshipActionButton"),
+  closeRelationshipActionButton: document.querySelector("#closeRelationshipActionButton"),
+  cancelRelationshipActionButton: document.querySelector("#cancelRelationshipActionButton"),
   subscriptionPageBody: document.querySelector("#subscriptionPageBody"),
   runHistoryBody: document.querySelector("#runHistoryBody"),
   runSearchInput: document.querySelector("#runSearchInput"),
@@ -1357,7 +1372,7 @@ function renderOpportunities(payload) {
       summaryTile("A 级机会", levels.A ?? 0),
       summaryTile("团队 / 关系待补", (actionQueue.team_incomplete || 0) + (actionQueue.stakeholder_incomplete || 0)),
       summaryTile("待管理决策", actionQueue.decision_pending ?? 0),
-      summaryTile("协同逾期", (actionQueue.decision_overdue || 0) + (actionQueue.task_overdue || 0) + (actionQueue.change_review_overdue || 0)),
+      summaryTile("协同逾期", (actionQueue.decision_overdue || 0) + (actionQueue.task_overdue || 0) + (actionQueue.relationship_action_overdue || 0) + (actionQueue.change_review_overdue || 0)),
       summaryTile("Go 通过率", actionQueue.go_rate == null ? "-" : `${actionQueue.go_rate}%`),
     ].join("");
     renderOpportunityDecisionBoard(actionQueue);
@@ -1509,6 +1524,10 @@ function openOpportunityDetail(noticeId) {
   const missingStakeholderRoles = Array.isArray(stakeholderMap.missing_roles)
     ? stakeholderMap.missing_roles
     : [];
+  const relationshipActionPlan = item.relationship_actions || {};
+  const relationshipActionItems = Array.isArray(relationshipActionPlan.items)
+    ? relationshipActionPlan.items
+    : [];
   el.opportunityDetailTitle.textContent = item.title || "机会详情";
   el.opportunityDetailContent.innerHTML = `
     <div class="opportunity-detail-hero">
@@ -1586,6 +1605,31 @@ function openOpportunityDetail(noticeId) {
       </div>
       ${stakeholderRisks.length ? `<div class="stakeholder-risk-list">${stakeholderRisks.map((risk) => `<p class="risk-${escapeHtml(risk.level || "warning")}">${escapeHtml(risk.message || "关系风险待核对")}</p>`).join("")}</div>` : ""}
       ${stakeholderActions.length ? `<div class="stakeholder-strategy-list">${stakeholderActions.map((action) => `<p>${escapeHtml(action)}</p>`).join("")}</div>` : ""}
+    </section>
+    <section class="opportunity-detail-section relationship-action-section">
+      <div class="opportunity-detail-section-title">
+        <div>
+          <h3>关系行动计划</h3>
+          <small>${escapeHtml(relationshipActionPlan.open_count || 0)} 项待办 · ${escapeHtml(relationshipActionPlan.completed_count || 0)} 项完成</small>
+        </div>
+        <div class="relationship-action-heading-actions">
+          <span class="relationship-action-health ${Number(relationshipActionPlan.overdue_count) ? "is-overdue" : ""}">${escapeHtml(relationshipActionPlan.completion_rate || 0)}% 闭环 · ${escapeHtml(relationshipActionPlan.overdue_count || 0)} 逾期</span>
+          <button class="primary-lite-button" type="button" data-add-relationship-action="${escapeHtml(item.notice_id)}">创建行动</button>
+        </div>
+      </div>
+      <div class="relationship-action-signals">
+        <span>未指派 <strong>${escapeHtml(relationshipActionPlan.unassigned_count || 0)}</strong></span>
+        <span>结果待补 <strong>${escapeHtml(relationshipActionPlan.outcome_pending_count || 0)}</strong></span>
+        <span>飞书同步 <strong>${escapeHtml(relationshipActionItems.filter((action) => action.feishu_task_guid).length)}</strong></span>
+      </div>
+      <div class="relationship-action-matrix" role="table" aria-label="客户关系行动计划">
+        <div class="relationship-action-matrix-head" role="row">
+          <span>行动 / 关键人</span><span>责任人</span><span>截止时间</span><span>状态</span><span>操作</span>
+        </div>
+        <div class="relationship-action-matrix-body">
+          ${relationshipActionItems.length ? relationshipActionItems.map((action) => opportunityRelationshipActionRow(action, item.notice_id)).join("") : '<div class="relationship-action-empty">把关系策略转成有负责人、有时限、可回写的行动</div>'}
+        </div>
+      </div>
     </section>
     ${Number(changeSummary.count) > 0 ? `
       <section class="opportunity-detail-section opportunity-change-section">
@@ -1774,7 +1818,42 @@ function opportunityStakeholderRow(stakeholder) {
       <div><strong>影响${escapeHtml(stakeholder.influence_label || "待确认")}</strong><span class="stance-${escapeHtml(stakeholder.stance || "unknown")}">${escapeHtml(stakeholder.stance_label || "待确认")}</span></div>
       <div><strong>${escapeHtml(stakeholder.relationship_label || "未建立")}</strong><small title="${escapeHtml(evidence)}">${escapeHtml(stakeholder.evidence_source || "证据待补")}</small></div>
       <div><strong>${escapeHtml(stakeholder.owner_member_name || "责任人待分配")}</strong><span>${escapeHtml(stakeholder.next_action || "行动待明确")}</span></div>
-      <div><button class="icon-close-button stakeholder-remove-button" type="button" aria-label="移除关键人" data-remove-opportunity-stakeholder="${escapeHtml(stakeholder.id || "")}" data-opportunity-id="${escapeHtml(stakeholder.notice_id || "")}">×</button></div>
+      <div class="stakeholder-row-actions">
+        <button class="icon-close-button stakeholder-action-button" type="button" aria-label="为该关键人创建行动" title="创建关系行动" data-create-stakeholder-action="${escapeHtml(stakeholder.id || "")}" data-opportunity-id="${escapeHtml(stakeholder.notice_id || "")}">+</button>
+        <button class="icon-close-button stakeholder-remove-button" type="button" aria-label="移除关键人" data-remove-opportunity-stakeholder="${escapeHtml(stakeholder.id || "")}" data-opportunity-id="${escapeHtml(stakeholder.notice_id || "")}">×</button>
+      </div>
+    </div>
+  `;
+}
+
+function opportunityRelationshipActionRow(action, noticeId) {
+  const effectiveStatus = action.effective_status || action.status || "open";
+  const statusLabel = {
+    open: "进行中",
+    overdue: "已逾期",
+    completed: action.outcome_note ? "已闭环" : "结果待补",
+    cancelled: "已取消",
+  }[effectiveStatus] || "待处理";
+  const remoteLabel = action.feishu_task_guid
+    ? `飞书 ${action.feishu_task_status === "completed" ? "已完成" : "已同步"}`
+    : action.feishu_sync_error
+      ? "飞书待重试"
+      : "仅本地";
+  const operations = [];
+  if (action.status === "open" && !action.feishu_task_guid) {
+    operations.push(`<button class="text-link" type="button" data-sync-relationship-action="${escapeHtml(action.id)}" data-opportunity-id="${escapeHtml(noticeId)}">同步飞书</button>`);
+    operations.push(`<button class="text-link" type="button" data-complete-relationship-action="${escapeHtml(action.id)}" data-opportunity-id="${escapeHtml(noticeId)}">完成</button>`);
+  }
+  if (action.status === "completed" && !action.outcome_note) {
+    operations.push(`<button class="text-link" type="button" data-complete-relationship-action="${escapeHtml(action.id)}" data-opportunity-id="${escapeHtml(noticeId)}">补结果</button>`);
+  }
+  return `
+    <div class="relationship-action-row status-${escapeHtml(effectiveStatus)}" role="row">
+      <div><strong>${escapeHtml(action.title || "未命名行动")}</strong><span>${escapeHtml(action.stakeholder_name || action.action_type_label || "通用关系行动")}</span></div>
+      <div><strong>${escapeHtml(action.assignee_member_name || "待分配")}</strong><span>${escapeHtml(action.priority_label || "普通")}优先</span></div>
+      <div><strong>${escapeHtml(compactDateTimeText(action.due_at || "-"))}</strong><span>${escapeHtml(remoteLabel)}</span></div>
+      <div><strong>${escapeHtml(statusLabel)}</strong>${action.outcome_note ? `<span title="${escapeHtml(action.outcome_note)}">结果已记录</span>` : ""}</div>
+      <div class="relationship-action-row-actions">${operations.join("") || "<span>—</span>"}</div>
     </div>
   `;
 }
@@ -1832,7 +1911,7 @@ function decisionSlaLabel(actionState) {
 }
 
 function escalationIssueLabel(item) {
-  const labels = { decision: "决策超时", task: "任务逾期", change_review: "变更复核逾期" };
+  const labels = { decision: "决策超时", task: "任务逾期", relationship_action: "关系行动逾期", change_review: "变更复核逾期" };
   const rawType = String(item.issue_type || "decision");
   const types = Array.isArray(item.issue_types)
     ? item.issue_types
@@ -1855,6 +1934,8 @@ function renderOpportunityDecisionBoard(actionQueue) {
         ${decisionBoardLine("阻断待补", actionQueue.qualification_blocked || 0)}
         ${decisionBoardLine("关键关系待补", actionQueue.stakeholder_incomplete || 0)}
         ${decisionBoardLine("关键关系高风险", actionQueue.stakeholder_critical || 0, actionQueue.stakeholder_critical ? "danger" : "")}
+        ${decisionBoardLine("关系行动逾期", actionQueue.relationship_action_overdue || 0, actionQueue.relationship_action_overdue ? "danger" : "")}
+        ${decisionBoardLine("行动结果待补", actionQueue.relationship_action_outcome_pending || 0)}
         ${decisionBoardLine("公告变更待复核", actionQueue.change_review_pending || 0, actionQueue.change_review_overdue ? "danger" : "")}
         ${decisionBoardLine("待管理决策", actionQueue.decision_pending || 0)}
         ${decisionBoardLine(`超过 ${actionQueue.decision_sla_hours || 0} 小时`, actionQueue.decision_overdue || 0, actionQueue.decision_overdue ? "danger" : "")}
@@ -1868,7 +1949,7 @@ function renderOpportunityDecisionBoard(actionQueue) {
         ${decisionPipelineValue("Hold", decisions.hold || 0, "hold")}
         ${decisionPipelineValue("No-Go", decisions.no_go || 0, "no-go")}
       </div>
-      <small>飞书任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)} · 变更复核逾期 ${escapeHtml(actionQueue.change_review_overdue || 0)}</small>
+      <small>主任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)}；关系行动：进行 ${escapeHtml(actionQueue.relationship_action_open || 0)} · 完成 ${escapeHtml(actionQueue.relationship_action_completed || 0)} · 未指派 ${escapeHtml(actionQueue.relationship_action_unassigned || 0)}</small>
     </section>
     <section>
       <span class="decision-board-kicker">协同升级队列</span>
@@ -1882,7 +1963,7 @@ function renderOpportunityDecisionBoard(actionQueue) {
             <span>${escapeHtml(item.title || "未命名机会")}</span>
             <small>${escapeHtml(escalationIssueLabel(item))} · ${escapeHtml(item.owner || "待分配")}</small>
           </button>
-        `).join("") : '<small>决策、飞书任务与公告变更复核会自动识别需要管理介入的机会。</small>'}
+        `).join("") : '<small>决策、主任务、关系行动与公告变更复核会自动识别需要管理介入的机会。</small>'}
       </div>
     </section>
   `;
@@ -2367,6 +2448,13 @@ function renderFeishuOverview(payload) {
       features.task_sync?.automation_enabled
         ? `自动 ${features.task_sync.cron} · 完成与逾期状态回写机会台账`
         : "机会页手动同步，支持完成与逾期状态回写",
+    ],
+    [
+      "客户关系行动",
+      features.relationship_actions,
+      features.relationship_actions?.automation_enabled
+        ? `自动 ${features.relationship_actions.cron} · 关键人行动完成、逾期与结果回写`
+        : "从关键人图谱生成可分派行动，支持飞书任务执行",
     ],
     [
       "来源健康告警",
@@ -3053,6 +3141,133 @@ async function removeOpportunityStakeholder(noticeId, stakeholderId) {
   showToast("关键人已移除，关系覆盖与资格门禁已刷新");
 }
 
+function openRelationshipActionDialog(noticeId, stakeholderId = "") {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (!item || !el.relationshipActionDialog) return;
+  state.pendingRelationshipActionNoticeId = noticeId;
+  state.pendingRelationshipActionStakeholderId = stakeholderId;
+  el.relationshipActionProject.textContent = item.title || "未命名机会";
+  const stakeholders = Array.isArray(item.stakeholder_map?.stakeholders)
+    ? item.stakeholder_map.stakeholders
+    : [];
+  const members = Array.isArray(item.team?.members) ? item.team.members : [];
+  el.relationshipActionStakeholder.innerHTML = [
+    '<option value="">通用关系行动</option>',
+    ...stakeholders.map(
+      (stakeholder) => `<option value="${escapeHtml(stakeholder.id || "")}">${escapeHtml(stakeholder.stakeholder_name || "未命名关键人")} · ${escapeHtml(stakeholder.role_label || "角色待确认")}</option>`,
+    ),
+  ].join("");
+  el.relationshipActionAssignee.innerHTML = [
+    '<option value="">暂未指定</option>',
+    ...members.map(
+      (member) => `<option value="${escapeHtml(member.id || "")}">${escapeHtml(member.member_name || "未命名成员")} · ${escapeHtml(member.role_label || "协作成员")}</option>`,
+    ),
+  ].join("");
+  el.relationshipActionStakeholder.value = stakeholderId;
+  el.relationshipActionDueAt.value = relationshipActionDueDefault(item.bid_deadline);
+  el.relationshipActionCreateFeishu.checked = true;
+  applyRelationshipActionStakeholderDefaults();
+  if (!el.relationshipActionDialog.open) el.relationshipActionDialog.showModal();
+}
+
+function applyRelationshipActionStakeholderDefaults() {
+  const noticeId = state.pendingRelationshipActionNoticeId;
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  const stakeholderId = el.relationshipActionStakeholder?.value || "";
+  state.pendingRelationshipActionStakeholderId = stakeholderId;
+  const stakeholders = Array.isArray(item?.stakeholder_map?.stakeholders)
+    ? item.stakeholder_map.stakeholders
+    : [];
+  const stakeholder = stakeholders.find((value) => value.id === stakeholderId);
+  el.relationshipActionTitle.value = stakeholder?.next_action || "";
+  el.relationshipActionAssignee.value = stakeholder?.owner_member_id || "";
+  const resistant = stakeholder?.stance === "resistant" || stakeholder?.role === "blocker";
+  const uncertain = stakeholder?.stance === "unknown";
+  const weak = ["unknown", "weak"].includes(stakeholder?.relationship_strength);
+  el.relationshipActionType.value = resistant ? "mitigation" : uncertain ? "validation" : "engagement";
+  el.relationshipActionPriority.value = resistant && stakeholder?.influence === "high"
+    ? "critical"
+    : stakeholder?.influence === "high" || resistant || weak
+      ? "high"
+      : "normal";
+}
+
+function relationshipActionDueDefault(bidDeadline) {
+  const now = new Date();
+  let due = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  due.setHours(17, 0, 0, 0);
+  const deadline = bidDeadline ? new Date(bidDeadline.replace(" ", "T")) : null;
+  if (deadline && !Number.isNaN(deadline.getTime()) && deadline < due) {
+    due = new Date(deadline.getTime() - 24 * 60 * 60 * 1000);
+  }
+  if (due <= now) due = new Date(now.getTime() + 60 * 60 * 1000);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}T${pad(due.getHours())}:${pad(due.getMinutes())}`;
+}
+
+function closeRelationshipActionDialog() {
+  state.pendingRelationshipActionNoticeId = "";
+  state.pendingRelationshipActionStakeholderId = "";
+  el.relationshipActionDialog?.close();
+}
+
+async function submitRelationshipAction(event) {
+  event.preventDefault();
+  const noticeId = state.pendingRelationshipActionNoticeId;
+  if (!noticeId) return;
+  if (el.submitRelationshipActionButton) el.submitRelationshipActionButton.disabled = true;
+  try {
+    const stakeholderId = el.relationshipActionStakeholder?.value || "";
+    const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/relationship-actions`, {
+      method: "POST",
+      body: JSON.stringify({
+        stakeholder_id: stakeholderId,
+        title: el.relationshipActionTitle?.value.trim() || "",
+        action_type: el.relationshipActionType?.value || "engagement",
+        priority: el.relationshipActionPriority?.value || "normal",
+        assignee_member_id: el.relationshipActionAssignee?.value || "",
+        due_at: el.relationshipActionDueAt?.value || "",
+        source_type: stakeholderId ? "stakeholder_strategy" : "manual",
+        source_ref: stakeholderId,
+        create_feishu_task: Boolean(el.relationshipActionCreateFeishu?.checked),
+        actor: "web:admin",
+      }),
+    });
+    closeRelationshipActionDialog();
+    await refreshOpportunities();
+    openOpportunityDetail(noticeId);
+    showToast(result.status === "partial" ? "行动已保存，飞书任务待重试" : "关系行动已创建并进入跟踪");
+  } finally {
+    if (el.submitRelationshipActionButton) el.submitRelationshipActionButton.disabled = false;
+  }
+}
+
+async function syncRelationshipActionTask(noticeId, actionId) {
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/relationship-actions/${encodeURIComponent(actionId)}/feishu-task`, {
+    method: "POST",
+  });
+  await refreshOpportunities();
+  openOpportunityDetail(noticeId);
+  showToast("关系行动已同步到飞书任务");
+}
+
+async function completeRelationshipAction(noticeId, actionId) {
+  const outcome = window.prompt("请记录行动结果或客户反馈，该内容将进入机会审计。", "");
+  if (outcome === null) return;
+  if (!outcome.trim()) throw new Error("完成行动前必须记录结果");
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/relationship-actions/${encodeURIComponent(actionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status: "completed",
+      outcome_note: outcome.trim(),
+      actor: "web:admin",
+    }),
+  });
+  await refreshOpportunities();
+  openOpportunityDetail(noticeId);
+  showToast("行动结果已记录，资格门禁已重新计算");
+}
+
 async function applyOpportunityAction(noticeId, action) {
   const item = state.opportunities.find((value) => value.notice_id === noticeId);
   const descriptor = item?.action_contract?.actions?.find((value) => value.action === action);
@@ -3082,7 +3297,7 @@ async function sendOpportunityEscalations() {
   });
   showToast(
     result.status === "sent"
-      ? `已发送 ${result.escalation_count} 条协同升级 · 决策 ${result.decision_count || 0} · 任务 ${result.task_count || 0} · 变更复核 ${result.change_review_count || 0}`
+      ? `已发送 ${result.escalation_count} 条协同升级 · 决策 ${result.decision_count || 0} · 主任务 ${result.task_count || 0} · 关系行动 ${result.relationship_action_count || 0} · 变更复核 ${result.change_review_count || 0}`
       : "当前没有需要发送的协同升级",
   );
 }
@@ -3129,12 +3344,13 @@ async function syncFeishuTasks() {
       body: JSON.stringify({ limit: 200 }),
     });
     await Promise.all([refreshOpportunities(), refreshFeishu()]);
-    if (!result.scanned_count) {
+    const relationship = result.relationship_actions || {};
+    if (!result.scanned_count && !relationship.scanned_count) {
       showToast("当前没有已关联的飞书任务");
       return;
     }
     showToast(
-      `已同步 ${result.scanned_count} 个任务 · 完成 ${result.completed_count} · 逾期 ${result.overdue_count} · 完成跟进 ${result.completion_notifications_sent || 0} · 逾期提醒 ${result.overdue_notifications_sent || 0} · 表格回写 ${result.bitable_updated_count || 0}${result.failed_count ? ` · 失败 ${result.failed_count}` : ""}`,
+      `主任务 ${result.scanned_count || 0} · 完成 ${result.completed_count || 0} · 逾期 ${result.overdue_count || 0}；关系行动 ${relationship.scanned_count || 0} · 完成 ${relationship.completed_count || 0} · 逾期 ${relationship.overdue_count || 0} · 结果待补 ${relationship.outcome_pending_count || 0}`,
     );
   } finally {
     if (el.syncFeishuTasksButton) el.syncFeishuTasksButton.disabled = false;
@@ -3790,6 +4006,35 @@ function bindEvents() {
       openOpportunityStakeholderDialog(addStakeholderTarget.dataset.addOpportunityStakeholder);
       return;
     }
+    const addRelationshipActionTarget = event.target.closest("[data-add-relationship-action]");
+    if (addRelationshipActionTarget) {
+      openRelationshipActionDialog(addRelationshipActionTarget.dataset.addRelationshipAction);
+      return;
+    }
+    const stakeholderActionTarget = event.target.closest("[data-create-stakeholder-action]");
+    if (stakeholderActionTarget) {
+      openRelationshipActionDialog(
+        stakeholderActionTarget.dataset.opportunityId || "",
+        stakeholderActionTarget.dataset.createStakeholderAction || "",
+      );
+      return;
+    }
+    const syncRelationshipActionTarget = event.target.closest("[data-sync-relationship-action]");
+    if (syncRelationshipActionTarget) {
+      syncRelationshipActionTask(
+        syncRelationshipActionTarget.dataset.opportunityId || "",
+        syncRelationshipActionTarget.dataset.syncRelationshipAction || "",
+      ).catch(toastError("关系行动同步失败"));
+      return;
+    }
+    const completeRelationshipActionTarget = event.target.closest("[data-complete-relationship-action]");
+    if (completeRelationshipActionTarget) {
+      completeRelationshipAction(
+        completeRelationshipActionTarget.dataset.opportunityId || "",
+        completeRelationshipActionTarget.dataset.completeRelationshipAction || "",
+      ).catch(toastError("关系行动完成失败"));
+      return;
+    }
     const removeStakeholderTarget = event.target.closest("[data-remove-opportunity-stakeholder]");
     if (removeStakeholderTarget) {
       removeOpportunityStakeholder(
@@ -3891,6 +4136,22 @@ function bindEvents() {
   );
   el.closeOpportunityStakeholderButton?.addEventListener("click", closeOpportunityStakeholderDialog);
   el.cancelOpportunityStakeholderButton?.addEventListener("click", closeOpportunityStakeholderDialog);
+  el.relationshipActionDialog?.addEventListener("click", (event) => {
+    if (event.target === el.relationshipActionDialog) closeRelationshipActionDialog();
+  });
+  el.relationshipActionDialog?.addEventListener("close", () => {
+    state.pendingRelationshipActionNoticeId = "";
+    state.pendingRelationshipActionStakeholderId = "";
+  });
+  el.relationshipActionStakeholder?.addEventListener(
+    "change",
+    applyRelationshipActionStakeholderDefaults,
+  );
+  el.relationshipActionForm?.addEventListener("submit", (event) =>
+    submitRelationshipAction(event).catch(toastError("关系行动创建失败")),
+  );
+  el.closeRelationshipActionButton?.addEventListener("click", closeRelationshipActionDialog);
+  el.cancelRelationshipActionButton?.addEventListener("click", closeRelationshipActionDialog);
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);
   el.queryInput?.addEventListener("input", () => {

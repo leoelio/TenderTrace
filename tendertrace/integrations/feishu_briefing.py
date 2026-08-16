@@ -133,6 +133,9 @@ def build_opportunity_briefing_card(
                     f"团队待补 {action_queue.get('team_incomplete') or 0} 条 · "
                     f"关系待补 {action_queue.get('stakeholder_incomplete') or 0} 条 · "
                     f"关系高风险 {action_queue.get('stakeholder_critical') or 0} 条\n"
+                    f"关系行动待办 {action_queue.get('relationship_action_open') or 0} 项 · "
+                    f"逾期 {action_queue.get('relationship_action_overdue') or 0} 项 · "
+                    f"结果待补 {action_queue.get('relationship_action_outcome_pending') or 0} 项\n"
                     f"待管理决策 {action_queue.get('decision_pending') or 0} 条 · "
                     f"决策超时 {action_queue.get('decision_overdue') or 0} 条"
                 ),
@@ -191,6 +194,8 @@ def _opportunity_elements(index: int, item: dict[str, Any]) -> list[dict[str, ob
     workflow = _mapping(item.get("workflow"))
     action_state = _mapping(item.get("action_state"))
     qualification = _mapping(item.get("qualification"))
+    relationship_actions = _mapping(item.get("relationship_actions"))
+    next_relationship_action = _mapping(relationship_actions.get("next_action"))
     level = _text(intelligence.get("level"), "D")
     score = _text(intelligence.get("score"), "0")
     owner = _text(workflow.get("owner_name"), "待认领")
@@ -227,7 +232,9 @@ def _opportunity_elements(index: int, item: dict[str, Any]) -> list[dict[str, ob
                     f"**{index}. {_text(item.get('title'), '未命名机会')}**\n"
                     f"{level} 级 · {score} 分 · 负责人 {owner} · 截止 {deadline}\n"
                     f"资格：{blockers or '已满足当前推进条件'} · "
-                    f"行动优先级 {action_state.get('priority') or 0}"
+                    f"行动优先级 {action_state.get('priority') or 0}\n"
+                    f"关系行动：{next_relationship_action.get('title') or '暂无待执行行动'} · "
+                    f"逾期 {relationship_actions.get('overdue_count') or 0} 项"
                 ),
             },
         }
