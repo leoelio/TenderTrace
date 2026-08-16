@@ -86,6 +86,8 @@ class OpportunityApiTests(unittest.TestCase):
                             "updated_count": 1,
                             "completed_count": 1,
                             "overdue_count": 0,
+                            "completion_notifications_sent": 1,
+                            "completion_notifications_skipped": 0,
                             "failed_count": 0,
                             "failures": [],
                         },
@@ -178,6 +180,7 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 409)
         self.assertEqual(task_sync.status_code, 200)
         self.assertEqual(task_sync.json()["completed_count"], 1)
+        self.assertEqual(task_sync.json()["completion_notifications_sent"], 1)
         self.assertEqual(users.status_code, 200)
         self.assertEqual(users.json()["items"][0]["open_id"], "ou_owner")
         self.assertIn("当前阶段", blocked.json()["detail"]["reasons"][0])

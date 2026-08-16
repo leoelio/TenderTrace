@@ -66,8 +66,8 @@ class DeliveryDocsTests(unittest.TestCase):
 
     def test_readme_matches_current_stage(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
-        self.assertIn("Current stage: P37", readme)
-        self.assertIn("291 unit tests pass", readme)
+        self.assertIn("Current stage: P38", readme)
+        self.assertIn("292 unit tests pass", readme)
         self.assertIn("acceptance-check", readme)
 
     def test_delivery_docs_do_not_regress_to_stale_evidence(self) -> None:
