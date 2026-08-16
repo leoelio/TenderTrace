@@ -6,6 +6,7 @@ import hashlib
 import json
 from typing import Any, Callable
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
@@ -29,6 +30,8 @@ class TaskSyncResult:
     bitable_failed_count: int
     completion_notifications_sent: int
     completion_notifications_skipped: int
+    overdue_notifications_sent: int
+    overdue_notifications_skipped: int
     failed_count: int
     failures: tuple[dict[str, str], ...] = ()
 
@@ -68,6 +71,8 @@ def sync_feishu_tasks(
             bitable_failed_count=0,
             completion_notifications_sent=0,
             completion_notifications_skipped=0,
+            overdue_notifications_sent=0,
+            overdue_notifications_skipped=0,
             failed_count=0,
         )
 
@@ -79,6 +84,8 @@ def sync_feishu_tasks(
     bitable_failed_count = 0
     completion_notifications_sent = 0
     completion_notifications_skipped = 0
+    overdue_notifications_sent = 0
+    overdue_notifications_skipped = 0
     failures: list[dict[str, str]] = []
     for row in rows:
         notice_id = str(row["notice_id"])
@@ -152,6 +159,24 @@ def sync_feishu_tasks(
                         "error": f"{type(exc).__name__}: {exc}"[:500],
                     }
                 )
+        elif status == "overdue":
+            try:
+                notification_status = _send_overdue_follow_up(
+                    settings,
+                    updated,
+                    client=feishu,
+                    now=reference_time,
+                )
+                overdue_notifications_sent += int(notification_status == "sent")
+                overdue_notifications_skipped += int(notification_status == "skipped")
+            except (FeishuError, ValueError, TypeError) as exc:
+                failures.append(
+                    {
+                        "notice_id": notice_id,
+                        "stage": "overdue_notify",
+                        "error": f"{type(exc).__name__}: {exc}"[:500],
+                    }
+                )
     return TaskSyncResult(
         status="partial" if failures else "finished",
         scanned_count=len(rows),
@@ -162,6 +187,8 @@ def sync_feishu_tasks(
         bitable_failed_count=bitable_failed_count,
         completion_notifications_sent=completion_notifications_sent,
         completion_notifications_skipped=completion_notifications_skipped,
+        overdue_notifications_sent=overdue_notifications_sent,
+        overdue_notifications_skipped=overdue_notifications_skipped,
         failed_count=len(failures),
         failures=tuple(failures),
     )
@@ -173,6 +200,64 @@ def _send_completion_follow_up(
     *,
     client: FeishuClient,
 ) -> str:
+    return _send_task_follow_up(
+        settings,
+        workflow,
+        client=client,
+        artifact_type="opportunity_task_completion",
+        artifact_key_builder=lambda receive_id, receive_id_type: _completion_artifact_key(
+            workflow,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        ),
+        header_template="green",
+        notice=(
+            "**跟进任务已完成，机会尚未结束。**\n"
+            "请结合当前证据与资格门禁，确认下一阶段动作。"
+        ),
+        next_action=_completion_next_action(workflow),
+    )
+
+
+def _send_overdue_follow_up(
+    settings: Settings,
+    workflow: OpportunityWorkflow,
+    *,
+    client: FeishuClient,
+    now: datetime,
+) -> str:
+    reminder_date = now.astimezone(ZoneInfo(settings.timezone)).date().isoformat()
+    return _send_task_follow_up(
+        settings,
+        workflow,
+        client=client,
+        artifact_type="opportunity_task_overdue",
+        artifact_key_builder=lambda receive_id, receive_id_type: _overdue_artifact_key(
+            workflow,
+            reminder_date=reminder_date,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        ),
+        header_template="red",
+        notice=(
+            "**跟进任务已逾期，机会处理时效正在下降。**\n"
+            "请补齐当前任务，并根据证据推进或调整机会决策。"
+        ),
+        next_action=_overdue_next_action(workflow),
+    )
+
+
+def _send_task_follow_up(
+    settings: Settings,
+    workflow: OpportunityWorkflow,
+    *,
+    client: FeishuClient,
+    artifact_type: str,
+    artifact_key_builder: Callable[[str, str], str],
+    header_template: str,
+    notice: str,
+    next_action: str,
+) -> str:
     if workflow.stage in {"won", "lost", "archived"}:
         return "skipped"
     if workflow.owner_open_id:
@@ -181,12 +266,9 @@ def _send_completion_follow_up(
         receive_id, receive_id_type = resolve_feishu_receiver(settings)
     if not receive_id:
         return "skipped"
-    artifact_key = _completion_artifact_key(
-        workflow,
-        receive_id=receive_id,
-        receive_id_type=receive_id_type or "open_id",
-    )
-    if _completion_already_sent(settings, artifact_key):
+    normalized_receive_type = receive_id_type or "open_id"
+    artifact_key = artifact_key_builder(receive_id, normalized_receive_type)
+    if _notification_already_sent(settings, artifact_type, artifact_key):
         return "skipped"
     opportunity = get_opportunity(settings, workflow.notice_id)
     if opportunity is None:
@@ -194,19 +276,16 @@ def _send_completion_follow_up(
     card = build_opportunity_card(
         opportunity,
         workflow,
-        next_action=_completion_next_action(workflow),
+        next_action=next_action,
     )
-    card["header"]["template"] = "green"
+    card["header"]["template"] = header_template
     card["elements"].insert(
         0,
         {
             "tag": "div",
             "text": {
                 "tag": "lark_md",
-                "content": (
-                    "**跟进任务已完成，机会尚未结束。**\n"
-                    "请结合当前证据与资格门禁，确认下一阶段动作。"
-                ),
+                "content": notice,
             },
         },
     )
@@ -214,13 +293,13 @@ def _send_completion_follow_up(
         response = client.send_card(
             card,
             receive_id=receive_id,
-            receive_id_type=receive_id_type,
+            receive_id_type=normalized_receive_type,
         )
         message_id = _nested_string(response, "data", "message_id")
         record_delivery_attempt(
             settings,
             channel="feishu",
-            artifact_type="opportunity_task_completion",
+            artifact_type=artifact_type,
             artifact_key=artifact_key,
             status="sent",
             external_id=message_id or None,
@@ -229,7 +308,7 @@ def _send_completion_follow_up(
         record_delivery_attempt(
             settings,
             channel="feishu",
-            artifact_type="opportunity_task_completion",
+            artifact_type=artifact_type,
             artifact_key=artifact_key,
             status="failed",
             error=str(exc),
@@ -245,6 +324,15 @@ def _completion_next_action(workflow: OpportunityWorkflow) -> str:
         "pursuing": "完成 Go、Hold 或 No-Go 决策",
         "bidding": "跟踪投标交付与中标结果",
     }.get(workflow.stage, "复核当前机会状态")
+
+
+def _overdue_next_action(workflow: OpportunityWorkflow) -> str:
+    return {
+        "identified": "尽快认领机会并确认责任边界",
+        "qualifying": "补齐机会确认任务与关键事实",
+        "pursuing": "完成策略任务并提交 Go、Hold 或 No-Go 决策",
+        "bidding": "处理逾期投标任务并复核交付风险",
+    }.get(workflow.stage, "处理逾期任务并复核机会状态")
 
 
 def _completion_artifact_key(
@@ -266,19 +354,43 @@ def _completion_artifact_key(
     return f"opportunity_task_completion:{digest}"
 
 
-def _completion_already_sent(settings: Settings, artifact_key: str) -> bool:
+def _overdue_artifact_key(
+    workflow: OpportunityWorkflow,
+    *,
+    reminder_date: str,
+    receive_id: str,
+    receive_id_type: str,
+) -> str:
+    raw = "|".join(
+        (
+            workflow.notice_id,
+            workflow.feishu_task_guid,
+            reminder_date,
+            receive_id_type,
+            receive_id,
+        )
+    )
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+    return f"opportunity_task_overdue:{digest}"
+
+
+def _notification_already_sent(
+    settings: Settings,
+    artifact_type: str,
+    artifact_key: str,
+) -> bool:
     with connection(settings) as conn:
         row = conn.execute(
             """
             SELECT 1
             FROM delivery_attempts
             WHERE channel = 'feishu'
-              AND artifact_type = 'opportunity_task_completion'
+              AND artifact_type = ?
               AND artifact_key = ?
               AND status = 'sent'
             LIMIT 1
             """,
-            (artifact_key,),
+            (artifact_type, artifact_key),
         ).fetchone()
     return row is not None
 

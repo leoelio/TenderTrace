@@ -112,6 +112,77 @@ class FeishuTaskSyncTests(unittest.TestCase):
         self.assertIn("跟进任务已完成", str(card))
         self.assertIn("'action': 'pursue'", str(card))
 
+    def test_overdue_task_reminds_owner_once_per_day_and_skips_terminal_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_notice(settings, "notice-overdue-reminder")
+            update_workflow(
+                settings,
+                "notice-overdue-reminder",
+                stage="pursuing",
+                owner_open_id="ou_owner",
+                owner_name="张三",
+                feishu_task_guid="task-overdue-reminder",
+            )
+            client = _TaskClient(
+                {
+                    "task-overdue-reminder": {
+                        "completed_at": "0",
+                        "due": {"timestamp": "1786752000000"},
+                    }
+                }
+            )
+            day_one = datetime(2026, 8, 16, 12, tzinfo=timezone.utc)
+            day_two = datetime(2026, 8, 17, 12, tzinfo=timezone.utc)
+
+            first = sync_feishu_tasks(
+                settings,
+                client=client,
+                bitable_updater=lambda *_args, **_kwargs: _BitableResult(),
+                now=day_one,
+            )
+            second = sync_feishu_tasks(
+                settings,
+                client=client,
+                bitable_updater=lambda *_args, **_kwargs: _BitableResult(),
+                now=day_one,
+            )
+            third = sync_feishu_tasks(
+                settings,
+                client=client,
+                bitable_updater=lambda *_args, **_kwargs: _BitableResult(),
+                now=day_two,
+            )
+            update_workflow(settings, "notice-overdue-reminder", stage="archived")
+            terminal = sync_feishu_tasks(
+                settings,
+                client=client,
+                bitable_updater=lambda *_args, **_kwargs: _BitableResult(),
+                now=datetime(2026, 8, 18, 12, tzinfo=timezone.utc),
+            )
+            with connection(settings) as conn:
+                delivery_count = conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM delivery_attempts
+                    WHERE artifact_type = 'opportunity_task_overdue'
+                      AND status = 'sent'
+                    """
+                ).fetchone()[0]
+
+        self.assertEqual(first.overdue_notifications_sent, 1)
+        self.assertEqual(second.overdue_notifications_skipped, 1)
+        self.assertEqual(third.overdue_notifications_sent, 1)
+        self.assertEqual(terminal.overdue_notifications_skipped, 1)
+        self.assertEqual(delivery_count, 2)
+        self.assertEqual(len(client.sent_cards), 2)
+        card, receive_id, receive_id_type = client.sent_cards[-1]
+        self.assertEqual((receive_id, receive_id_type), ("ou_owner", "open_id"))
+        self.assertEqual(card["header"]["template"], "red")
+        self.assertIn("跟进任务已逾期", str(card))
+        self.assertIn("Go、Hold 或 No-Go", str(card))
+
     def test_sync_updates_completed_open_and_overdue_tasks_without_duplicates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

@@ -2710,7 +2710,7 @@ async function syncFeishuTasks() {
       return;
     }
     showToast(
-      `已同步 ${result.scanned_count} 个任务 · 完成 ${result.completed_count} · 逾期 ${result.overdue_count} · 表格回写 ${result.bitable_updated_count || 0}${result.failed_count ? ` · 失败 ${result.failed_count}` : ""}`,
+      `已同步 ${result.scanned_count} 个任务 · 完成 ${result.completed_count} · 逾期 ${result.overdue_count} · 完成跟进 ${result.completion_notifications_sent || 0} · 逾期提醒 ${result.overdue_notifications_sent || 0} · 表格回写 ${result.bitable_updated_count || 0}${result.failed_count ? ` · 失败 ${result.failed_count}` : ""}`,
     );
   } finally {
     if (el.syncFeishuTasksButton) el.syncFeishuTasksButton.disabled = false;

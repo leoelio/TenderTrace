@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P38</strong> · Task Completion Loop · Decision Follow-up · Enterprise Glass UI
+  <strong>Current stage: P39</strong> · Overdue Task Control · Owner Reminders · Enterprise Glass UI
 </p>
 
 ---
@@ -36,7 +36,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经预检后进入本地公告库、FTS 和证据链；系统核验公网原文、保存内容哈希与正文摘录，并回写稳定指纹、入库及核验状态。系统自身同步记录不会循环导入。
-- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；点击“认领机会”会为点击者创建或复用幂等 Task v2，并按配置同步截止日程。任务完成后，系统向负责人发送下一步机会卡，继续资格确认或 Go/Hold/No-Go 决策；卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。
+- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；点击“认领机会”会为点击者创建或复用幂等 Task v2，并按配置同步截止日程。任务完成后，系统向负责人发送下一步机会卡；任务逾期时按天定向催办，继续资格确认或 Go/Hold/No-Go 决策。卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。
 - 飞书接收目标：连接中心同时读取机器人可见会话和应用授权通讯录成员，可将群聊或成员设为统一默认目标，报告、周报、经营晨报和来源告警复用该偏好。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
@@ -369,6 +369,8 @@ python -m tendertrace embed-notices
 
 启用 `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` 后，Task v2 完成状态不仅会回写本地 workflow 与多维表格，还会向机会负责人发送阶段合法的下一步机会卡。系统不会把“完成跟进任务”误判为“机会已完成”，也不会绕过资格门禁自动推进阶段。完成通知按任务完成事件与接收人生成不可逆指纹并写入投递账本：失败会在下次同步重试，成功后不重复发送；没有负责人时才回退到统一飞书接收目标。
 
+仍未完成的逾期任务会向负责人发送红色机会卡，展示当前阶段合法动作和证据门禁。逾期催办按“任务、接收人、本地日期”生成不可逆指纹，同一天只发送一次，发送失败仍可在后续同步重试；跨天持续逾期才再次提醒。中标、未中标或已归档机会不会继续催办。任务同步 API 与 Web 操作反馈分别返回完成跟进和逾期提醒的发送、跳过数量。
+
 机会页分配负责人时会读取飞书应用当前获授权的通讯录成员。应用需要开通通讯录基本信息读取权限并配置可访问的数据范围；选择成员后，新任务会直接设置 `assignee`，已有未指派任务会通过 Task v2 成员接口补充负责人，同时回写本地 workflow 与多维表格。通讯录不可用时界面会明确降级为仅记录负责人姓名，任务保持未指派，不会伪造成员绑定。
 
 机会经营晨报默认关闭自动发送。设置 `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` 汇总本地真实机会与来源健康记录并投递到默认会话；Web 机会情报页也可手动触发。卡片中的认领、确认、Go 和投标准备动作复用同一套状态图、资格门禁和回调审计，不维护第二份流程状态。
@@ -475,8 +477,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P38
-- 292 unit tests pass, including 426 subtests.
+- Current stage: P39
+- 293 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -521,7 +523,7 @@ The current architecture is local-first: background ingestion continuously store
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
-- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream. Claiming from a card creates or reuses Task v2 and assigns the clicking member; task completion sends the owner a stage-valid follow-up card for qualification or Go/Hold/No-Go decisions.
+- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream. Claiming creates or reuses Task v2 and assigns the clicking member; completion sends a stage-valid follow-up card, while overdue tasks produce a daily owner reminder until resolved or the opportunity becomes terminal.
 - A unified Feishu delivery target picker that combines bot-visible chats and authorized directory members; reports, weekly digests, operations briefings, and source alerts reuse the selected target.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
@@ -817,6 +819,8 @@ The Claim action first passes the shared workflow and qualification gates, then 
 
 When `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` is enabled, a completed Task v2 is synchronized to the local workflow and Bitable, then produces a stage-valid follow-up card for the opportunity owner. Completing a follow-up task never closes the opportunity or bypasses qualification gates. Delivery uses an irreversible, receiver-scoped completion fingerprint: failed sends retry during the next synchronization, successful sends are not duplicated, and the shared Feishu target is used only when no owner is available.
 
+An incomplete overdue task produces a red, stage-valid card for its owner. Its irreversible fingerprint is scoped by task, receiver, and local date, so repeated synchronization sends at most one reminder per day, failed delivery remains retryable, and a task that is still overdue on a later date can be raised again. Won, lost, and archived opportunities remain silent. The task-sync API and Web feedback expose sent and skipped counts for completion follow-ups and overdue reminders separately.
+
 The Opportunity view resolves owners from the Feishu app's authorized contact scope. Grant basic contact read permission and configure the app's contact data scope. A selected member becomes the task `assignee`; an existing unassigned Task v2 task receives the member without creating a duplicate, and the owner is synchronized to the local workflow and Bitable. If the directory is unavailable, the UI explicitly falls back to recording the owner's name only and leaves the task unassigned.
 
 Scheduled opportunity briefings are disabled by default. Set `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` and configure `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` to deliver a state-deduplicated weekday briefing to the default chat. The Web Opportunity Intelligence view can also trigger it manually. Claim, qualify, Go, and bid-preparation buttons reuse the same workflow graph, qualification gates, callback handler, and audit stream as the Web UI.
@@ -917,8 +921,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P38
-- 292 unit tests pass, including 426 subtests.
+- Current stage: P39
+- 293 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
