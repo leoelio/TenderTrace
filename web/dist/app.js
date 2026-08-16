@@ -1095,11 +1095,11 @@ function renderSourceList(target, items) {
   target.className = "source-list source-grid";
   target.innerHTML = items
     .map((item) => {
-      const site = escapeHtml(item.site || "-");
-      const engine = escapeHtml(item.engine || "-");
       const access = sourceAccessStatus(item);
       const health = item.health || {};
       const rules = item.discovery_rules || {};
+      const site = escapeHtml(rules.authority || item.site || "-");
+      const engine = escapeHtml(item.engine || "-");
       const routes = Array.isArray(item.routes) ? item.routes : [];
       const validation = item.validation ? `<span>validation: ${escapeHtml(item.validation)}</span>` : "";
       const counts =

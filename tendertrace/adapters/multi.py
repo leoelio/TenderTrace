@@ -11,11 +11,13 @@ from tendertrace.adapters.ebrd import EbrdAdapter
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
 from tendertrace.adapters.idb import IdbAdapter
+from tendertrace.adapters.pbc_procurement import PbcProcurementAdapter
 from tendertrace.adapters.prozorro import ProzorroAdapter
 from tendertrace.adapters.ted import TedAdapter
 from tendertrace.adapters.uk_ocds import ContractsFinderAdapter, FindTenderAdapter
 from tendertrace.adapters.ungm import UngmAdapter
 from tendertrace.adapters.worldbank import WorldBankAdapter
+from tendertrace.adapters.zzcg import ZzcgAdapter
 from tendertrace.config import Settings
 
 
@@ -63,6 +65,8 @@ class MultiSourceAdapter:
         adapters: list[SourceAdapter] = [
             CcgpAdapter(),
             GgzyAdapter(),
+            PbcProcurementAdapter(),
+            ZzcgAdapter(),
             TedAdapter(),
             UngmAdapter(),
             WorldBankAdapter(),

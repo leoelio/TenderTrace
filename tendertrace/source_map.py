@@ -11,6 +11,10 @@ from tendertrace.adapters.ebrd import EBRD_NOTICES_URL
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.idb import IDB_DATASTORE_API
+from tendertrace.adapters.pbc_procurement import (
+    PBC_PROCUREMENT_API,
+    PBC_PROCUREMENT_LIST_URL,
+)
 from tendertrace.adapters.prozorro import PROZORRO_FEED_URL, PROZORRO_PORTAL_URL
 from tendertrace.adapters.ted import TED_SEARCH_API
 from tendertrace.adapters.uk_ocds import (
@@ -21,6 +25,7 @@ from tendertrace.adapters.uk_ocds import (
 )
 from tendertrace.adapters.ungm import UNGM_SEARCH_URL
 from tendertrace.adapters.worldbank import WORLD_BANK_API
+from tendertrace.adapters.zzcg import ZZCG_LIST_URLS
 from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.vault.qianlima import QIANLIMA_MEMBER_SEARCH_URL, QianlimaSessionVault
@@ -94,6 +99,56 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "source_class": "official_primary",
                 "allow": [r"/information/deal/html/.+\.html$", r"\.(pdf|docx?|xlsx?|zip|rar)$"],
                 "deny": [],
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="pbc_procurement",
+            engine="official-json-api+detail",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="pbc-procurement-api",
+                    url=PBC_PROCUREMENT_API,
+                    kind="api",
+                ),
+                SourceMapRoute(
+                    name="pbc-procurement-list",
+                    url=PBC_PROCUREMENT_LIST_URL,
+                    kind="list",
+                ),
+            ],
+            health=health.get("pbc_procurement", {}),
+            discovery_rules={
+                "authority": "中国人民银行集中采购中心",
+                "source_class": "official_primary",
+                "coverage": "总行及人民银行系统采购公告、结果和变更",
+                "allow": [r"/freecms/site/.+/ggxx/info/.+\.html$"],
+                "deny": [r"/login", r"/zcfg/"],
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="zzcg",
+            engine="official-static-html",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name=f"zzcg-list-{index + 1}",
+                    url=url,
+                    kind="list",
+                )
+                for index, url in enumerate(ZZCG_LIST_URLS)
+            ],
+            health=health.get("zzcg", {}),
+            discovery_rules={
+                "authority": "中共中央直属机关采购中心",
+                "source_class": "official_primary",
+                "coverage": "中直机关采购公告和结果公告",
+                "allow": [r"/(zbgg|jggg)/\d+\.jhtml$"],
+                "deny": [r"/tongzhi/", r"/fagui/"],
                 "same_domain": True,
             },
         ),

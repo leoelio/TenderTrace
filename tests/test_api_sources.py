@@ -64,6 +64,8 @@ class SourcesApiTests(unittest.TestCase):
             [
                 "ccgp",
                 "ggzy",
+                "pbc_procurement",
+                "zzcg",
                 "ted",
                 "ungm",
                 "worldbank",
@@ -108,7 +110,7 @@ class SourcesApiTests(unittest.TestCase):
         self.assertEqual(incident_sync_response.json()["status"], "skipped")
         self.assertEqual(source_map_response.status_code, 200)
         source_map_payload = source_map_response.json()
-        self.assertEqual(source_map_payload["source_count"], 14)
+        self.assertEqual(source_map_payload["source_count"], 16)
         self.assertFalse(source_map_payload["login_source_ready"])
         self.assertTrue(source_map_payload["items"][-1]["requires_login"])
         self.assertEqual(model_response.status_code, 200)
