@@ -14,9 +14,57 @@ from tendertrace.integrations.feishu_card_actions import (
 )
 from tendertrace.memory import build_weekly_report, record_activity
 from tendertrace.scheduling.subscriptions import list_subscriptions
+from tendertrace.workflow import get_workflow, update_workflow
 
 
 class FeishuCardActionTests(unittest.TestCase):
+    def test_claim_creates_and_then_reuses_assigned_collaboration_task(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_notice(settings)
+            calls: list[tuple[str, str]] = []
+
+            def start_collaboration(opportunity, owner_open_id, owner_name):
+                calls.append((owner_open_id, owner_name))
+                workflow = get_workflow(settings, str(opportunity["notice_id"]))
+                if not workflow.feishu_task_guid:
+                    workflow = update_workflow(
+                        settings,
+                        str(opportunity["notice_id"]),
+                        feishu_task_guid="task-guid",
+                        feishu_task_status="open",
+                        feishu_event_id="event-id",
+                    )
+                return SimpleNamespace(
+                    workflow=workflow,
+                    task_guid="task-guid",
+                    task_assigned=True,
+                    event_id="event-id",
+                    bitable_status="sent",
+                )
+
+            first = process_opportunity_card_action(
+                settings,
+                _payload("claim"),
+                start_collaboration=start_collaboration,
+            )
+            second = process_opportunity_card_action(
+                settings,
+                _payload("claim"),
+                start_collaboration=start_collaboration,
+            )
+
+        self.assertEqual(calls, [("ou_owner", "张三"), ("ou_owner", "张三")])
+        self.assertEqual(first["collaboration"]["task_status"], "created")
+        self.assertTrue(first["collaboration"]["task_assigned"])
+        self.assertEqual(first["collaboration"]["calendar_status"], "created")
+        self.assertEqual(second["collaboration"]["task_status"], "reused")
+        self.assertEqual(second["collaboration"]["calendar_status"], "reused")
+        self.assertNotIn("task-guid", str(first["collaboration"]))
+        self.assertNotIn("event-id", str(first["collaboration"]))
+        self.assertIn("任务已创建并分派给你", first["toast"]["content"])
+
     def test_shared_handler_updates_workflow_and_returns_refreshed_card(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

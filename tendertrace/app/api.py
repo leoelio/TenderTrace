@@ -167,6 +167,20 @@ def create_app():
             receive_id_type=receive_id_type,
         )
 
+    def start_adaptive_opportunity_collaboration(
+        opportunity: dict[str, object],
+        owner_open_id: str,
+        owner_name: str,
+    ):
+        return start_opportunity_collaboration(
+            settings,
+            opportunity,
+            owner_open_id=owner_open_id,
+            owner_name=owner_name,
+            create_task=True,
+            create_calendar_event=True,
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=(
@@ -852,6 +866,7 @@ def create_app():
                 schedule_ingest=schedule_ingest_callback,
                 schedule_subscription=schedule_user_callback,
                 send_opportunity_briefing=send_adaptive_opportunity_briefing,
+                start_collaboration=start_adaptive_opportunity_collaboration,
             )
         except OpportunityNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

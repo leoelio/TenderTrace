@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tendertrace.config import Settings
 from tendertrace.db import connection
@@ -27,6 +29,89 @@ class FakeFeishuClient:
 
 
 class FeishuBotTests(unittest.TestCase):
+    def test_http_card_claim_starts_assigned_collaboration_task(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app import api as api_module
+        from tendertrace.db import init_db
+        from tendertrace.workflow import update_workflow
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = {
+                "TENDERTRACE_DB_PATH": str(root / "data" / "db.sqlite3"),
+                "TENDERTRACE_OUTPUTS_DIR": str(root / "outputs"),
+                "TENDERTRACE_OUTBOX_DIR": str(root / "outbox"),
+                "TENDERTRACE_SNAPSHOTS_DIR": str(root / "snapshots"),
+                "TENDERTRACE_TRACES_DIR": str(root / "traces"),
+                "TENDERTRACE_SECRETS_DIR": str(root / "secrets"),
+                "TENDERTRACE_SCHEDULER_ENABLED": "false",
+                "FEISHU_ENABLED": "true",
+                "FEISHU_CALLBACK_VERIFICATION_TOKEN": "verification-token",
+            }
+            previous = {key: os.environ.get(key) for key in values}
+            os.environ.update(values)
+            try:
+                settings = Settings.load()
+                init_db(settings)
+                _insert_card_notice(settings)
+                owners: list[tuple[str, str]] = []
+
+                def fake_collaboration(runtime_settings, opportunity, **kwargs):
+                    owners.append((kwargs["owner_open_id"], kwargs["owner_name"]))
+                    workflow = update_workflow(
+                        runtime_settings,
+                        str(opportunity["notice_id"]),
+                        feishu_task_guid="task-guid",
+                        feishu_task_status="open",
+                    )
+                    return SimpleNamespace(
+                        workflow=workflow,
+                        task_guid="task-guid",
+                        task_assigned=True,
+                        event_id="",
+                        bitable_status="sent",
+                    )
+
+                with patch.object(
+                    api_module,
+                    "start_opportunity_collaboration",
+                    side_effect=fake_collaboration,
+                ):
+                    with TestClient(api_module.create_app()) as client:
+                        response = client.post(
+                            "/api/integrations/feishu/callback",
+                            json={
+                                "header": {
+                                    "token": "verification-token",
+                                    "event_id": "claim-event",
+                                },
+                                "event": {
+                                    "operator": {
+                                        "name": "张三",
+                                        "operator_id": {"open_id": "ou_owner"},
+                                    },
+                                    "action": {
+                                        "value": {
+                                            "action": "claim",
+                                            "notice_id": "callback-notice",
+                                        }
+                                    },
+                                },
+                            },
+                        )
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(owners, [("ou_owner", "张三")])
+        self.assertEqual(response.json()["collaboration"]["task_status"], "created")
+        self.assertTrue(response.json()["collaboration"]["task_assigned"])
+
     def test_listener_registers_message_and_card_action_callbacks(self) -> None:
         source = Path("tendertrace/integrations/feishu_bot.py").read_text(encoding="utf-8")
 
@@ -228,6 +313,29 @@ def _event_payload(event_id: str, message_id: str, text: str) -> dict:
             },
         },
     }
+
+
+def _insert_card_notice(settings: Settings) -> None:
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO notices(
+                id, source_site, source_url, canonical_url, title, purchaser,
+                publish_time, content_text, fields_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "callback-notice",
+                "ccgp",
+                "https://example.com/callback-notice",
+                "https://example.com/callback-notice",
+                "服务器采购项目",
+                "示例采购人",
+                "2026-08-16",
+                "服务器采购项目，采购人为示例采购人。",
+                '{"bid_deadline":"2026-08-30 17:00"}',
+            ),
+        )
 
 
 if __name__ == "__main__":

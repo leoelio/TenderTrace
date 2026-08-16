@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P36</strong> · Opportunity Advice Automation · Chat-scoped Briefings · Enterprise Glass UI
+  <strong>Current stage: P37</strong> · Claim-to-Task Automation · Owner Assignment · Enterprise Glass UI
 </p>
 
 ---
@@ -36,7 +36,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 邮件投递：可选 SMTP 通道，将订阅/运行生成的 Word 作为附件发送。
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经预检后进入本地公告库、FTS 和证据链；系统核验公网原文、保存内容哈希与正文摘录，并回写稳定指纹、入库及核验状态。系统自身同步记录不会循环导入。
-- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。飞书周报中的知识库建议可直接创建并调度后台采集计划。
+- 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；点击“认领机会”会为点击者创建或复用幂等 Task v2，并按配置同步截止日程，卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。
 - 飞书接收目标：连接中心同时读取机器人可见会话和应用授权通讯录成员，可将群聊或成员设为统一默认目标，报告、周报、经营晨报和来源告警复用该偏好。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
@@ -365,6 +365,8 @@ python -m tendertrace embed-notices
 
 机会协同使用公告 ID 生成任务 `client_token` 与日程 `idempotency_key`，重复同步不会重复创建任务或日程。启用截止日程需配置 `FEISHU_CALENDAR_ID`；启用卡片动作需配置 `FEISHU_CALLBACK_VERIFICATION_TOKEN`，并在飞书开发者后台把可公网访问的 `/api/integrations/feishu/callback` 注册为回调地址。本地 `127.0.0.1` 不能直接接收飞书云端回调。
 
+机会经营晨报或单机会卡片中的“认领机会”会先通过本地状态图与资格门禁，再以点击者 `open_id` 创建并分派 Task v2；已有任务会直接复用并补充分派，不产生重复待办。响应与活动账本只保存创建/复用、分派和日程状态，不在自动化摘要中暴露任务或日程标识。
+
 机会页分配负责人时会读取飞书应用当前获授权的通讯录成员。应用需要开通通讯录基本信息读取权限并配置可访问的数据范围；选择成员后，新任务会直接设置 `assignee`，已有未指派任务会通过 Task v2 成员接口补充负责人，同时回写本地 workflow 与多维表格。通讯录不可用时界面会明确降级为仅记录负责人姓名，任务保持未指派，不会伪造成员绑定。
 
 机会经营晨报默认关闭自动发送。设置 `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` 后，APScheduler 按 `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` 汇总本地真实机会与来源健康记录并投递到默认会话；Web 机会情报页也可手动触发。卡片中的认领、确认、Go 和投标准备动作复用同一套状态图、资格门禁和回调审计，不维护第二份流程状态。
@@ -471,8 +473,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P36
-- 289 unit tests pass, including 426 subtests.
+- Current stage: P37
+- 291 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -517,7 +519,7 @@ The current architecture is local-first: background ingestion continuously store
 - Optional SMTP email delivery for generated Word reports.
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
-- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream. Weekly-card advice can create adaptive ingestion or bind a daily incremental report subscription to the chat where the action occurred.
+- Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream. Claiming from a card creates or reuses Task v2, assigns the clicking member, and synchronizes the same workflow to Bitable.
 - A unified Feishu delivery target picker that combines bot-visible chats and authorized directory members; reports, weekly digests, operations briefings, and source alerts reuse the selected target.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
@@ -809,6 +811,8 @@ The Feishu connection center can select a default chat from the bot's visible ch
 
 Task `client_token` and calendar `idempotency_key` values are derived from the notice ID, so repeated synchronization does not duplicate those artifacts. Set `FEISHU_CALENDAR_ID` to enable deadline events. Set `FEISHU_CALLBACK_VERIFICATION_TOKEN` and register the publicly reachable `/api/integrations/feishu/callback` endpoint in Feishu Developer Console to enable card actions; a local `127.0.0.1` URL is not reachable from Feishu Cloud.
 
+The Claim action first passes the shared workflow and qualification gates, then creates or reuses Task v2 with the clicking member's `open_id` as assignee. Existing tasks are assigned instead of duplicated. Automation summaries expose only created/reused, assignment, and calendar status, without returning task or event identifiers.
+
 The Opportunity view resolves owners from the Feishu app's authorized contact scope. Grant basic contact read permission and configure the app's contact data scope. A selected member becomes the task `assignee`; an existing unassigned Task v2 task receives the member without creating a duplicate, and the owner is synchronized to the local workflow and Bitable. If the directory is unavailable, the UI explicitly falls back to recording the owner's name only and leaves the task unassigned.
 
 Scheduled opportunity briefings are disabled by default. Set `TENDERTRACE_OPPORTUNITY_BRIEFING_ENABLED=true` and configure `TENDERTRACE_OPPORTUNITY_BRIEFING_CRON` to deliver a state-deduplicated weekday briefing to the default chat. The Web Opportunity Intelligence view can also trigger it manually. Claim, qualify, Go, and bid-preparation buttons reuse the same workflow graph, qualification gates, callback handler, and audit stream as the Web UI.
@@ -909,8 +913,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P36
-- 289 unit tests pass, including 426 subtests.
+- Current stage: P37
+- 291 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
