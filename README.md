@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P39</strong> · Overdue Task Control · Owner Reminders · Enterprise Glass UI
+  <strong>Current stage: P40</strong> · Unified Escalation Queue · Management Briefings · Enterprise Glass UI
 </p>
 
 ---
@@ -349,7 +349,7 @@ python -m tendertrace embed-notices
 - `GET /api/opportunities/{notice_id}/facts`：读取字段级核验结果与变更审计。
 - `PATCH /api/opportunities/{notice_id}/facts`：提交带来源链接的核验事实，重算机会与准入，并回写飞书台账。
 - `POST /api/opportunities/{notice_id}/actions`：执行带阶段和资格门禁的认领、确认、Go/Hold/No-Go、投标准备、中标/失标与归档动作。
-- `POST /api/opportunities/escalations/send-feishu`：发送当前决策 SLA 超时摘要；自动任务按每日机会集合去重。
+- `POST /api/opportunities/escalations/send-feishu`：发送决策超时与任务逾期的统一管理摘要；同一机会合并风险，并按每日风险集合去重。
 - `POST /api/opportunities/briefing/send-feishu`：发送机会经营晨报，汇总机会池、负责人、资格、决策、市场和来源风险；自动任务按同日机会状态去重。
 - `POST /api/integrations/feishu/callback`：接收卡片动作，校验令牌后推进机会状态或回写建议反馈，并同步相关业务状态。
 - `POST /api/integrations/feishu/events`：接收飞书消息事件，校验令牌、去重后异步执行自然语言查询或创建订阅。
@@ -370,6 +370,8 @@ python -m tendertrace embed-notices
 启用 `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` 后，Task v2 完成状态不仅会回写本地 workflow 与多维表格，还会向机会负责人发送阶段合法的下一步机会卡。系统不会把“完成跟进任务”误判为“机会已完成”，也不会绕过资格门禁自动推进阶段。完成通知按任务完成事件与接收人生成不可逆指纹并写入投递账本：失败会在下次同步重试，成功后不重复发送；没有负责人时才回退到统一飞书接收目标。
 
 仍未完成的逾期任务会向负责人发送红色机会卡，展示当前阶段合法动作和证据门禁。逾期催办按“任务、接收人、本地日期”生成不可逆指纹，同一天只发送一次，发送失败仍可在后续同步重试；跨天持续逾期才再次提醒。中标、未中标或已归档机会不会继续催办。任务同步 API 与 Web 操作反馈分别返回完成跟进和逾期提醒的发送、跳过数量。
+
+管理升级队列统一纳入决策 SLA 超时与飞书任务逾期。同一机会同时命中两类风险时合并为一行，Web 看板和飞书管理摘要分别展示风险类型、负责人、阶段、等待时长与截止时间。摘要按当天风险集合去重；纯决策升级继续沿用原有 `decision_sla` 指纹，不会因版本升级重复发送。发送结果返回机会数、决策超时数和任务逾期数。
 
 机会页分配负责人时会读取飞书应用当前获授权的通讯录成员。应用需要开通通讯录基本信息读取权限并配置可访问的数据范围；选择成员后，新任务会直接设置 `assignee`，已有未指派任务会通过 Task v2 成员接口补充负责人，同时回写本地 workflow 与多维表格。通讯录不可用时界面会明确降级为仅记录负责人姓名，任务保持未指派，不会伪造成员绑定。
 
@@ -477,8 +479,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P39
-- 293 unit tests pass, including 426 subtests.
+- Current stage: P40
+- 295 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -529,7 +531,7 @@ The current architecture is local-first: background ingestion continuously store
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
 - Auditable fact verification for purchaser, project number, budget, deadline, and region. Evidence-backed overlays preserve the raw notice, recompute opportunity quality and qualification gates, and synchronize the resulting fields to Feishu Bitable.
 - Configurable sales qualification gates covering ownership, purchaser identity, credibility, completeness, deadline viability, opportunity score, and requirement coverage. Stage transitions are rejected until both workflow and evidence requirements pass.
-- Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. A stage-specific decision clock drives SLA escalation queues and deduplicated manual or scheduled Feishu summaries.
+- Durable Go/Hold/No-Go decisions with actor, rationale, and timestamp synchronized across SQLite, Web, shared Feishu cards, and Bitable. Decision SLA breaches and overdue Task v2 work merge into one opportunity-level management queue and a deduplicated Feishu summary.
 - Actionable Feishu opportunity briefings that combine grade, owner gaps, qualification gates, deadlines, decision SLA, market signals, and source health, with weekday automation, receiver-scoped daily deduplication, and in-card workflow actions.
 - A source SLO workflow derived from login state, observed reliability, and last-success freshness, with deduplicated alerts, Task v2 incidents, owner assignment, a configurable SLA, and evidence-based closure only after both task completion and real source recovery.
 - Action queue sorting driven by opportunity grade, missing ownership, and bid deadlines, with unowned priority, due-soon, and active-collaboration counters.
@@ -799,7 +801,7 @@ Available Web APIs:
 - `GET /api/opportunities/{notice_id}/facts`: inspect field-level verified facts and their audit history.
 - `PATCH /api/opportunities/{notice_id}/facts`: submit evidence-backed facts, recompute qualification, and synchronize the Bitable record.
 - `POST /api/opportunities/{notice_id}/actions`: execute stage- and qualification-gated claim, pursuit, Go/Hold/No-Go, bid preparation, outcome, and archive actions.
-- `POST /api/opportunities/escalations/send-feishu`: send the current overdue decision summary with daily escalation-set deduplication.
+- `POST /api/opportunities/escalations/send-feishu`: send a unified decision-overdue and task-overdue management summary, merging risks per opportunity and deduplicating the daily risk set.
 - `POST /api/opportunities/briefing/send-feishu`: send an opportunity operations briefing that combines pipeline, ownership, qualification, decision, market, and source-risk context.
 - `POST /api/integrations/feishu/callback`: verify card callbacks, then advance opportunity state or persist recommendation feedback through the shared business workflow.
 - `POST /api/integrations/feishu/events`: verify, deduplicate, and asynchronously execute inbound Feishu text commands.
@@ -820,6 +822,8 @@ The Claim action first passes the shared workflow and qualification gates, then 
 When `TENDERTRACE_FEISHU_TASK_SYNC_ENABLED` is enabled, a completed Task v2 is synchronized to the local workflow and Bitable, then produces a stage-valid follow-up card for the opportunity owner. Completing a follow-up task never closes the opportunity or bypasses qualification gates. Delivery uses an irreversible, receiver-scoped completion fingerprint: failed sends retry during the next synchronization, successful sends are not duplicated, and the shared Feishu target is used only when no owner is available.
 
 An incomplete overdue task produces a red, stage-valid card for its owner. Its irreversible fingerprint is scoped by task, receiver, and local date, so repeated synchronization sends at most one reminder per day, failed delivery remains retryable, and a task that is still overdue on a later date can be raised again. Won, lost, and archived opportunities remain silent. The task-sync API and Web feedback expose sent and skipped counts for completion follow-ups and overdue reminders separately.
+
+The management escalation queue combines decision-SLA breaches and overdue Feishu tasks. When both affect the same opportunity, Web and Feishu show one row with both issue types, owner, stage, wait time, and deadline. Daily delivery deduplicates the complete risk set; decision-only sets retain the legacy `decision_sla` fingerprint to prevent upgrade-time duplicates. Results expose opportunity, decision, and task counts separately.
 
 The Opportunity view resolves owners from the Feishu app's authorized contact scope. Grant basic contact read permission and configure the app's contact data scope. A selected member becomes the task `assignee`; an existing unassigned Task v2 task receives the member without creating a duplicate, and the owner is synchronized to the local workflow and Bitable. If the directory is unavailable, the UI explicitly falls back to recording the owner's name only and leaves the task unassigned.
 
@@ -921,8 +925,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P39
-- 293 unit tests pass, including 426 subtests.
+- Current stage: P40
+- 295 unit tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

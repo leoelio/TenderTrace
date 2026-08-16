@@ -1636,6 +1636,12 @@ function decisionSlaLabel(actionState) {
   return "计时起点待确认";
 }
 
+function escalationIssueLabel(item) {
+  if (item.issue_type === "decision_task") return "决策超时 + 任务逾期";
+  if (item.issue_type === "task") return "任务逾期";
+  return "决策超时";
+}
+
 function renderOpportunityDecisionBoard(actionQueue) {
   if (!el.opportunityDecisionBoard) return;
   const decisions = actionQueue.decisions || {};
@@ -1664,18 +1670,18 @@ function renderOpportunityDecisionBoard(actionQueue) {
       <small>飞书任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)}</small>
     </section>
     <section>
-      <span class="decision-board-kicker">SLA 升级队列</span>
+      <span class="decision-board-kicker">协同升级队列</span>
       <div class="decision-board-heading">
-        <strong>${allEscalations.length ? `${allEscalations.length} 条需要管理介入` : "当前无超时决策"}</strong>
+        <strong>${allEscalations.length ? `${allEscalations.length} 条需要管理介入` : "当前无协同逾期"}</strong>
         ${allEscalations.length ? '<button class="text-link" type="button" data-send-opportunity-escalations>发送飞书摘要</button>' : ""}
       </div>
       <div class="decision-escalation-list">
         ${escalations.length ? escalations.map((item) => `
           <button type="button" data-view-opportunity="${escapeHtml(item.notice_id)}">
             <span>${escapeHtml(item.title || "未命名机会")}</span>
-            <small>${escapeHtml(item.owner || "待分配")} · ${escapeHtml(item.wait_hours || 0)} 小时</small>
+            <small>${escapeHtml(escalationIssueLabel(item))} · ${escapeHtml(item.owner || "待分配")}</small>
           </button>
-        `).join("") : '<small>进入策略制定阶段后，系统自动开始决策计时。</small>'}
+        `).join("") : '<small>决策计时与飞书任务同步会自动识别需要管理介入的机会。</small>'}
       </div>
     </section>
   `;
@@ -2681,7 +2687,11 @@ async function sendOpportunityEscalations() {
     method: "POST",
     body: JSON.stringify({ force: true }),
   });
-  showToast(result.status === "sent" ? `已发送 ${result.escalation_count} 条决策升级` : "当前没有需要发送的超时决策");
+  showToast(
+    result.status === "sent"
+      ? `已发送 ${result.escalation_count} 条协同升级 · 决策 ${result.decision_count || 0} · 任务 ${result.task_count || 0}`
+      : "当前没有需要发送的协同升级",
+  );
 }
 
 async function sendOpportunityBriefing() {

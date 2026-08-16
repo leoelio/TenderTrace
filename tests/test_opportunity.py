@@ -20,6 +20,42 @@ from tendertrace.opportunity import (
 
 
 class OpportunityIntelligenceTests(unittest.TestCase):
+    def test_task_and_decision_overdue_merge_into_one_management_escalation(self) -> None:
+        item = {
+            "notice_id": "combined-1",
+            "title": "数据中心设备采购",
+            "bid_deadline": "2026-08-15",
+            "intelligence": {"level": "A", "score": 90},
+            "qualification": {"status": "ready"},
+            "workflow": {
+                "stage": "pursuing",
+                "stage_label": "策略制定",
+                "decision": "pending",
+                "owner_name": "张三",
+                "feishu_task_status": "overdue",
+                "due_at": "2026-08-15T17:00:00+08:00",
+                "stage_changed_at": "2026-08-14T00:00:00+00:00",
+            },
+        }
+        item["action_state"] = _opportunity_action_state(
+            item,
+            decision_sla_hours=24,
+            now=datetime(2026, 8, 16, tzinfo=timezone.utc),
+        )
+
+        summary = _action_queue_summary([item], decision_sla_hours=24)
+
+        self.assertEqual(summary["decision_overdue"], 1)
+        self.assertEqual(summary["task_overdue"], 1)
+        self.assertEqual(len(summary["escalations"]), 1)
+        self.assertEqual(summary["escalations"][0]["issue_type"], "decision_task")
+        self.assertEqual(summary["escalations"][0]["stage"], "策略制定")
+        self.assertTrue(summary["escalations"][0]["decision_due_at"])
+        self.assertEqual(
+            summary["escalations"][0]["task_due_at"],
+            "2026-08-15T17:00:00+08:00",
+        )
+
     def test_decision_sla_only_applies_to_pending_pursuit_decisions(self) -> None:
         item = {
             "notice_id": "sla-1",

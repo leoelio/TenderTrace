@@ -576,15 +576,45 @@ def _action_queue_summary(
             decisions[decision] += 1
         if action.get("decision_required"):
             decision_pending += 1
-        if action.get("decision_sla_status") == "overdue":
+        decision_is_overdue = action.get("decision_sla_status") == "overdue"
+        task_is_overdue = task_status == "overdue" and stage not in {
+            "won",
+            "lost",
+            "archived",
+        }
+        if decision_is_overdue:
             decision_overdue += 1
+        if decision_is_overdue or task_is_overdue:
+            decision_due_at = str(action.get("decision_due_at") or "")
+            task_due_at = str(workflow.get("due_at") or item.get("bid_deadline") or "")
+            issue_types = [
+                issue_type
+                for issue_type, active in (
+                    ("decision", decision_is_overdue),
+                    ("task", task_is_overdue),
+                )
+                if active
+            ]
             escalations.append(
                 {
                     "notice_id": str(item.get("notice_id") or ""),
                     "title": str(item.get("title") or ""),
                     "owner": str(workflow.get("owner_name") or "待分配"),
-                    "wait_hours": float(action.get("decision_wait_hours") or 0),
-                    "due_at": str(action.get("decision_due_at") or ""),
+                    "stage": str(workflow.get("stage_label") or stage),
+                    "issue_type": "_".join(issue_types),
+                    "issue_types": issue_types,
+                    "decision_due_at": decision_due_at if decision_is_overdue else "",
+                    "task_due_at": task_due_at if task_is_overdue else "",
+                    "wait_hours": (
+                        float(action.get("decision_wait_hours") or 0)
+                        if decision_is_overdue
+                        else 0.0
+                    ),
+                    "due_at": str(
+                        decision_due_at
+                        if decision_is_overdue
+                        else task_due_at
+                    ),
                 }
             )
         deadline = _deadline_date(item)
@@ -600,7 +630,13 @@ def _action_queue_summary(
         if deadlines
         else None
     )
-    escalations.sort(key=lambda item: float(item.get("wait_hours") or 0), reverse=True)
+    escalations.sort(
+        key=lambda item: (
+            len(item.get("issue_types") or []),
+            float(item.get("wait_hours") or 0),
+        ),
+        reverse=True,
+    )
     closed_decisions = decisions["go"] + decisions["no_go"]
     outcomes = stages["won"] + stages["lost"]
     return {

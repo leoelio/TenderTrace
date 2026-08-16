@@ -189,6 +189,8 @@ class OpportunityApiTests(unittest.TestCase):
         self.assertIn("当前阶段", blocked.json()["detail"]["reasons"][0])
         self.assertEqual(escalation.status_code, 200)
         self.assertEqual(escalation.json()["status"], "skipped")
+        self.assertEqual(escalation.json()["decision_count"], 0)
+        self.assertEqual(escalation.json()["task_count"], 0)
         self.assertEqual(briefing.status_code, 200)
         self.assertEqual(briefing.json()["status"], "skipped")
 

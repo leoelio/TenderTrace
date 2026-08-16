@@ -10,6 +10,7 @@ from tendertrace.config import Settings
 from tendertrace.db import init_db
 from tendertrace.delivery.preferences import save_feishu_receiver
 from tendertrace.integrations.feishu_escalation import (
+    _artifact_key,
     build_escalation_card,
     send_opportunity_escalation_summary,
 )
@@ -60,6 +61,8 @@ class FeishuEscalationTests(unittest.TestCase):
 
         self.assertEqual(first.status, "sent")
         self.assertEqual(first.escalation_count, 1)
+        self.assertEqual(first.decision_count, 1)
+        self.assertEqual(first.task_count, 1)
         self.assertEqual(duplicate.status, "skipped")
         self.assertIn("already sent", duplicate.reason)
         self.assertEqual(forced.status, "sent")
@@ -91,6 +94,20 @@ class FeishuEscalationTests(unittest.TestCase):
         self.assertIn("张三", card_text)
         self.assertIn("31.5", card_text)
         self.assertIn("24", card_text)
+        self.assertIn("决策超时 + 任务逾期", card_text)
+        self.assertIn("2026-08-15T09:00:00+00:00", card_text)
+        self.assertIn("2026-08-15T17:00:00+08:00", card_text)
+
+    def test_decision_only_set_keeps_legacy_artifact_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            key = _artifact_key(
+                settings,
+                [{"notice_id": "notice-1", "issue_types": ["decision"]}],
+                now=datetime(2026, 8, 16, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+            )
+
+        self.assertTrue(key.startswith("decision_sla:2026-08-16:"))
 
 
 def _overdue_payload(*_args, **_kwargs) -> dict[str, object]:
@@ -98,12 +115,19 @@ def _overdue_payload(*_args, **_kwargs) -> dict[str, object]:
         "summary": {
             "action_queue": {
                 "decision_sla_hours": 24,
+                "decision_overdue": 1,
+                "task_overdue": 1,
                 "escalations": [
                     {
                         "notice_id": "notice-1",
                         "title": "服务器采购项目",
                         "owner": "张三",
+                        "stage": "策略制定",
+                        "issue_type": "decision_task",
+                        "issue_types": ["decision", "task"],
                         "wait_hours": 31.5,
+                        "decision_due_at": "2026-08-15T09:00:00+00:00",
+                        "task_due_at": "2026-08-15T17:00:00+08:00",
                         "due_at": "2026-08-15T09:00:00+00:00",
                     }
                 ],
