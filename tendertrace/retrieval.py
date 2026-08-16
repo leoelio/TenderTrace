@@ -25,6 +25,8 @@ _INTERNATIONAL_SOURCE_SCOPES = {
     "ebrd": {"global", "ebrd"},
     "contracts_finder": {"global", "uk"},
     "find_tender": {"global", "uk"},
+    "canadabuys": {"global", "canada"},
+    "prozorro": {"global", "ukraine"},
 }
 
 

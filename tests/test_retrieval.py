@@ -84,7 +84,16 @@ class RetrievalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))
             init_db(settings)
-            for source_site in ("ccgp", "worldbank", "adb", "afdb", "ebrd", "find_tender"):
+            for source_site in (
+                "ccgp",
+                "worldbank",
+                "adb",
+                "afdb",
+                "ebrd",
+                "find_tender",
+                "canadabuys",
+                "prozorro",
+            ):
                 _insert_notice(
                     settings,
                     notice_id=f"{source_site}:server-hit",
@@ -107,6 +116,16 @@ class RetrievalTests(unittest.TestCase):
                 {**base, "region": {"scope": "global", "aliases": ["全球"]}},
                 max_results=10,
             )
+            canada = search_notices(
+                settings,
+                compile_intent("最近1个月加拿大服务器采购信息", now=NOW),
+                max_results=10,
+            )
+            ukraine = search_notices(
+                settings,
+                compile_intent("最近1个月乌克兰服务器采购信息", now=NOW),
+                max_results=10,
+            )
             domestic = search_notices(
                 settings,
                 {**base, "region": {"scope": "domestic", "aliases": []}},
@@ -116,8 +135,10 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual([notice.source_site for notice in uk.notices], ["find_tender"])
         self.assertEqual(
             {notice.source_site for notice in global_result.notices},
-            {"worldbank", "adb", "afdb", "ebrd", "find_tender"},
+            {"worldbank", "adb", "afdb", "ebrd", "find_tender", "canadabuys", "prozorro"},
         )
+        self.assertEqual([notice.source_site for notice in canada.notices], ["canadabuys"])
+        self.assertEqual([notice.source_site for notice in ukraine.notices], ["prozorro"])
         self.assertEqual([notice.source_site for notice in domestic.notices], ["ccgp"])
 
 

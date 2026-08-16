@@ -235,6 +235,8 @@ class GgzyAdapter:
             "adb",
             "afdb",
             "ebrd",
+            "canada",
+            "ukraine",
         }
 
     def collect(

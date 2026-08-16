@@ -6,10 +6,12 @@ from typing import Any
 
 from tendertrace.adapters.adb import ADB_NOTICES_URL
 from tendertrace.adapters.afdb import AFDB_SOLICITATIONS_URL
+from tendertrace.adapters.canadabuys import CANADABUYS_OPEN_TENDERS_URL
 from tendertrace.adapters.ebrd import EBRD_NOTICES_URL
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.idb import IDB_DATASTORE_API
+from tendertrace.adapters.prozorro import PROZORRO_FEED_URL, PROZORRO_PORTAL_URL
 from tendertrace.adapters.ted import TED_SEARCH_API
 from tendertrace.adapters.uk_ocds import (
     CONTRACTS_FINDER_API,
@@ -266,6 +268,53 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "authority": "UK Cabinet Office",
                 "standard": "OCDS 1.1",
                 "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="canadabuys",
+            engine="official-open-data-csv",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="canadabuys-open-tenders",
+                    url=CANADABUYS_OPEN_TENDERS_URL,
+                    kind="dataset",
+                )
+            ],
+            health=health.get("canadabuys", {}),
+            discovery_rules={
+                "scope": ["global", "canada"],
+                "authority": "Public Services and Procurement Canada - CanadaBuys",
+                "source_class": "official_primary",
+                "coverage": "open federal tender notices",
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="prozorro",
+            engine="official-rest-feed+detail",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="prozorro-tender-feed",
+                    url=PROZORRO_FEED_URL,
+                    kind="feed",
+                ),
+                SourceMapRoute(
+                    name="prozorro-public-portal",
+                    url=PROZORRO_PORTAL_URL,
+                    kind="detail",
+                ),
+            ],
+            health=health.get("prozorro", {}),
+            discovery_rules={
+                "scope": ["global", "ukraine"],
+                "authority": "Prozorro public procurement system",
+                "source_class": "official_primary",
+                "standard": "OpenProcurement API 2.5",
+                "same_domain": False,
             },
         ),
         SourceMapItem(

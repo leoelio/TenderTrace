@@ -6,10 +6,12 @@ from typing import Any, Protocol
 
 from tendertrace.adapters.adb import AdbAdapter
 from tendertrace.adapters.afdb import AfdbAdapter
+from tendertrace.adapters.canadabuys import CanadaBuysAdapter
 from tendertrace.adapters.ebrd import EbrdAdapter
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
 from tendertrace.adapters.idb import IdbAdapter
+from tendertrace.adapters.prozorro import ProzorroAdapter
 from tendertrace.adapters.ted import TedAdapter
 from tendertrace.adapters.uk_ocds import ContractsFinderAdapter, FindTenderAdapter
 from tendertrace.adapters.ungm import UngmAdapter
@@ -70,6 +72,8 @@ class MultiSourceAdapter:
             EbrdAdapter(),
             ContractsFinderAdapter(),
             FindTenderAdapter(),
+            CanadaBuysAdapter(),
+            ProzorroAdapter(),
         ]
         try:
             from tendertrace.vault.qianlima import QianlimaAdapter, QianlimaSessionVault

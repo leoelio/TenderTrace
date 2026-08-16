@@ -241,6 +241,8 @@ class CcgpAdapter:
             "adb",
             "afdb",
             "ebrd",
+            "canada",
+            "ukraine",
         }
 
     def list_urls(self, max_pages: int) -> list[str]:

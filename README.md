@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Current stage: P48</strong> · Relationship Action Orchestration · Feishu Task v2 Sync · Outcome-based Qualification
+  <strong>Current stage: P49</strong> · Official Source Expansion · CanadaBuys Open Data · Prozorro Feed Integration
 </p>
 
 ---
@@ -26,7 +26,9 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 ## 核心能力
 
 - 自然语言意图解析：识别主题、同义词、地区、省市区、时间范围、发送频率。
-- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、UNGM、世界银行、亚洲开发银行、非洲开发银行、欧洲复兴开发银行 ECEPP、美洲开发银行，以及英国 Contracts Finder / Find a Tender 官方接口，共 12 个来源；UNGM 一处覆盖 32 个联合国组织。
+- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、UNGM、世界银行、亚洲开发银行、非洲开发银行、欧洲复兴开发银行 ECEPP、美洲开发银行、英国 Contracts Finder / Find a Tender、加拿大 CanadaBuys 和乌克兰 Prozorro，共 14 个来源；UNGM 一处覆盖 32 个联合国组织。
+- 加拿大官方开放数据：CanadaBuys 适配器读取联邦开放招标 CSV，按主题与发布时间过滤，保留采购主体、截止日期、公告链接和公开附件，不采集联系人邮箱或电话。
+- 乌克兰公共采购：Prozorro 适配器按查询窗口终点定位官方游标 feed，再受限并发读取公开详情；支持主题跨语言扩展、稳定分页、截止日期、金额、币种与附件证据，所有请求进入统一来源健康统计。
 - 范围路由：国内、省市查询只启用国内源；英国、欧盟、世界银行、亚洲开发银行、非洲开发银行、美洲开发银行和全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
 - 托管抓取：统一阻断识别、`Retry-After`、指数退避、HTTP 优先、Playwright 动态页恢复、静态资源拦截、批量详情抓取和页面快照。
 - 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码；会员检索会提交真实主题并监听同域 API 鉴权，过期会话明确标记为 `login_expired`，不会伪装成零结果。
@@ -511,8 +513,8 @@ docs/evaluation/gold_benchmark.json
 
 当前验证基线：
 
-- Current stage: P48
-- 332 automated tests pass, including 426 subtests.
+- Current stage: P49
+- 341 automated tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.
@@ -547,7 +549,9 @@ The current architecture is local-first: background ingestion continuously store
 ## Key Features
 
 - Natural-language intent parsing for topic, synonyms, region, time range, and delivery schedule.
-- Twelve-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, UNGM, World Bank, Asian Development Bank, African Development Bank, EBRD ECEPP, Inter-American Development Bank, and the official UK Contracts Finder / Find a Tender APIs. UNGM adds procurement coverage across 32 UN organizations.
+- Fourteen-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, UNGM, World Bank, Asian Development Bank, African Development Bank, EBRD ECEPP, Inter-American Development Bank, the official UK Contracts Finder / Find a Tender APIs, CanadaBuys, and Prozorro. UNGM adds procurement coverage across 32 UN organizations.
+- CanadaBuys reads the official federal open-tender CSV, filters by topic and publication window, and preserves purchaser, deadline, notice URL, and public attachments without ingesting contact email addresses or phone numbers.
+- Prozorro anchors its official cursor feed at the requested window end, then performs bounded concurrent detail retrieval with cross-language topic expansion, stable pagination, deadlines, values, currencies, and attachment evidence. Every request contributes to the shared source-health telemetry.
 - Scope-aware routing that keeps domestic queries on domestic sources and activates the matching UK, EU, World Bank, IDB, or global sources only when requested.
 - Managed fetching with `Retry-After`, exponential backoff, block detection, HTTP-first execution, resource-light Playwright recovery, and traceable fetch statistics.
 - Login-state vault based on Playwright `storage_state`; credentials are never stored in code. Member search submits the actual topic and treats same-origin API authentication failures as `login_expired` instead of silently returning zero results.
@@ -989,8 +993,8 @@ The `OPENAI_API_KEY` field in `.env.example` must stay blank.
 
 Current verified baseline:
 
-- Current stage: P48
-- 332 automated tests pass, including 426 subtests.
+- Current stage: P49
+- 341 automated tests pass, including 426 subtests.
 - Ruff passes.
 - `node --check web\dist\app.js` passes.
 - `python -m tendertrace acceptance-check --no-runtime` passes.

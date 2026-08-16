@@ -110,6 +110,17 @@ class IntentCompilerTests(unittest.TestCase):
         self.assertIn("server", bidql["topic"]["source_terms"])
         self.assertNotIn("region", bidql["meta"]["clarify_needed"])
 
+    def test_canada_and_ukraine_scopes_route_to_official_sources(self) -> None:
+        canada = compile_intent("最近1个月加拿大服务器采购信息", now=NOW)
+        ukraine = compile_intent("最近1个月乌克兰服务器采购信息", now=NOW)
+
+        self.assertEqual(canada["region"]["scope"], "canada")
+        self.assertEqual(ukraine["region"]["scope"], "ukraine")
+        self.assertIn("server", canada["topic"]["source_terms"])
+        self.assertIn("server", ukraine["topic"]["source_terms"])
+        self.assertNotIn("region", canada["meta"]["clarify_needed"])
+        self.assertNotIn("region", ukraine["meta"]["clarify_needed"])
+
     def test_idb_scope_and_english_topic_are_preserved(self) -> None:
         bidql = compile_intent("最近1个月美洲开发银行 solar 招标信息", now=NOW)
 

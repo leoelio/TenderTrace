@@ -175,6 +175,8 @@ class QianlimaAdapter:
             "adb",
             "afdb",
             "ebrd",
+            "canada",
+            "ukraine",
         }
 
     def collect(
