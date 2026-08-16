@@ -21,6 +21,7 @@ _INTERNATIONAL_SOURCE_SCOPES = {
     "worldbank": {"global", "worldbank"},
     "idb": {"global", "idb"},
     "adb": {"global", "adb"},
+    "afdb": {"global", "afdb"},
     "contracts_finder": {"global", "uk"},
     "find_tender": {"global", "uk"},
 }

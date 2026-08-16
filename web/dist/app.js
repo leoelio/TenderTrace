@@ -297,6 +297,13 @@ function statusLabel(status) {
   return labels[status] || status || labels.muted;
 }
 
+function sourceAccessStatus(item) {
+  if (!item?.requires_login) return { label: "公开", badge: "pass" };
+  if (item.status === "configured") return { label: "已登录", badge: "pass" };
+  if (item.status === "login_expired") return { label: "登录过期", badge: "warn" };
+  return { label: "待登录", badge: "warn" };
+}
+
 function setApiStatus(ok, text) {
   if (el.apiStatus) el.apiStatus.className = `status-dot ${ok ? "status-ok" : "status-error"}`;
   if (el.apiStatusText) el.apiStatusText.textContent = text;
@@ -936,7 +943,7 @@ function renderSourceList(target, items) {
     .map((item) => {
       const site = escapeHtml(item.site || "-");
       const engine = escapeHtml(item.engine || "-");
-      const status = escapeHtml(item.status || "muted");
+      const access = sourceAccessStatus(item);
       const health = item.health || {};
       const rules = item.discovery_rules || {};
       const routes = Array.isArray(item.routes) ? item.routes : [];
@@ -962,7 +969,7 @@ function renderSourceList(target, items) {
             <strong>${site} · ${engine}</strong>
             <span>
               <span class="badge badge-${healthStatus}">${escapeHtml(statusLabel(health.health_status))}</span>
-              <span class="badge badge-${status}">${escapeHtml(statusLabel(item.status))}</span>
+              <span class="badge badge-${escapeHtml(access.badge)}">${escapeHtml(access.label)}</span>
             </span>
           </div>
           <div class="source-health-grid">
@@ -2407,29 +2414,52 @@ async function importFeishuPartnerLeads() {
 
 async function openFeishuReceiverEditor() {
   if (!el.feishuReceiverEditor || !el.feishuChatSelect) return;
-  const payload = await api("/api/integrations/feishu/chats?page_size=100");
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  if (!items.length) throw new Error("机器人尚未加入任何可见会话");
-  el.feishuChatSelect.innerHTML = items
-    .map((item) => `<option value="${escapeHtml(item.chat_id || "")}">${escapeHtml(item.name || item.chat_id || "未命名会话")}</option>`)
+  const [chats, users] = await Promise.all([
+    api("/api/integrations/feishu/chats?page_size=100").catch((error) => ({ items: [], error })),
+    api("/api/integrations/feishu/users?limit=100").catch((error) => ({ items: [], error })),
+  ]);
+  const chatItems = Array.isArray(chats.items) ? chats.items : [];
+  const userItems = Array.isArray(users.items) ? users.items : [];
+  if (!chatItems.length && !userItems.length) {
+    throw chats.error || users.error || new Error("没有可用的飞书会话或授权成员");
+  }
+  const chatOptions = chatItems
+    .map((item) => {
+      const id = item.chat_id || "";
+      const label = item.name || id || "未命名会话";
+      return `<option value="${escapeHtml(id)}" data-receive-type="chat_id" data-label="${escapeHtml(label)}">${escapeHtml(label)}</option>`;
+    })
     .join("");
+  const userOptions = userItems
+    .map((item) => {
+      const id = item.open_id || "";
+      const label = item.name || "未命名成员";
+      return `<option value="${escapeHtml(id)}" data-receive-type="open_id" data-label="${escapeHtml(label)}">${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  el.feishuChatSelect.innerHTML = [
+    chatOptions ? `<optgroup label="机器人会话">${chatOptions}</optgroup>` : "",
+    userOptions ? `<optgroup label="授权成员">${userOptions}</optgroup>` : "",
+  ].join("");
   el.feishuReceiverEditor.hidden = false;
 }
 
 async function saveFeishuReceiverSelection() {
   const option = el.feishuChatSelect?.selectedOptions?.[0];
-  if (!option?.value) throw new Error("请选择接收会话");
+  if (!option?.value) throw new Error("请选择接收目标");
+  const receiveType = option.dataset.receiveType || "chat_id";
+  const label = option.dataset.label || option.textContent || "飞书接收目标";
   await api("/api/integrations/feishu/receiver", {
     method: "POST",
     body: JSON.stringify({
       receive_id: option.value,
-      receive_id_type: "chat_id",
-      label: option.textContent,
+      receive_id_type: receiveType,
+      label,
     }),
   });
   el.feishuReceiverEditor.hidden = true;
   await refreshFeishu();
-  showToast(`默认接收会话已设为：${option.textContent}`);
+  showToast(`默认接收目标已设为：${label}`);
 }
 
 async function sendReportToFeishu(name, runId = "", subscriptionId = "") {

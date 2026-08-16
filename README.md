@@ -26,8 +26,8 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 ## 核心能力
 
 - 自然语言意图解析：识别主题、同义词、地区、省市区、时间范围、发送频率。
-- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、UNGM、世界银行、亚洲开发银行、美洲开发银行，以及英国 Contracts Finder / Find a Tender 官方接口，共 10 个来源；UNGM 一处覆盖 32 个联合国组织。
-- 范围路由：国内、省市查询只启用国内源；英国、欧盟、世界银行、亚洲开发银行、美洲开发银行和全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
+- 多源采集：支持中国政府采购网、全国公共资源交易平台、千里马登录态源、TED、UNGM、世界银行、亚洲开发银行、非洲开发银行、美洲开发银行，以及英国 Contracts Finder / Find a Tender 官方接口，共 11 个来源；UNGM 一处覆盖 32 个联合国组织。
+- 范围路由：国内、省市查询只启用国内源；英国、欧盟、世界银行、亚洲开发银行、非洲开发银行、美洲开发银行和全球查询自动启用对应国际源，避免无效抓取和地域误匹配。
 - 托管抓取：统一阻断识别、`Retry-After`、指数退避、HTTP 优先、Playwright 动态页恢复、静态资源拦截、批量详情抓取和页面快照。
 - 登录态管理：千里马使用 Playwright `storage_state` 保存登录状态，代码不保存账号密码；会员检索会提交真实主题并监听同域 API 鉴权，过期会话明确标记为 `login_expired`，不会伪装成零结果。
 - 本地优先检索：公告入库后写入 SQLite FTS5，使用 jieba 分词和 BM25 排序。
@@ -37,6 +37,7 @@ TenderTrace 是一个面向招投标情报聚合场景的可运行 AI 应用原�
 - 飞书台账：可选同步新增公告到飞书多维表格，形成招标机会协同跟进表。
 - 飞书伙伴线索：多维表格中标记为“伙伴提交”或“待导入”的记录可经预检后进入本地公告库、FTS 和证据链；系统核验公网原文、保存内容哈希与正文摘录，并回写稳定指纹、入库及核验状态。系统自身同步记录不会循环导入。
 - 飞书协同：Word、周报和可操作机会卡片可发送到默认会话；机会可自动创建负责人任务和截止日程，卡片动作通过 HTTP 或官方长连接回写本地状态流、多维表格与审计事件。
+- 飞书接收目标：连接中心同时读取机器人可见会话和应用授权通讯录成员，可将群聊或成员设为统一默认目标，报告、周报、经营晨报和来源告警复用该偏好。
 - 飞书会话入口：用户可直接在机器人会话中输入自然语言问题；即时查询回传 Word，带频率的问题创建绑定当前会话的增量订阅，事件支持持久化去重与中断恢复。
 - 机会情报：基于真实字段、时效、证据质量与多源佐证计算机会等级，输出负责人、团队和伙伴行动建议。
 - 事实核验闭环：分析人员可在 Web 补充采购主体、项目编号、预算、截止时间和地区，并附原文链接与证据摘录；系统保留原始公告，以可审计覆盖层重算完整度、机会等级与销售准入，再同步飞书多维表格。
@@ -500,7 +501,7 @@ The current architecture is local-first: background ingestion continuously store
 ## Key Features
 
 - Natural-language intent parsing for topic, synonyms, region, time range, and delivery schedule.
-- Ten-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, UNGM, World Bank, Asian Development Bank, Inter-American Development Bank, and the official UK Contracts Finder / Find a Tender APIs. UNGM adds procurement coverage across 32 UN organizations.
+- Eleven-source collection from Chinese procurement platforms, a Qianlima login-state source, TED, UNGM, World Bank, Asian Development Bank, African Development Bank, Inter-American Development Bank, and the official UK Contracts Finder / Find a Tender APIs. UNGM adds procurement coverage across 32 UN organizations.
 - Scope-aware routing that keeps domestic queries on domestic sources and activates the matching UK, EU, World Bank, IDB, or global sources only when requested.
 - Managed fetching with `Retry-After`, exponential backoff, block detection, HTTP-first execution, resource-light Playwright recovery, and traceable fetch statistics.
 - Login-state vault based on Playwright `storage_state`; credentials are never stored in code. Member search submits the actual topic and treats same-origin API authentication failures as `login_expired` instead of silently returning zero results.
@@ -511,6 +512,7 @@ The current architecture is local-first: background ingestion continuously store
 - Optional Feishu Bitable opportunity ledger for incremental tender records.
 - Bidirectional Feishu partner-lead ingestion: approved Bitable rows are validated against their public source, stored with a content hash and evidence excerpt, indexed in FTS, and written back with idempotent import and verification status.
 - Feishu opportunity collaboration with interactive cards, idempotent owner tasks, bid-deadline calendar events, HTTP or official long-connection card callbacks, and an auditable local event stream.
+- A unified Feishu delivery target picker that combines bot-visible chats and authorized directory members; reports, weekly digests, operations briefings, and source alerts reuse the selected target.
 - Native Feishu conversation commands: immediate natural-language questions return Word to the originating chat, while scheduled questions create chat-bound incremental subscriptions with durable deduplication and recovery.
 - Evidence-led opportunity grading with freshness, completeness, credibility, readiness, risks, and role-specific actions.
 - Auditable fact verification for purchaser, project number, budget, deadline, and region. Evidence-backed overlays preserve the raw notice, recompute opportunity quality and qualification gates, and synchronize the resulting fields to Feishu Bitable.

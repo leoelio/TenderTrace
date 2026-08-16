@@ -173,6 +173,7 @@ class QianlimaAdapter:
             "uk",
             "idb",
             "adb",
+            "afdb",
         }
 
     def collect(

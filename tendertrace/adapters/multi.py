@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from tendertrace.adapters.adb import AdbAdapter
+from tendertrace.adapters.afdb import AfdbAdapter
 from tendertrace.adapters.ccgp import CcgpAdapter, Notice
 from tendertrace.adapters.ggzy import GgzyAdapter
 from tendertrace.adapters.idb import IdbAdapter
@@ -64,6 +65,7 @@ class MultiSourceAdapter:
             WorldBankAdapter(),
             IdbAdapter(),
             AdbAdapter(),
+            AfdbAdapter(),
             ContractsFinderAdapter(),
             FindTenderAdapter(),
         ]

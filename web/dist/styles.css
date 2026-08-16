@@ -4143,8 +4143,11 @@ button.smart-card:hover {
   gap: 12px;
   align-items: end;
   margin-bottom: 14px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line-soft);
+  padding: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.54);
+  box-shadow: 0 10px 26px rgba(38, 55, 80, 0.045);
 }
 
 .receiver-editor[hidden] {
@@ -4157,6 +4160,11 @@ button.smart-card:hover {
   color: #334155;
   font-size: 12px;
   font-weight: 650;
+}
+
+.receiver-editor select {
+  min-height: 38px;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .integration-row {

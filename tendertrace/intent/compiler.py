@@ -30,6 +30,7 @@ def compile_intent(query: str, *, now: datetime | None = None) -> dict[str, Any]
         "uk",
         "idb",
         "adb",
+        "afdb",
     }:
         clarify_needed.append("region")
 
@@ -39,7 +40,7 @@ def compile_intent(query: str, *, now: datetime | None = None) -> dict[str, Any]
             1.0
             if parsed_region.value["province"]
             or parsed_region.value.get("scope")
-            in {"global", "eu", "worldbank", "uk", "idb", "adb"}
+            in {"global", "eu", "worldbank", "uk", "idb", "adb", "afdb"}
             else 0.0
         ),
         "time": 0.96 if parsed_time.value.get("origin") == "rule" else 0.65,

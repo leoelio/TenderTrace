@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from tendertrace.adapters.adb import ADB_NOTICES_URL
+from tendertrace.adapters.afdb import AFDB_SOLICITATIONS_URL
 from tendertrace.adapters.ccgp import CCGP_LIST_URLS
 from tendertrace.adapters.ggzy import GGZY_DEAL_LIST_URL, GGZY_LIST_API
 from tendertrace.adapters.idb import IDB_DATASTORE_API
@@ -173,6 +174,26 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                 "scope": ["global", "adb"],
                 "authority": "Asian Development Bank",
                 "documents": "official PDF",
+                "same_domain": True,
+            },
+        ),
+        SourceMapItem(
+            site="afdb",
+            engine="official-html+detail+pdf",
+            status="configured",
+            requires_login=False,
+            routes=[
+                SourceMapRoute(
+                    name="afdb-current-solicitations",
+                    url=AFDB_SOLICITATIONS_URL,
+                    kind="list",
+                )
+            ],
+            health=health.get("afdb", {}),
+            discovery_rules={
+                "scope": ["global", "afdb"],
+                "authority": "African Development Bank Group",
+                "documents": "official detail and tender files",
                 "same_domain": True,
             },
         ),

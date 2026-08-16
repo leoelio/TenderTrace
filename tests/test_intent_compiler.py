@@ -126,6 +126,14 @@ class IntentCompilerTests(unittest.TestCase):
         self.assertEqual(bidql["topic"]["source_terms"], ["security"])
         self.assertNotIn("region", bidql["meta"]["clarify_needed"])
 
+    def test_afdb_scope_routes_to_african_development_bank_source(self) -> None:
+        bidql = compile_intent("最近1个月非洲开发银行 security 招标信息", now=NOW)
+
+        self.assertEqual(bidql["region"]["scope"], "afdb")
+        self.assertEqual(bidql["topic"]["core"], ["security"])
+        self.assertEqual(bidql["topic"]["source_terms"], ["security"])
+        self.assertNotIn("region", bidql["meta"]["clarify_needed"])
+
     def test_global_english_topic_does_not_lose_leading_s(self) -> None:
         bidql = compile_intent("最近1个月全球 server 招标信息", now=NOW)
 
