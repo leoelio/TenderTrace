@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import uuid4
 
 import httpx
@@ -14,6 +14,14 @@ from tendertrace.config import Settings
 
 class FeishuError(RuntimeError):
     """Raised when Feishu integration is disabled, misconfigured, or rejected."""
+
+
+def feishu_chat_applink(chat_id: str) -> str:
+    normalized_chat_id = chat_id.strip()
+    if not normalized_chat_id:
+        return ""
+    query = urlencode({"openChatId": normalized_chat_id})
+    return f"https://applink.feishu.cn/client/chat/open?{query}"
 
 
 @dataclass(frozen=True)

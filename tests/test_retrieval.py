@@ -141,6 +141,48 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual([notice.source_site for notice in ukraine.notices], ["prozorro"])
         self.assertEqual([notice.source_site for notice in domestic.notices], ["ccgp"])
 
+    def test_english_uk_query_filters_location_and_award_notices(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_notice(
+                settings,
+                notice_id="find_tender:manchester-opportunity",
+                source_site="find_tender",
+                title="Greater Manchester EV charging supply and installation",
+                content_text="Open opportunity for public-sector charge points.",
+                region="Greater Manchester",
+            )
+            _insert_notice(
+                settings,
+                notice_id="find_tender:london-opportunity",
+                source_site="find_tender",
+                title="London EV charging supply and installation",
+                content_text="Open opportunity for public-sector charge points.",
+                region="London",
+            )
+            _insert_notice(
+                settings,
+                notice_id="find_tender:manchester-award",
+                source_site="find_tender",
+                title="Greater Manchester EV charging contract award notice",
+                content_text="Awarded public-sector charging contract.",
+                region="Greater Manchester",
+            )
+
+            bidql = compile_intent(
+                "Show public-sector EV charging opportunities in Greater Manchester "
+                "published in the last 30 days. Includesupply-and-install lots, "
+                "notify me on weekdays at 08:30, and exclude award notices.",
+                now=NOW,
+            )
+            result = search_notices(settings, bidql, max_results=10)
+
+        self.assertEqual(
+            [notice.id for notice in result.notices],
+            ["manchester-opportunity"],
+        )
+
 
 def _insert_notice(
     settings: Settings,
@@ -149,6 +191,7 @@ def _insert_notice(
     title: str,
     content_text: str,
     source_site: str = "ccgp",
+    region: str = "上海",
 ) -> None:
     with connection(settings) as conn:
         conn.execute(
@@ -167,7 +210,7 @@ def _insert_notice(
                 f"https://example.com/{notice_id}.html",
                 title,
                 "2026-07-01 09:00",
-                "上海",
+                region,
                 "上海某单位",
                 content_text,
                 content_text,

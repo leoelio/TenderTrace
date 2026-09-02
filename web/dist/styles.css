@@ -6564,6 +6564,27 @@ body.theme-dark .owner-assignment-actions {
   }
 }
 
+/* Keep the TT conversation aligned with the report rail on wide workspaces. */
+@media (min-width: 1101px) {
+  .workbench-grid {
+    align-items: stretch;
+  }
+
+  .main-stack {
+    align-self: stretch;
+  }
+
+  .main-stack > .chat-panel {
+    height: 100%;
+    grid-template-rows: minmax(320px, 1fr) auto;
+  }
+
+  .main-stack > .chat-panel .chat-stream {
+    min-height: 320px;
+    max-height: none;
+  }
+}
+
 @media (max-width: 700px) {
   .page {
     padding-right: 10px;

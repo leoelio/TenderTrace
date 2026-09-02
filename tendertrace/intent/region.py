@@ -115,6 +115,10 @@ _INTERNATIONAL_SCOPES = (
     ("国际", "global"),
 )
 
+_UK_AREAS = (
+    ("Greater Manchester", ("Greater Manchester", "Manchester")),
+)
+
 
 def _short_name(value: str) -> str:
     for suffix in _PLACE_SUFFIXES:
@@ -202,8 +206,30 @@ _DISTRICT_ALIASES = sorted(
 
 
 def parse_region(query: str) -> RegionMatch:
+    folded_query = query.casefold()
+    for area, aliases in _UK_AREAS:
+        matched = next((alias for alias in aliases if alias.casefold() in folded_query), None)
+        if matched:
+            return RegionMatch(
+                value={
+                    "province": None,
+                    "city": area,
+                    "district": None,
+                    "adcode": None,
+                    "city_adcode": None,
+                    "district_adcode": None,
+                    "aliases": list(aliases),
+                    "city_aliases": list(aliases),
+                    "district_aliases": [],
+                    "location_aliases": list(aliases),
+                    "scope": "uk",
+                    "timezone": "Europe/London",
+                    "origin": "rule",
+                },
+                matched_text=matched,
+            )
     for alias, scope in _INTERNATIONAL_SCOPES:
-        if alias in query:
+        if alias.casefold() in folded_query:
             return RegionMatch(
                 value={
                     "province": None,
@@ -216,6 +242,7 @@ def parse_region(query: str) -> RegionMatch:
                     "city_aliases": [],
                     "district_aliases": [],
                     "scope": scope,
+                    "timezone": "Europe/London" if scope == "uk" else None,
                     "origin": "rule",
                 },
                 matched_text=alias,

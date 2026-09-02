@@ -13,6 +13,7 @@ from tendertrace.config import Settings
 from tendertrace.integrations.feishu import (
     FeishuClient,
     FeishuError,
+    feishu_chat_applink,
     feishu_agent_status,
     feishu_status,
 )
@@ -37,6 +38,13 @@ FEISHU_ENV_KEYS = (
 
 
 class FeishuIntegrationTests(unittest.TestCase):
+    def test_chat_applink_uses_official_open_chat_protocol(self) -> None:
+        self.assertEqual(
+            feishu_chat_applink("oc_team"),
+            "https://applink.feishu.cn/client/chat/open?openChatId=oc_team",
+        )
+        self.assertEqual(feishu_chat_applink("  "), "")
+
     def test_create_chat_and_invite_members_use_official_group_endpoints(self) -> None:
         old_env = _clear_env(FEISHU_ENV_KEYS)
         try:

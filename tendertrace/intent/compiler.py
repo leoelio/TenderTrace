@@ -11,8 +11,11 @@ from tendertrace.intent.topic import extract_topic
 
 def compile_intent(query: str, *, now: datetime | None = None) -> dict[str, Any]:
     parsed_time = parse_time_expr(query)
-    parsed_schedule = parse_schedule(query)
-    parsed_region = parse_region(_region_query(query, parsed_time.matched_text, parsed_schedule.matched_text))
+    parsed_region = parse_region(_region_query(query, parsed_time.matched_text, ""))
+    parsed_schedule = parse_schedule(
+        query,
+        timezone=str(parsed_region.value.get("timezone") or "Asia/Shanghai"),
+    )
     topic = extract_topic(
         query,
         region_text=parsed_region.matched_text,

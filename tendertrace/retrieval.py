@@ -325,6 +325,12 @@ def _filters(bidql: dict[str, Any], *, relax_city: bool) -> tuple[str, list[obje
                 clause, values = _alias_filter(aliases)
                 clauses.append(f"AND ({clause})")
                 params.extend(values)
+        elif region.get("location_aliases"):
+            clause, values = _alias_filter(
+                [str(item) for item in region["location_aliases"]]
+            )
+            clauses.append(f"AND ({clause})")
+            params.extend(values)
 
     negatives = bidql.get("topic", {}).get("negative", [])
     for term in negatives if isinstance(negatives, list) else []:

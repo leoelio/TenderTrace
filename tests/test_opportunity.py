@@ -401,8 +401,9 @@ class OpportunityIntelligenceTests(unittest.TestCase):
                     ),
                 )
 
-            payload = list_opportunities(settings, limit=10)
-            filtered = list_opportunities(settings, limit=10, topic="服务器")
+            as_of = datetime(2026, 8, 16, tzinfo=timezone.utc)
+            payload = list_opportunities(settings, limit=10, now=as_of)
+            filtered = list_opportunities(settings, limit=10, topic="服务器", now=as_of)
 
         self.assertEqual(payload["summary"]["total"], 2)
         self.assertEqual(payload["summary"]["market"]["notice_count"], 2)

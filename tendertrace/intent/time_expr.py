@@ -17,6 +17,11 @@ _RELATIVE_RE = re.compile(
 _ABSOLUTE_MONTH_RE = re.compile(
     r"(?P<text>(?P<year>20\d{2})\s*年\s*(?P<month>[0-9一二两三四五六七八九十]{1,3})\s*月份?)"
 )
+_EN_RELATIVE_RE = re.compile(
+    r"(?P<text>(?:in\s+)?(?:the\s+)?last\s+(?P<n>\d+)\s+"
+    r"(?P<unit>days?|weeks?|months?|years?))",
+    re.IGNORECASE,
+)
 
 
 _UNIT_MAP = {
@@ -26,6 +31,13 @@ _UNIT_MAP = {
     "星期": "week",
     "月": "month",
     "年": "year",
+}
+
+_EN_UNIT_MAP = {
+    "day": "day",
+    "week": "week",
+    "month": "month",
+    "year": "year",
 }
 
 
@@ -67,6 +79,20 @@ def parse_time_expr(query: str) -> ParsedTime:
                 matched_text=relative.group("text"),
             )
 
+    english_relative = _EN_RELATIVE_RE.search(query)
+    if english_relative:
+        n = int(english_relative.group("n"))
+        unit = _EN_UNIT_MAP[english_relative.group("unit").casefold().rstrip("s")]
+        if n > 0:
+            return ParsedTime(
+                value={
+                    "kind": "relative",
+                    "ast": {"op": "last", "unit": unit, "n": n},
+                    "origin": "rule",
+                },
+                matched_text=english_relative.group("text"),
+            )
+
     return ParsedTime(
         value={
             "kind": "relative",
@@ -91,4 +117,3 @@ def resolve_window(time_expr: dict[str, Any], now: datetime) -> dict[str, str]:
     }[unit]
     start = now - relativedelta(**delta_args)
     return {"from": start.date().isoformat(), "to": now.date().isoformat()}
-

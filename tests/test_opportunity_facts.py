@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -16,7 +17,8 @@ class OpportunityFactTests(unittest.TestCase):
             settings = Settings.load(Path(tmp))
             init_db(settings)
             _insert_notice(settings)
-            before = list_opportunities(settings)["items"][0]
+            as_of = datetime(2026, 8, 16, tzinfo=timezone.utc)
+            before = list_opportunities(settings, now=as_of)["items"][0]
 
             overrides = upsert_verified_facts(
                 settings,
@@ -33,7 +35,7 @@ class OpportunityFactTests(unittest.TestCase):
                 note="人工复核原始公告",
                 actor="测试分析师",
             )
-            after = list_opportunities(settings)["items"][0]
+            after = list_opportunities(settings, now=as_of)["items"][0]
             with connection(settings) as conn:
                 raw = conn.execute(
                     "SELECT purchaser, region, fields_json FROM notices WHERE id = ?",

@@ -345,6 +345,7 @@ def list_opportunities(
     level: str | None = None,
     topic: str | None = None,
     sort: str = "priority",
+    now: datetime | None = None,
 ) -> dict[str, object]:
     limit = max(1, min(int(limit), 200))
     trust_profiles = source_trust_profiles(settings)
@@ -378,7 +379,7 @@ def list_opportunities(
     market["selected_category"] = topic or ""
     items: list[dict[str, object]] = []
     qualification_policy = policy_from_settings(settings)
-    reference_time = datetime.now(timezone.utc)
+    reference_time = now or datetime.now(timezone.utc)
     workflows = workflow_snapshots(settings, [notice_id for notice_id, _notice in rows])
     teams = team_snapshots(settings, workflows)
     stakeholder_maps = stakeholder_snapshots(settings, workflows)
@@ -432,6 +433,7 @@ def list_opportunities(
         item["qualification"] = assess_qualification(
             item,
             workflow,
+            as_of=reference_time.date(),
             policy=qualification_policy,
         ).to_dict()
         item["action_contract"] = workflow_action_contract(
@@ -473,6 +475,7 @@ def list_opportunities(
             "action_queue": _action_queue_summary(
                 all_matching_items,
                 decision_sla_hours=settings.decision_sla_hours,
+                now=reference_time,
             ),
             "qualification_policy": {
                 **qualification_policy.to_dict(),
@@ -703,6 +706,7 @@ def _action_queue_summary(
     items: list[dict[str, object]],
     *,
     decision_sla_hours: int,
+    now: datetime | None = None,
 ) -> dict[str, object]:
     stages = {stage: 0 for stage in ("identified", "qualifying", "pursuing", "bidding", "won", "lost", "archived")}
     unowned_priority = 0
@@ -855,7 +859,7 @@ def _action_queue_summary(
                 }
             )
         deadline = _deadline_date(item)
-        if deadline and deadline >= date.today():
+        if deadline and deadline >= (now or datetime.now(timezone.utc)).date():
             deadlines.append((deadline, item))
     deadlines.sort(key=lambda value: value[0])
     next_deadline = (

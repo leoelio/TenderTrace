@@ -243,6 +243,7 @@ const el = {
   organizationMemoryNoticeId: document.querySelector("#organizationMemoryNoticeId"),
   organizationMemoryEvidenceUrl: document.querySelector("#organizationMemoryEvidenceUrl"),
   refreshOrganizationButton: document.querySelector("#refreshOrganizationButton"),
+  openOrganizationWorkspaceButton: document.querySelector("#openOrganizationWorkspaceButton"),
   createOrganizationWorkspaceButton: document.querySelector("#createOrganizationWorkspaceButton"),
   inviteOrganizationMembersButton: document.querySelector("#inviteOrganizationMembersButton"),
   organizationGroupDialog: document.querySelector("#organizationGroupDialog"),
@@ -2864,7 +2865,17 @@ function renderOrganizationSummary() {
   if (!workspace) {
     el.organizationSummary.className = "organization-summary empty-state";
     el.organizationSummary.textContent = "请选择或创建协作空间";
+    if (el.openOrganizationWorkspaceButton) {
+      el.openOrganizationWorkspaceButton.hidden = true;
+      el.openOrganizationWorkspaceButton.removeAttribute("href");
+    }
     return;
+  }
+  if (el.openOrganizationWorkspaceButton) {
+    const chatUrl = workspace.feishu_chat_url || "";
+    el.openOrganizationWorkspaceButton.hidden = !chatUrl;
+    if (chatUrl) el.openOrganizationWorkspaceButton.href = chatUrl;
+    else el.openOrganizationWorkspaceButton.removeAttribute("href");
   }
   el.organizationSummary.className = "organization-summary";
   el.organizationSummary.innerHTML = `
@@ -2999,12 +3010,16 @@ async function submitOrganizationGroup(event) {
   }));
   if (!members.length) throw new Error("请至少选择一名成员");
   if (el.organizationGroupStatus) el.organizationGroupStatus.textContent = "正在同步飞书...";
+  let successMessage = "成员邀请已发送";
   if (state.organizationGroupMode === "create") {
     const result = await api("/api/organization/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: el.organizationGroupName?.value.trim() || "", members }),
     });
     state.organizationWorkspaceId = result.workspace.id;
+    successMessage = result.notification?.status === "sent"
+      ? `${result.workspace.name}已创建，群内通知已发送`
+      : result.notification?.message || `${result.workspace.name}已创建`;
   } else {
     await api(
       `/api/organization/workspaces/${encodeURIComponent(state.organizationWorkspaceId)}/members`,
@@ -3012,8 +3027,8 @@ async function submitOrganizationGroup(event) {
     );
   }
   closeOrganizationGroupDialog();
-  showToast(state.organizationGroupMode === "create" ? "飞书项目群已创建" : "成员邀请已发送");
   await refreshOrganizationWorkspaces();
+  showToast(successMessage);
 }
 
 function openOrganizationConvertDialog(memoryId) {

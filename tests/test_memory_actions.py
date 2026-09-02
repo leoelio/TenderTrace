@@ -147,8 +147,8 @@ def _insert_priority_opportunity(settings: Settings) -> None:
             """
             INSERT INTO notices(
                 id, source_site, source_url, canonical_url, title, publish_time,
-                region, purchaser, content_text, fields_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                region, purchaser, content_text, fields_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "memory-priority-opportunity",
@@ -161,6 +161,7 @@ def _insert_priority_opportunity(settings: Settings) -> None:
                 "示例采购人",
                 "服务器采购项目",
                 '{"opportunity_intelligence":{"level":"A","score":90}}',
+                "2026-08-16 09:00:00",
             ),
         )
 

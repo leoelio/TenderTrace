@@ -61,7 +61,7 @@ def extract_time_of_day(query: str) -> tuple[int, int, str]:
     return 9, 0, ""
 
 
-def parse_schedule(query: str) -> ParsedSchedule:
+def parse_schedule(query: str, *, timezone: str = "Asia/Shanghai") -> ParsedSchedule:
     hour, minute, time_text = extract_time_of_day(query)
     time_value = _format_time(hour, minute)
 
@@ -70,7 +70,7 @@ def parse_schedule(query: str) -> ParsedSchedule:
             value={
                 "kind": "recurring",
                 "cron": f"{minute} {hour} * * *",
-                "tz": "Asia/Shanghai",
+                "tz": timezone,
                 "time": time_value,
                 "origin": "rule",
             },
@@ -84,7 +84,7 @@ def parse_schedule(query: str) -> ParsedSchedule:
             value={
                 "kind": "recurring",
                 "cron": f"{minute} {hour} * * {_WEEKDAY_MAP[weekday]}",
-                "tz": "Asia/Shanghai",
+                "tz": timezone,
                 "time": time_value,
                 "origin": "rule",
             },
@@ -98,7 +98,7 @@ def parse_schedule(query: str) -> ParsedSchedule:
             value={
                 "kind": "recurring",
                 "cron": f"{minute} {hour} {day} * *",
-                "tz": "Asia/Shanghai",
+                "tz": timezone,
                 "time": time_value,
                 "origin": "rule",
             },
@@ -110,11 +110,23 @@ def parse_schedule(query: str) -> ParsedSchedule:
             value={
                 "kind": "once_at",
                 "time": time_value,
-                "tz": "Asia/Shanghai",
+                "tz": timezone,
                 "origin": "rule",
             },
             matched_text=("今天" + time_text).strip(),
         )
 
-    return ParsedSchedule(value={"kind": "immediate", "origin": "rule"}, matched_text="")
+    weekdays = re.search(r"\b(?:on\s+)?weekdays?\b", query, re.IGNORECASE)
+    if weekdays:
+        return ParsedSchedule(
+            value={
+                "kind": "recurring",
+                "cron": f"{minute} {hour} * * 1-5",
+                "tz": timezone,
+                "time": time_value,
+                "origin": "rule",
+            },
+            matched_text=(weekdays.group(0) + " " + time_text).strip(),
+        )
 
+    return ParsedSchedule(value={"kind": "immediate", "origin": "rule"}, matched_text="")

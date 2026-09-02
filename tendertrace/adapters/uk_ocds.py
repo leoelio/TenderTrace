@@ -162,7 +162,13 @@ class _UkOcdsAdapter:
                     for item in candidates
                 ]
                 for notice in parsed:
-                    if notice.id in seen or not _in_window(notice.publish_time, bidql):
+                    if (
+                        notice.id in seen
+                        or not _in_window(notice.publish_time, bidql)
+                        or not _matches_terms(notice, terms)
+                        or not _matches_region(notice, bidql)
+                        or _matches_negative(notice, bidql)
+                    ):
                         continue
                     seen.add(notice.id)
                     notices.append(notice)
@@ -277,6 +283,27 @@ def _matches_terms(notice: Notice, terms: list[str]) -> bool:
         )
     ).casefold()
     return any(term.casefold() in haystack for term in terms)
+
+
+def _matches_region(notice: Notice, bidql: dict[str, Any]) -> bool:
+    aliases = bidql.get("region", {}).get("location_aliases") or []
+    if not aliases:
+        return True
+    haystack = " ".join((notice.region, notice.title, notice.content_text)).casefold()
+    return any(str(alias).casefold() in haystack for alias in aliases if str(alias).strip())
+
+
+def _matches_negative(notice: Notice, bidql: dict[str, Any]) -> bool:
+    terms = bidql.get("topic", {}).get("negative") or []
+    haystack = " ".join(
+        (
+            notice.title,
+            notice.content_text,
+            _text(notice.fields.get("procurement_stage")),
+            _text(notice.fields.get("release_tag")),
+        )
+    ).casefold()
+    return any(str(term).casefold() in haystack for term in terms if str(term).strip())
 
 
 def parse_search_candidates(html: str, *, source_site: str) -> list[SearchCandidate]:

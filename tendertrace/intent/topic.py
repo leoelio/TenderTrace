@@ -18,7 +18,14 @@ _CATEGORY_SYNONYMS = {
 }
 
 _CATEGORY_SOURCE_TERMS = {
-    "充电桩": ["electric vehicle charging", "charging station", "EV charger"],
+    "充电桩": [
+        "EV charging",
+        "electric vehicle charging",
+        "EV charging infrastructure",
+        "charging station",
+        "EV charger",
+        "charge point",
+    ],
     "服务器": ["server", "data center server", "computing infrastructure"],
     "空调": ["air conditioning", "HVAC", "cooling system"],
     "储能": ["energy storage", "battery storage", "BESS"],
@@ -27,6 +34,16 @@ _CATEGORY_SOURCE_TERMS = {
     "消防": ["fire protection", "fire safety equipment", "fire suppression"],
     "安防": ["security system", "video surveillance", "access control"],
     "网络设备": ["network equipment", "network infrastructure", "switch router"],
+}
+
+_CATEGORY_INPUT_ALIASES = {
+    "充电桩": [
+        "EV charging",
+        "electric vehicle charging",
+        "EV charging infrastructure",
+        "EV charger",
+        "charge point",
+    ],
 }
 
 _NEGATIVE = ["中标", "成交", "废标", "流标", "终止", "结果"]
@@ -88,9 +105,17 @@ _KEEP_FLAGS = ("n", "vn", "eng")
 
 _CATEGORY_ALIASES = sorted(
     (
-        (alias, canonical, tuple(item for item in synonyms if item != canonical))
+        (
+            alias,
+            canonical,
+            tuple(
+                item
+                for item in (*synonyms, *_CATEGORY_INPUT_ALIASES.get(canonical, ()))
+                if item != canonical
+            ),
+        )
         for canonical, synonyms in _CATEGORY_SYNONYMS.items()
-        for alias in synonyms
+        for alias in (*synonyms, *_CATEGORY_INPUT_ALIASES.get(canonical, ()))
     ),
     key=lambda item: len(item[0]),
     reverse=True,
@@ -117,7 +142,7 @@ def extract_topic(
             "core": core,
             "expanded": _dedupe_expanded(expanded, core),
             "source_terms": _source_terms(core),
-            "negative": list(_NEGATIVE),
+            "negative": _negative_terms(query),
             "origin": "category_dict",
             "confidence": 0.94,
             "open_scope": False,
@@ -132,7 +157,7 @@ def extract_topic(
         "core": core,
         "expanded": [],
         "source_terms": [term for term in core if re.search(r"[A-Za-z]", term)],
-        "negative": list(_NEGATIVE),
+        "negative": _negative_terms(query),
         "origin": "jieba_pos" if confidence >= 0.7 else "fallback",
         "confidence": confidence,
         "open_scope": not core and ("全部" in query or "不限主题" in query),
@@ -162,8 +187,9 @@ def _remove_context(
 
 def _match_categories(text: str) -> list[dict[str, object]]:
     candidates: list[tuple[int, str, tuple[str, ...]]] = []
+    folded_text = text.casefold()
     for alias, canonical, synonyms in _CATEGORY_ALIASES:
-        index = text.find(alias)
+        index = folded_text.find(alias.casefold())
         if index < 0:
             continue
         candidates.append((index, canonical, synonyms))
@@ -177,6 +203,13 @@ def _match_categories(text: str) -> list[dict[str, object]]:
         if len(matched) >= 3:
             break
     return matched
+
+
+def _negative_terms(query: str) -> list[str]:
+    terms = list(_NEGATIVE)
+    if re.search(r"\bexclude\s+(?:contract\s+)?award\s+notices?\b", query, re.IGNORECASE):
+        terms.extend(["award notice", "contract award"])
+    return _dedupe_terms(terms)
 
 
 def _noun_terms(text: str) -> list[str]:

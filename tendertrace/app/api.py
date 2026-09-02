@@ -31,6 +31,7 @@ from tendertrace.evaluation import build_agent_evaluation_report
 from tendertrace.integrations.feishu import (
     FeishuClient,
     FeishuError,
+    feishu_chat_applink,
     feishu_agent_status,
     feishu_status,
 )
@@ -92,6 +93,7 @@ from tendertrace.opportunity import (
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
 from tendertrace.opportunity_outcomes import record_outcome
 from tendertrace.organization_memory import (
+    OrganizationWorkspace,
     add_members as add_organization_members,
     create_workspace as create_organization_workspace,
     get_memory as get_organization_memory,
@@ -596,7 +598,10 @@ def create_app():
     @app.get("/api/organization/workspaces")
     def organization_workspaces(limit: int = 100) -> dict[str, object]:
         return {
-            "items": [item.to_dict() for item in list_organization_workspaces(settings, limit=limit)]
+            "items": [
+                _organization_workspace_payload(item)
+                for item in list_organization_workspaces(settings, limit=limit)
+            ]
         }
 
     @app.post("/api/organization/workspaces")
@@ -634,7 +639,30 @@ def create_app():
             )
         except (FeishuError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return {"status": "created", "workspace": workspace.to_dict()}
+        try:
+            feishu.send_text(
+                _organization_workspace_welcome_message(
+                    settings,
+                    workspace,
+                    member_count=len(normalized_members),
+                ),
+                receive_id=chat_id,
+                receive_id_type="chat_id",
+            )
+            notification = {
+                "status": "sent",
+                "message": "项目群通知已发送",
+            }
+        except FeishuError:
+            notification = {
+                "status": "failed",
+                "message": "项目群已创建，但群内通知发送失败，请确认机器人发言权限",
+            }
+        return {
+            "status": "created",
+            "workspace": _organization_workspace_payload(workspace),
+            "notification": notification,
+        }
 
     @app.post("/api/organization/workspaces/{workspace_id}/members")
     def add_organization_members_api(
@@ -2083,6 +2111,36 @@ def create_app():
             app.mount("/", StaticFiles(directory=Path(web_dist), html=True), name="web")
 
     return app
+
+
+def _organization_workspace_payload(workspace: OrganizationWorkspace) -> dict[str, object]:
+    payload = workspace.to_dict()
+    payload["feishu_chat_url"] = feishu_chat_applink(workspace.feishu_chat_id)
+    return payload
+
+
+def _organization_workspace_welcome_message(
+    settings: Settings,
+    workspace: OrganizationWorkspace,
+    *,
+    member_count: int,
+) -> str:
+    workspace_url = (
+        f"{settings.public_base_url}/?view=organizationView&workspace={workspace.id}"
+    )
+    return "\n".join(
+        [
+            f"TenderTrace 项目群已创建｜{workspace.name}",
+            f"已邀请 {member_count} 名协作成员，机器人已加入群聊。",
+            "",
+            "你可以在群内：",
+            "1. 直接发送招投标问题，生成 Word 或创建增量订阅；",
+            "2. 发送“记录组织记忆：内容”，沉淀团队事实；",
+            "3. 发送“查询组织记忆：关键词”，检索共享知识。",
+            "",
+            f"返回 TenderTrace 组织协作：{workspace_url}",
+        ]
+    )
 
 
 def _parse_limits(request: dict[str, object]) -> tuple[int, int]:

@@ -158,6 +158,28 @@ class IntentCompilerTests(unittest.TestCase):
         self.assertEqual(bidql["topic"]["core"], ["server"])
         self.assertEqual(bidql["topic"]["source_terms"], ["server"])
 
+    def test_english_uk_query_parses_location_window_schedule_and_exclusion(self) -> None:
+        bidql = compile_intent(
+            "Show public-sector EV charging opportunities in Greater Manchester "
+            "published in the last 30 days. Includesupply-and-install lots, "
+            "notify me on weekdays at 08:30, and exclude award notices.",
+            now=NOW,
+        )
+
+        self.assertEqual(bidql["region"]["scope"], "uk")
+        self.assertEqual(bidql["region"]["city"], "Greater Manchester")
+        self.assertIn("Manchester", bidql["region"]["location_aliases"])
+        self.assertEqual(bidql["topic"]["core"], ["充电桩"])
+        self.assertIn("EV charging", bidql["topic"]["source_terms"])
+        self.assertIn("award notice", bidql["topic"]["negative"])
+        self.assertIn("contract award", bidql["topic"]["negative"])
+        self.assertEqual(bidql["time"]["ast"], {"op": "last", "unit": "day", "n": 30})
+        self.assertEqual(bidql["schedule"]["kind"], "recurring")
+        self.assertEqual(bidql["schedule"]["cron"], "30 8 * * 1-5")
+        self.assertEqual(bidql["schedule"]["tz"], "Europe/London")
+        self.assertNotIn("topic", bidql["meta"]["clarify_needed"])
+        self.assertNotIn("region", bidql["meta"]["clarify_needed"])
+
     def test_low_confidence_topic_requests_clarification(self) -> None:
         bidql = compile_intent("最近1个月上海相关信息有哪些", now=NOW)
 

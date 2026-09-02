@@ -6,11 +6,14 @@ from unittest.mock import patch
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
+from tendertrace.integrations.feishu import FeishuError
 
 
 class FakeFeishuClient:
     created: list[dict[str, object]] = []
     invited: list[tuple[str, list[str]]] = []
+    sent: list[dict[str, object]] = []
+    send_failure = False
 
     def __init__(self, settings) -> None:
         self.settings = settings
@@ -22,6 +25,12 @@ class FakeFeishuClient:
     def add_chat_members(self, chat_id: str, member_open_ids: list[str]):
         self.invited.append((chat_id, member_open_ids))
         return {"invalid_id_list": []}
+
+    def send_text(self, text: str, **kwargs):
+        if self.send_failure:
+            raise FeishuError("message delivery rejected")
+        self.sent.append({"text": text, **kwargs})
+        return {"message_id": "om_welcome"}
 
 
 class OrganizationMemoryApiTests(unittest.TestCase):
@@ -37,6 +46,8 @@ class OrganizationMemoryApiTests(unittest.TestCase):
             os.environ.update(values)
             FakeFeishuClient.created.clear()
             FakeFeishuClient.invited.clear()
+            FakeFeishuClient.sent.clear()
+            FakeFeishuClient.send_failure = False
             try:
                 settings = Settings.load()
                 init_db(settings)
@@ -109,6 +120,50 @@ class OrganizationMemoryApiTests(unittest.TestCase):
         self.assertEqual(action_converted.json()["result"]["source_type"], "organization_memory")
         self.assertEqual(listed.json()["items"][0]["member_count"], 2)
         self.assertEqual(FakeFeishuClient.invited, [("oc_api_team", ["ou_partner"])])
+        self.assertEqual(created.json()["notification"]["status"], "sent")
+        self.assertEqual(
+            created.json()["workspace"]["feishu_chat_url"],
+            "https://applink.feishu.cn/client/chat/open?openChatId=oc_api_team",
+        )
+        self.assertEqual(FakeFeishuClient.sent[0]["receive_id"], "oc_api_team")
+        self.assertEqual(FakeFeishuClient.sent[0]["receive_id_type"], "chat_id")
+        self.assertIn("记录组织记忆", str(FakeFeishuClient.sent[0]["text"]))
+
+    def test_group_creation_survives_welcome_message_failure(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app import api as api_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = _environment(root)
+            previous = {key: os.environ.get(key) for key in values}
+            os.environ.update(values)
+            FakeFeishuClient.send_failure = True
+            try:
+                settings = Settings.load()
+                init_db(settings)
+                with patch.object(api_module, "FeishuClient", FakeFeishuClient):
+                    with TestClient(api_module.create_app()) as client:
+                        created = client.post(
+                            "/api/organization/workspaces",
+                            json={
+                                "name": "通知降级测试群",
+                                "members": [{"open_id": "ou_owner", "name": "负责人"}],
+                            },
+                        )
+                        listed = client.get("/api/organization/workspaces")
+            finally:
+                FakeFeishuClient.send_failure = False
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(created.status_code, 200)
+        self.assertEqual(created.json()["notification"]["status"], "failed")
+        self.assertEqual(listed.json()["items"][0]["name"], "通知降级测试群")
 
 
 def _environment(root: Path) -> dict[str, str]:
