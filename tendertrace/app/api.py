@@ -42,6 +42,7 @@ from tendertrace.integrations.feishu_card_actions import (
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_notice_changes import send_opportunity_change_alerts
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
+from tendertrace.integrations.feishu_war_room import build_war_room_plan
 from tendertrace.integrations.feishu_relationship_actions import (
     create_relationship_action_task,
     sync_relationship_action_tasks,
@@ -951,6 +952,13 @@ def create_app():
         payload = result.to_dict()
         payload["relationship_actions"] = relationship_result.to_dict()
         return payload
+
+    @app.get("/api/opportunities/{notice_id}/war-room")
+    def opportunity_war_room_plan(notice_id: str) -> dict[str, object]:
+        try:
+            return build_war_room_plan(settings, notice_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/opportunities/send-feishu")
     def send_opportunity_feishu(request: dict[str, object] = Body(...)) -> dict[str, object]:

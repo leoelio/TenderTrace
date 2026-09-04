@@ -1872,6 +1872,9 @@ function openOpportunityDetail(noticeId) {
       ${workflow.feishu_task_completed_at ? detailLine("完成时间", workflow.feishu_task_completed_at) : ""}
       ${workflow.feishu_task_synced_at ? detailLine("最近同步", workflow.feishu_task_synced_at) : ""}
       ${detailLine("截止日程", workflow.feishu_event_id ? "已创建" : (item.bid_deadline ? "待创建" : "未识别截止时间"))}
+      <div class="war-room-plan" data-war-room-plan="${escapeHtml(item.notice_id)}">
+        <span>正在生成本地战情室编排方案…</span>
+      </div>
     </section>
     <div class="opportunity-detail-footer">
       <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${collaborationButtonLabel(workflow)}</button>
@@ -1886,6 +1889,10 @@ function openOpportunityDetail(noticeId) {
   loadOpportunityRequirements(noticeId).catch((error) => {
     const container = currentOpportunityRequirementContainer(noticeId);
     if (container) container.innerHTML = `<div class="opportunity-revision-empty">要求账本加载失败：${escapeHtml(error.message || error)}</div>`;
+  });
+  loadOpportunityWarRoomPlan(noticeId).catch((error) => {
+    const container = currentOpportunityWarRoomPlanContainer(noticeId);
+    if (container) container.innerHTML = `<span>战情室编排方案加载失败：${escapeHtml(error.message || error)}</span>`;
   });
 }
 
@@ -2247,6 +2254,33 @@ async function loadOpportunityRequirements(noticeId) {
 function currentOpportunityRequirementContainer(noticeId) {
   const container = el.opportunityDetailContent?.querySelector("[data-opportunity-requirements]");
   return container?.dataset.opportunityRequirements === noticeId ? container : null;
+}
+
+async function loadOpportunityWarRoomPlan(noticeId) {
+  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/war-room`);
+  const container = currentOpportunityWarRoomPlanContainer(noticeId);
+  if (!container) return;
+  container.innerHTML = renderOpportunityWarRoomPlan(payload);
+}
+
+function currentOpportunityWarRoomPlanContainer(noticeId) {
+  const container = el.opportunityDetailContent?.querySelector("[data-war-room-plan]");
+  return container?.dataset.warRoomPlan === noticeId ? container : null;
+}
+
+function renderOpportunityWarRoomPlan(plan) {
+  const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  const requirements = plan.requirements || {};
+  return `
+    <div class="war-room-plan-heading">
+      <strong>投标战情室编排</strong>
+      <span>本地方案 · ${escapeHtml(plan.ready_step_count || 0)} / ${escapeHtml(steps.length)} 步就绪</span>
+    </div>
+    <small>强制要求待处理 ${escapeHtml(requirements.task_candidate_count || 0)} 项；启动后才会创建飞书资源。</small>
+    <div class="war-room-steps">
+      ${steps.map((step) => `<div class="war-room-step status-${escapeHtml(step.status || "needs_configuration")}"><strong>${escapeHtml(step.label || step.key || "未命名步骤")}</strong><span>${escapeHtml(step.status === "ready" ? "就绪" : "待配置")}</span><small>${escapeHtml(step.detail || "")}</small></div>`).join("")}
+    </div>
+  `;
 }
 
 function renderOpportunityRequirements(payload, item) {
