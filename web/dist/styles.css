@@ -5854,6 +5854,286 @@ tbody tr:hover {
   background: rgba(255, 249, 235, 0.58);
 }
 
+.opportunity-requirements-section {
+  border-left: 3px solid rgba(18, 101, 214, 0.64);
+}
+
+.opportunity-requirement-ledger,
+.opportunity-requirement-list,
+.opportunity-requirement-form {
+  display: grid;
+  gap: 10px;
+}
+
+.opportunity-requirement-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 10px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.opportunity-requirement-summary strong {
+  color: var(--text);
+}
+
+.opportunity-requirement-summary .is-warning {
+  color: #b54708;
+}
+
+.opportunity-requirement-row {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid rgba(18, 101, 214, 0.18);
+  border-radius: 6px;
+  background: rgba(245, 249, 255, 0.58);
+}
+
+.opportunity-requirement-row.status-review,
+.opportunity-requirement-row.status-pending {
+  border-left: 3px solid #c48516;
+}
+
+.opportunity-requirement-heading,
+.opportunity-requirement-form-heading,
+.opportunity-requirement-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opportunity-requirement-heading span,
+.opportunity-requirement-heading em,
+.opportunity-requirement-row p,
+.opportunity-requirement-row small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.opportunity-requirement-heading em {
+  color: #b54708;
+}
+
+.opportunity-requirement-heading .link-button {
+  margin-left: auto;
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+.opportunity-requirement-row p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.opportunity-requirement-empty {
+  padding: 12px;
+  border: 1px dashed rgba(18, 101, 214, 0.28);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.opportunity-requirement-impact {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(196, 133, 22, 0.34);
+  border-left: 3px solid #c48516;
+  border-radius: 6px;
+  background: rgba(255, 249, 235, 0.66);
+}
+
+.opportunity-requirement-impact strong {
+  font-size: 12px;
+}
+
+.opportunity-requirement-impact span,
+.opportunity-requirement-impact small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.opportunity-requirement-form {
+  padding: 12px;
+  border: 1px solid rgba(18, 101, 214, 0.2);
+  border-radius: 6px;
+  background: rgba(247, 250, 255, 0.72);
+}
+
+.opportunity-requirement-form-heading strong {
+  font-size: 12px;
+}
+
+.opportunity-requirement-form-heading .link-button {
+  margin-left: auto;
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+.opportunity-requirement-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 12px;
+}
+
+.opportunity-requirement-form-grid label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.opportunity-requirement-form-grid input,
+.opportunity-requirement-form-grid select,
+.opportunity-requirement-form-grid textarea {
+  min-width: 0;
+}
+
+.opportunity-requirement-form-grid .requirement-wide {
+  grid-column: 1 / -1;
+}
+
+.opportunity-requirement-form-grid .requirement-checkbox {
+  display: flex;
+  align-items: center;
+  align-self: end;
+  gap: 7px;
+}
+
+.opportunity-requirement-form-grid .requirement-checkbox input {
+  width: auto;
+}
+
+.opportunity-archive-current {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: baseline;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(220, 199, 154, 0.62);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.opportunity-archive-current span,
+.opportunity-archive-current small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.opportunity-archive-current strong {
+  font-size: 13px;
+}
+
+.opportunity-archive-current small {
+  grid-column: 1 / -1;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.change-impact-panel {
+  margin-top: 12px;
+}
+
+.change-impact-heading,
+.opportunity-revision-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.change-impact-heading strong {
+  font-size: 12px;
+}
+
+.change-impact-heading span,
+.opportunity-revision-heading span,
+.opportunity-revision-heading small,
+.opportunity-revision-empty,
+.opportunity-revision-loading {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.change-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.change-impact-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(15, 99, 255, 0.16);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.change-impact-item strong {
+  font-size: 12px;
+}
+
+.change-impact-item span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.change-impact-item.impact-critical {
+  border-color: rgba(190, 44, 44, 0.28);
+  border-left-color: var(--danger);
+}
+
+.change-impact-item.impact-warning {
+  border-color: rgba(196, 133, 22, 0.34);
+  border-left-color: #c48516;
+}
+
+.change-impact-item.impact-stable {
+  border-color: rgba(22, 163, 74, 0.24);
+  border-left-color: #16a34a;
+}
+
+.opportunity-revision-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.opportunity-revision-card {
+  padding: 11px 12px;
+  border: 1px solid rgba(220, 199, 154, 0.58);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.opportunity-revision-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.opportunity-revision-heading strong {
+  font-size: 12px;
+}
+
+.opportunity-revision-empty,
+.opportunity-revision-loading {
+  padding: 12px;
+  border: 1px dashed rgba(196, 133, 22, 0.34);
+  border-radius: 6px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.42);
+}
+
 .opportunity-change-list {
   display: grid;
   margin-top: 10px;
@@ -5906,6 +6186,14 @@ tbody tr:hover {
 .change-review-acknowledged { margin: 10px 0 0; }
 
 @media (max-width: 760px) {
+  .opportunity-requirement-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .change-impact-grid {
+    grid-template-columns: 1fr;
+  }
+
   .opportunity-change-list > div {
     grid-template-columns: 1fr;
   }

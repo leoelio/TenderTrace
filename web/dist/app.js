@@ -18,6 +18,7 @@ const state = {
   feishu: null,
   opportunities: [],
   opportunitySummaryData: {},
+  opportunityRequirementPayloads: {},
   opportunityVisible: 20,
   pendingOpportunityId: "",
   pendingOpportunityTeamId: "",
@@ -1536,7 +1537,7 @@ function renderOpportunities(payload) {
               </div>
               <div class="opportunity-actions">
                 <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${collaborationButtonLabel(workflow)}</button>
-                <button class="text-link" type="button" data-view-opportunity="${escapeHtml(item.notice_id)}">研判详情</button>
+                <button class="text-link" type="button" data-view-opportunity="${escapeHtml(item.notice_id)}">数字档案</button>
               </div>
             </article>
           `;
@@ -1603,7 +1604,7 @@ function openOpportunityDetail(noticeId) {
   const relationshipActionItems = Array.isArray(relationshipActionPlan.items)
     ? relationshipActionPlan.items
     : [];
-  el.opportunityDetailTitle.textContent = item.title || "机会详情";
+  el.opportunityDetailTitle.textContent = item.title || "档案详情";
   el.opportunityDetailContent.innerHTML = `
     <div class="opportunity-detail-hero">
       <div class="opportunity-detail-grade grade-${escapeHtml(String(intelligence.level || "D").toLowerCase())}">
@@ -1706,19 +1707,24 @@ function openOpportunityDetail(noticeId) {
         </div>
       </div>
     </section>
-    ${Number(changeSummary.count) > 0 ? `
-      <section class="opportunity-detail-section opportunity-change-section">
-        <div class="opportunity-detail-section-title">
-          <h3>公告变更</h3>
-          <span>累计 ${escapeHtml(changeSummary.count)} 次 · 最近 ${escapeHtml(changeSummary.latest_at || "-")}</span>
+    <section class="opportunity-detail-section opportunity-change-section">
+      <div class="opportunity-detail-section-title">
+        <div>
+          <h3>档案时间线</h3>
+          <small>公告、附件、关键事实与决策影响均保留版本依据</small>
         </div>
-        <div class="opportunity-change-list">
-          ${changedFields.map((field) => noticeChangeLine(
-            field,
-            changeSummary.before?.[field],
-            changeSummary.after?.[field],
-          )).join("")}
-        </div>
+        <span>${Number(changeSummary.count) > 0 ? `累计 ${escapeHtml(changeSummary.count)} 次修订` : "当前为首个版本"}</span>
+      </div>
+      <div class="opportunity-archive-current">
+        <span>当前有效版本</span>
+        <strong>${escapeHtml(item.publish_time || "发布时间待确认")}</strong>
+        <small>${escapeHtml(item.source_site || "未知来源")} · ${escapeHtml(item.project_no || "项目编号待确认")} · 截止 ${escapeHtml(item.bid_deadline || "待确认")}</small>
+      </div>
+      ${changeImpactPanel(changedFields, changeReview)}
+      <div class="opportunity-revision-history" data-opportunity-revisions="${escapeHtml(item.notice_id)}">
+        <div class="opportunity-revision-loading">正在加载完整版本记录</div>
+      </div>
+      ${Number(changeSummary.count) > 0 ? `
         ${Number(changeReview.pending_count) > 0 ? `
           <div class="change-review-status ${changeReview.overdue ? "is-overdue" : ""}">
             <div>
@@ -1728,8 +1734,8 @@ function openOpportunityDetail(noticeId) {
             <small>原决策已失效，确认复核后需要重新完成 Go/Hold/No-Go 判断。</small>
           </div>
         ` : changeReview.acknowledged_at ? `<p class="change-review-acknowledged">最近复核：${escapeHtml(changeReview.acknowledged_by || "-")} · ${escapeHtml(changeReview.acknowledged_at)}</p>` : ""}
-      </section>
-    ` : ""}
+      ` : ""}
+    </section>
     <section class="opportunity-detail-section opportunity-facts-section">
       <div class="opportunity-detail-section-title">
         <h3>事实核验</h3>
@@ -1764,6 +1770,18 @@ function openOpportunityDetail(noticeId) {
           <button class="primary-lite-button" type="submit">保存并重新研判</button>
         </div>
       </form>
+    </section>
+    <section class="opportunity-detail-section opportunity-requirements-section">
+      <div class="opportunity-detail-section-title">
+        <div>
+          <h3>投标要求账本</h3>
+          <small>每条要求均需保留原文、定位、责任与处理状态</small>
+        </div>
+        <span>人工维护</span>
+      </div>
+      <div class="opportunity-requirement-ledger" data-opportunity-requirements="${escapeHtml(item.notice_id)}">
+        <div class="opportunity-revision-loading">正在加载要求账本</div>
+      </div>
     </section>
     <section class="opportunity-detail-section">
       <h3>市场与竞争</h3>
@@ -1861,6 +1879,14 @@ function openOpportunityDetail(noticeId) {
     </div>
   `;
   if (!el.opportunityDetailDialog.open) el.opportunityDetailDialog.showModal();
+  loadOpportunityRevisionHistory(noticeId).catch((error) => {
+    const container = currentOpportunityRevisionContainer(noticeId);
+    if (container) container.innerHTML = `<div class="opportunity-revision-empty">版本记录加载失败：${escapeHtml(error.message || error)}</div>`;
+  });
+  loadOpportunityRequirements(noticeId).catch((error) => {
+    const container = currentOpportunityRequirementContainer(noticeId);
+    if (container) container.innerHTML = `<div class="opportunity-revision-empty">要求账本加载失败：${escapeHtml(error.message || error)}</div>`;
+  });
 }
 
 function opportunityFactInput(label, name, value, type = "text") {
@@ -2116,6 +2142,268 @@ function noticeChangeLine(field, before, after) {
       <i aria-hidden="true">→</i>
       <span>${escapeHtml(afterText || "未提供")}</span>
     </div>
+  `;
+}
+
+function changeImpactPanel(changedFields, changeReview) {
+  const impacts = noticeChangeImpacts(changedFields, changeReview);
+  return `
+    <div class="change-impact-panel">
+      <div class="change-impact-heading">
+        <strong>变化影响</strong>
+        <span>${changedFields.length ? "按最新版本差异生成" : "当前没有待处理差异"}</span>
+      </div>
+      <div class="change-impact-grid">
+        ${impacts.map((impact) => `
+          <div class="change-impact-item impact-${escapeHtml(impact.level)}">
+            <strong>${escapeHtml(impact.title)}</strong>
+            <span>${escapeHtml(impact.detail)}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function noticeChangeImpacts(changedFields, changeReview) {
+  const fields = new Set(changedFields);
+  const impacts = [];
+  if (Number(changeReview?.pending_count) > 0) {
+    impacts.push({
+      level: "critical",
+      title: "原投标决策已失效",
+      detail: "负责人完成变更复核后，需重新提交 Go、Hold 或 No-Go 判断。",
+    });
+  }
+  if (fields.has("bid_deadline")) {
+    impacts.push({
+      level: "critical",
+      title: "投标截止时间发生变化",
+      detail: "需复核倒排计划、飞书任务和日历安排，系统不会静默覆盖人工计划。",
+    });
+  }
+  if (fields.has("attachments") || fields.has("attachment_fingerprints")) {
+    impacts.push({
+      level: "warning",
+      title: "附件或附件内容发生变化",
+      detail: "需重新检查资格材料、技术参数和附件清单。",
+    });
+  }
+  if (fields.has("budget")) {
+    impacts.push({
+      level: "warning",
+      title: "预算发生变化",
+      detail: "需重新评估投入规模、报价策略和机会优先级。",
+    });
+  }
+  if (fields.has("content_text") || fields.has("core_content")) {
+    impacts.push({
+      level: "warning",
+      title: "公告正文发生变化",
+      detail: "需重新执行需求覆盖与证据核验。",
+    });
+  }
+  if (!impacts.length && changedFields.length) {
+    impacts.push({
+      level: "info",
+      title: "项目事实发生变化",
+      detail: "请核对最新版本后再推进机会判断。",
+    });
+  }
+  if (!impacts.length) {
+    impacts.push({
+      level: "stable",
+      title: "当前版本稳定",
+      detail: "尚未记录影响投标判断的公告修订。",
+    });
+  }
+  return impacts;
+}
+
+async function loadOpportunityRevisionHistory(noticeId) {
+  const payload = await api(`/api/opportunities/changes?notice_id=${encodeURIComponent(noticeId)}&limit=100`);
+  const container = currentOpportunityRevisionContainer(noticeId);
+  if (!container) return;
+  const revisions = Array.isArray(payload.items) ? payload.items : [];
+  container.innerHTML = revisions.length
+    ? revisions.map((revision, index) => opportunityRevisionCard(revision, index === 0)).join("")
+    : '<div class="opportunity-revision-empty">当前公告是首个有效版本，尚无历史修订。</div>';
+}
+
+function currentOpportunityRevisionContainer(noticeId) {
+  const container = el.opportunityDetailContent?.querySelector("[data-opportunity-revisions]");
+  return container?.dataset.opportunityRevisions === noticeId ? container : null;
+}
+
+async function loadOpportunityRequirements(noticeId) {
+  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/requirements`);
+  const container = currentOpportunityRequirementContainer(noticeId);
+  if (!container) return;
+  state.opportunityRequirementPayloads[noticeId] = payload;
+  const item = state.opportunities.find((value) => value.notice_id === noticeId) || {};
+  container.innerHTML = renderOpportunityRequirements(payload, item);
+}
+
+function currentOpportunityRequirementContainer(noticeId) {
+  const container = el.opportunityDetailContent?.querySelector("[data-opportunity-requirements]");
+  return container?.dataset.opportunityRequirements === noticeId ? container : null;
+}
+
+function renderOpportunityRequirements(payload, item) {
+  const requirements = Array.isArray(payload.items) ? payload.items : [];
+  const summary = payload.summary || {};
+  const impact = payload.impact || {};
+  const impactsByRequirementId = new Map(
+    (Array.isArray(impact.items) ? impact.items : []).map((value) => [value.id, value]),
+  );
+  const members = Array.isArray(item.team?.members) ? item.team.members : [];
+  const noticeId = item.notice_id || "";
+  return `
+    <div class="opportunity-requirement-summary">
+      <span>共 <strong>${escapeHtml(summary.total_count || 0)}</strong> 项</span>
+      <span>已确认 <strong>${escapeHtml(summary.confirmed_count || 0)}</strong> 项</span>
+      <span class="${Number(summary.mandatory_pending_count) ? "is-warning" : ""}">强制待处理 <strong>${escapeHtml(summary.mandatory_pending_count || 0)}</strong> 项</span>
+    </div>
+    <div class="opportunity-requirement-list">
+      ${requirements.length ? requirements.map((requirement) => opportunityRequirementRow(requirement, impactsByRequirementId.get(requirement.id))).join("") : '<div class="opportunity-requirement-empty">尚未录入要求。请从公告或附件原文开始建立可复核账本。</div>'}
+    </div>
+    ${impact.review_required ? `<div class="opportunity-requirement-impact"><strong>公告变化影响：${escapeHtml(impact.affected_count || 0)} 项要求待复核</strong><span>${escapeHtml((impact.items || []).map((item) => item.requirement_key).join("、"))}</span><small>${escapeHtml(impact.items?.[0]?.reason || "请回看原文证据")}</small></div>` : ""}
+    ${opportunityRequirementForm(noticeId, item, members)}
+  `;
+}
+
+function opportunityRequirementRow(requirement, impact = null) {
+  const displayStatus = impact?.review_status || requirement.status || "pending";
+  const displayStatusLabel = impact
+    ? `${impact.review_status_label || "待复核"}（原：${impact.status_label || requirement.status_label || requirement.status || "待确认"}）`
+    : requirement.status_label || requirement.status || "待确认";
+  return `
+    <article class="opportunity-requirement-row status-${escapeHtml(displayStatus)}">
+      <div class="opportunity-requirement-heading">
+        <strong>${escapeHtml(requirement.requirement_key || "要求编号待确认")}</strong>
+        <span>${escapeHtml(requirement.requirement_type_label || requirement.requirement_type || "类型待确认")}</span>
+        ${requirement.mandatory ? '<em>强制项</em>' : ""}
+        <button class="link-button" type="button" data-edit-opportunity-requirement="${escapeHtml(requirement.id || "")}" data-opportunity-id="${escapeHtml(requirement.notice_id || "")}">编辑</button>
+      </div>
+      <strong>${escapeHtml(requirement.title || "未命名要求")}</strong>
+      <p>${escapeHtml(requirement.evidence_text || "原文待补")}</p>
+      <small>${escapeHtml(requirement.source_locator || "定位待补")} · 置信度 ${escapeHtml(requirement.confidence || 0)}% · ${escapeHtml(displayStatusLabel)}${requirement.due_at ? ` · 截止 ${escapeHtml(requirement.due_at)}` : ""}</small>
+    </article>
+  `;
+}
+
+function opportunityRequirementForm(noticeId, item, members) {
+  const memberOptions = [
+    '<option value="">暂不分配</option>',
+    ...members.map((member) => `<option value="${escapeHtml(member.id || "")}">${escapeHtml(member.member_name || "未命名成员")} · ${escapeHtml(member.role_label || "协作成员")}</option>`),
+  ].join("");
+  return `
+    <form class="opportunity-requirement-form" data-opportunity-requirements-form="${escapeHtml(noticeId)}">
+      <div class="opportunity-requirement-form-heading">
+        <strong>录入或修订要求</strong>
+        <button class="link-button" type="button" data-extract-opportunity-requirements="${escapeHtml(noticeId)}">规则提取</button>
+        <button class="link-button" type="button" data-reset-opportunity-requirement="${escapeHtml(noticeId)}">清空</button>
+      </div>
+      <div class="opportunity-requirement-form-grid">
+        <label><span>要求编号</span><input name="requirement_key" required maxlength="80" placeholder="例如 QUAL-01" /></label>
+        <label><span>类型</span><select name="requirement_type"><option value="qualification">资格条件</option><option value="deadline">截止时间</option><option value="scoring">评分项</option><option value="disqualification">废标条款</option><option value="attachment">附件清单</option></select></label>
+        <label class="requirement-wide"><span>要求概述</span><input name="title" required maxlength="300" placeholder="可执行、可判断的要求描述" /></label>
+        <label class="requirement-wide"><span>原文摘录</span><textarea name="evidence_text" required rows="2" maxlength="2000" placeholder="复制对应原文，不以模型概括代替证据"></textarea></label>
+        <label><span>原文定位</span><input name="source_locator" required maxlength="300" placeholder="文件名第 3 页，第 2.1 条" /></label>
+        <label><span>证据链接</span><input name="source_url" type="url" required value="${escapeHtml(item.source_url || "")}" /></label>
+        <label><span>置信度</span><input name="confidence" type="number" min="0" max="100" value="0" /></label>
+        <label><span>处理状态</span><select name="status"><option value="pending">待确认</option><option value="confirmed">已确认</option><option value="assigned">待准备</option><option value="in_progress">准备中</option><option value="review">待复核</option><option value="completed">已完成</option></select></label>
+        <label><span>责任人</span><select name="assignee_member_id">${memberOptions}</select></label>
+        <label><span>截止时间</span><input name="due_at" type="datetime-local" /></label>
+        <label class="requirement-checkbox"><input name="mandatory" type="checkbox" /><span>强制项 / 废标风险</span></label>
+        <label class="requirement-wide"><span>备注</span><input name="note" maxlength="1000" placeholder="待补材料、核验说明或人工判断" /></label>
+      </div>
+      <div class="opportunity-requirement-form-actions"><button class="primary-lite-button" type="submit">保存要求</button></div>
+    </form>
+  `;
+}
+
+function editOpportunityRequirement(noticeId, requirementId) {
+  const requirement = state.opportunityRequirementPayloads[noticeId]?.items?.find(
+    (item) => item.id === requirementId,
+  );
+  const form = currentOpportunityRequirementContainer(noticeId)?.querySelector("form");
+  if (!requirement || !form) return;
+  for (const field of ["requirement_key", "requirement_type", "title", "evidence_text", "source_url", "source_locator", "confidence", "status", "assignee_member_id", "due_at", "note"]) {
+    if (form.elements[field]) form.elements[field].value = requirement[field] || "";
+  }
+  form.elements.mandatory.checked = Boolean(requirement.mandatory);
+  form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function resetOpportunityRequirementForm(noticeId) {
+  const form = currentOpportunityRequirementContainer(noticeId)?.querySelector("form");
+  if (!form) return;
+  form.reset();
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  if (form.elements.source_url) form.elements.source_url.value = item?.source_url || "";
+}
+
+async function saveOpportunityRequirement(form) {
+  const noticeId = form.dataset.opportunityRequirementsForm || "";
+  if (!noticeId) return;
+  const values = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    await api(`/api/opportunities/${encodeURIComponent(noticeId)}/requirements`, {
+      method: "POST",
+      body: JSON.stringify({
+        requirement_key: values.get("requirement_key") || "",
+        requirement_type: values.get("requirement_type") || "qualification",
+        title: values.get("title") || "",
+        evidence_text: values.get("evidence_text") || "",
+        source_url: values.get("source_url") || "",
+        source_locator: values.get("source_locator") || "",
+        mandatory: values.get("mandatory") === "on",
+        confidence: Number(values.get("confidence") || 0),
+        status: values.get("status") || "pending",
+        assignee_member_id: values.get("assignee_member_id") || "",
+        due_at: values.get("due_at") || "",
+        note: values.get("note") || "",
+        actor: "web:admin",
+      }),
+    });
+    await loadOpportunityRequirements(noticeId);
+    showToast("要求已保存，并保留原文证据与处理状态");
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+}
+
+async function extractOpportunityRequirements(noticeId) {
+  if (!noticeId) return;
+  const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/requirements/extract`, {
+    method: "POST",
+  });
+  await loadOpportunityRequirements(noticeId);
+  showToast(`规则提取完成：新增或更新 ${result.created_or_updated_count || 0} 项，人工内容保留 ${result.preserved_count || 0} 项`);
+}
+
+function opportunityRevisionCard(revision, latest) {
+  const fields = Array.isArray(revision.changed_fields) ? revision.changed_fields : [];
+  return `
+    <article class="opportunity-revision-card">
+      <div class="opportunity-revision-heading">
+        <div>
+          <span>${latest ? "最近一次修订" : "历史修订"}</span>
+          <strong>${escapeHtml(revision.created_at || "时间待确认")}</strong>
+        </div>
+        <small>${escapeHtml(fields.length)} 个字段变化</small>
+      </div>
+      <div class="opportunity-change-list">
+        ${fields.map((field) => noticeChangeLine(
+          field,
+          revision.before?.[field],
+          revision.after?.[field],
+        )).join("")}
+      </div>
+    </article>
   `;
 }
 
@@ -4361,6 +4649,12 @@ function normalizeWorkbenchLayout() {
 
 function bindEvents() {
   document.addEventListener("submit", (event) => {
+    const requirementForm = event.target.closest("[data-opportunity-requirements-form]");
+    if (requirementForm) {
+      event.preventDefault();
+      saveOpportunityRequirement(requirementForm).catch(toastError("要求账本保存失败"));
+      return;
+    }
     const form = event.target.closest("[data-opportunity-facts]");
     if (!form) return;
     event.preventDefault();
@@ -4469,6 +4763,26 @@ function bindEvents() {
         removeOpportunityTeamTarget.dataset.opportunityId || "",
         removeOpportunityTeamTarget.dataset.removeOpportunityTeam,
       ).catch(toastError("移除团队成员失败"));
+      return;
+    }
+    const editRequirementTarget = event.target.closest("[data-edit-opportunity-requirement]");
+    if (editRequirementTarget) {
+      editOpportunityRequirement(
+        editRequirementTarget.dataset.opportunityId || "",
+        editRequirementTarget.dataset.editOpportunityRequirement || "",
+      );
+      return;
+    }
+    const resetRequirementTarget = event.target.closest("[data-reset-opportunity-requirement]");
+    if (resetRequirementTarget) {
+      resetOpportunityRequirementForm(resetRequirementTarget.dataset.resetOpportunityRequirement || "");
+      return;
+    }
+    const extractRequirementsTarget = event.target.closest("[data-extract-opportunity-requirements]");
+    if (extractRequirementsTarget) {
+      extractOpportunityRequirements(
+        extractRequirementsTarget.dataset.extractOpportunityRequirements || "",
+      ).catch(toastError("规则提取失败"));
       return;
     }
     const addStakeholderTarget = event.target.closest("[data-add-opportunity-stakeholder]");

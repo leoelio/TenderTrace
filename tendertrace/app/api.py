@@ -92,6 +92,13 @@ from tendertrace.opportunity import (
 )
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
 from tendertrace.opportunity_outcomes import record_outcome
+from tendertrace.opportunity_requirements import (
+    list_requirements,
+    requirement_summary,
+    upsert_requirement,
+)
+from tendertrace.requirement_extraction import extract_and_save_requirements
+from tendertrace.requirement_change_impact import requirement_change_impact
 from tendertrace.organization_memory import (
     OrganizationWorkspace,
     add_members as add_organization_members,
@@ -1011,6 +1018,62 @@ def create_app():
         if opportunity is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return _mapping_value(opportunity.get("team"))
+
+    @app.get("/api/opportunities/{notice_id}/requirements")
+    def opportunity_requirements(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return {
+            "items": [item.to_dict() for item in list_requirements(settings, notice_id)],
+            "summary": requirement_summary(settings, notice_id),
+            "impact": requirement_change_impact(settings, notice_id),
+        }
+
+    @app.post("/api/opportunities/{notice_id}/requirements/extract")
+    def extract_opportunity_requirements(notice_id: str) -> dict[str, object]:
+        try:
+            result = extract_and_save_requirements(settings, notice_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {
+            **result,
+            "summary": requirement_summary(settings, notice_id),
+            "impact": requirement_change_impact(settings, notice_id),
+        }
+
+    @app.post("/api/opportunities/{notice_id}/requirements")
+    def save_opportunity_requirement(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            requirement = upsert_requirement(
+                settings,
+                notice_id=notice_id,
+                requirement_key=str(request.get("requirement_key") or ""),
+                requirement_type=str(request.get("requirement_type") or ""),
+                title=str(request.get("title") or ""),
+                evidence_text=str(request.get("evidence_text") or ""),
+                source_url=str(request.get("source_url") or ""),
+                source_locator=str(request.get("source_locator") or ""),
+                mandatory=bool(request.get("mandatory")),
+                confidence=int(request.get("confidence") or 0),
+                status=str(request.get("status") or "pending"),
+                assignee_member_id=str(request.get("assignee_member_id") or ""),
+                due_at=str(request.get("due_at") or ""),
+                note=str(request.get("note") or ""),
+                actor=str(request.get("actor") or "admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "status": "saved",
+            "requirement": requirement.to_dict(),
+            "summary": requirement_summary(settings, notice_id),
+            "impact": requirement_change_impact(settings, notice_id),
+        }
 
     @app.post("/api/opportunities/{notice_id}/team")
     def add_opportunity_team_member(

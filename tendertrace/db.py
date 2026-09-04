@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 
 
 DDL = (
@@ -504,6 +504,30 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS opportunity_requirements (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        requirement_key TEXT NOT NULL,
+        requirement_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        evidence_text TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        source_locator TEXT NOT NULL,
+        mandatory INTEGER NOT NULL DEFAULT 0,
+        confidence INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        assignee_member_id TEXT,
+        due_at TEXT,
+        note TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (notice_id, requirement_key),
+        FOREIGN KEY (notice_id) REFERENCES notices(id),
+        FOREIGN KEY (assignee_member_id) REFERENCES opportunity_team_members(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS feishu_lead_import_runs (
         id TEXT PRIMARY KEY,
         mode TEXT NOT NULL,
@@ -680,6 +704,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_relationship_actions_notice ON opportunity_relationship_actions(notice_id, status, due_at)",
     "CREATE INDEX IF NOT EXISTS idx_relationship_actions_sync ON opportunity_relationship_actions(feishu_task_status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_notice ON opportunity_requirements(notice_id, status, requirement_type)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_assignee ON opportunity_requirements(assignee_member_id, status, due_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_organization_workspaces_status ON organization_workspaces(status, updated_at)",
