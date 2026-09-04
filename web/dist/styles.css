@@ -6002,6 +6002,55 @@ tbody tr:hover {
   border-left: 3px solid #c48516;
 }
 
+.requirement-review-board,
+.requirement-review-list {
+  display: grid;
+  gap: 8px;
+}
+
+.requirement-review-summary {
+  display: flex;
+  gap: 14px;
+  margin: 10px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.requirement-review-case {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(196, 133, 22, 0.3);
+  border-left: 3px solid #c48516;
+  border-radius: 6px;
+}
+
+.requirement-review-case.status-resolved {
+  border-left-color: #16a34a;
+}
+
+.requirement-review-case > div,
+.requirement-review-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.requirement-review-case span,
+.requirement-review-case small,
+.requirement-review-case p {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.requirement-review-case p {
+  margin: 0;
+}
+
+.requirement-review-form input {
+  min-width: 0;
+}
+
 .opportunity-requirement-form {
   padding: 12px;
   border: 1px solid rgba(18, 101, 214, 0.2);
@@ -6242,6 +6291,11 @@ tbody tr:hover {
 
   .war-room-steps {
     grid-template-columns: 1fr;
+  }
+
+  .requirement-review-form {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .opportunity-change-list > div {

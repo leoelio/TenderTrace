@@ -1783,6 +1783,18 @@ function openOpportunityDetail(noticeId) {
         <div class="opportunity-revision-loading">正在加载要求账本</div>
       </div>
     </section>
+    <section class="opportunity-detail-section review-board-section">
+      <div class="opportunity-detail-section-title">
+        <div>
+          <h3>五角色会审</h3>
+          <small>低置信度、强制待处理和公告变化会进入人工可裁决队列</small>
+        </div>
+        <button class="link-button" type="button" data-sync-review-board="${escapeHtml(item.notice_id)}">生成会审项</button>
+      </div>
+      <div class="requirement-review-board" data-requirement-review-board="${escapeHtml(item.notice_id)}">
+        <div class="opportunity-revision-loading">正在加载会审队列</div>
+      </div>
+    </section>
     <section class="opportunity-detail-section">
       <h3>市场与竞争</h3>
       ${detailLine("价格位置", benchmark.message || "同品类预算样本不足")}
@@ -1889,6 +1901,10 @@ function openOpportunityDetail(noticeId) {
   loadOpportunityRequirements(noticeId).catch((error) => {
     const container = currentOpportunityRequirementContainer(noticeId);
     if (container) container.innerHTML = `<div class="opportunity-revision-empty">要求账本加载失败：${escapeHtml(error.message || error)}</div>`;
+  });
+  loadOpportunityReviewBoard(noticeId).catch((error) => {
+    const container = currentOpportunityReviewBoardContainer(noticeId);
+    if (container) container.innerHTML = `<div class="opportunity-revision-empty">会审队列加载失败：${escapeHtml(error.message || error)}</div>`;
   });
   loadOpportunityWarRoomPlan(noticeId).catch((error) => {
     const container = currentOpportunityWarRoomPlanContainer(noticeId);
@@ -2266,6 +2282,72 @@ async function loadOpportunityWarRoomPlan(noticeId) {
 function currentOpportunityWarRoomPlanContainer(noticeId) {
   const container = el.opportunityDetailContent?.querySelector("[data-war-room-plan]");
   return container?.dataset.warRoomPlan === noticeId ? container : null;
+}
+
+async function loadOpportunityReviewBoard(noticeId) {
+  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board`);
+  const container = currentOpportunityReviewBoardContainer(noticeId);
+  if (container) container.innerHTML = renderOpportunityReviewBoard(payload);
+}
+
+function currentOpportunityReviewBoardContainer(noticeId) {
+  const container = el.opportunityDetailContent?.querySelector("[data-requirement-review-board]");
+  return container?.dataset.requirementReviewBoard === noticeId ? container : null;
+}
+
+function renderOpportunityReviewBoard(payload) {
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const summary = payload.summary || {};
+  return `
+    <div class="requirement-review-summary">
+      <span>待会审 <strong>${escapeHtml(summary.pending_count || 0)}</strong> 项</span>
+      <span>已裁决 <strong>${escapeHtml(summary.resolved_count || 0)}</strong> 项</span>
+    </div>
+    <div class="requirement-review-list">
+      ${items.length ? items.map(requirementReviewCase).join("") : '<div class="opportunity-requirement-empty">尚无会审项。生成后不会自动改变要求账本结论。</div>'}
+    </div>
+  `;
+}
+
+function requirementReviewCase(item) {
+  const resolved = item.status === "resolved";
+  return `
+    <article class="requirement-review-case status-${escapeHtml(item.status || "pending")}">
+      <div><strong>${escapeHtml(item.requirement_key || "未命名要求")}</strong><span>${escapeHtml(item.reviewer_role_label || item.reviewer_role || "会审")}</span></div>
+      <small>${escapeHtml(item.reason || "待人工判断")}</small>
+      ${resolved ? `<p>裁决：${escapeHtml(item.decision_label || item.decision || "已完成")} · ${escapeHtml(item.decided_by || "")}${item.decision_note ? ` · ${escapeHtml(item.decision_note)}` : ""}</p>` : `
+        <form class="requirement-review-form" data-requirement-review-form="${escapeHtml(item.notice_id)}" data-review-id="${escapeHtml(item.id)}">
+          <select name="decision"><option value="accepted">采纳</option><option value="returned">退回修订</option><option value="escalated">升级会审</option></select>
+          <input name="actor" required maxlength="80" placeholder="裁决人" />
+          <input name="note" required maxlength="500" placeholder="裁决依据（不会覆盖原要求）" />
+          <button class="link-button" type="submit">记录裁决</button>
+        </form>
+      `}
+    </article>
+  `;
+}
+
+async function syncOpportunityReviewBoard(noticeId) {
+  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/sync`, { method: "POST" });
+  const container = currentOpportunityReviewBoardContainer(noticeId);
+  if (container) container.innerHTML = renderOpportunityReviewBoard(payload);
+  showToast(`会审队列已生成：新增 ${payload.created_count || 0} 项`);
+}
+
+async function resolveOpportunityReviewCase(form) {
+  const noticeId = form.dataset.requirementReviewForm || "";
+  const reviewId = form.dataset.reviewId || "";
+  const values = new FormData(form);
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/${encodeURIComponent(reviewId)}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({
+      decision: values.get("decision") || "",
+      actor: values.get("actor") || "",
+      note: values.get("note") || "",
+    }),
+  });
+  await loadOpportunityReviewBoard(noticeId);
+  showToast("会审裁决已记录，原要求结论保持不变");
 }
 
 function renderOpportunityWarRoomPlan(plan) {
@@ -4683,6 +4765,12 @@ function normalizeWorkbenchLayout() {
 
 function bindEvents() {
   document.addEventListener("submit", (event) => {
+    const reviewForm = event.target.closest("[data-requirement-review-form]");
+    if (reviewForm) {
+      event.preventDefault();
+      resolveOpportunityReviewCase(reviewForm).catch(toastError("会审裁决保存失败"));
+      return;
+    }
     const requirementForm = event.target.closest("[data-opportunity-requirements-form]");
     if (requirementForm) {
       event.preventDefault();
@@ -4817,6 +4905,13 @@ function bindEvents() {
       extractOpportunityRequirements(
         extractRequirementsTarget.dataset.extractOpportunityRequirements || "",
       ).catch(toastError("规则提取失败"));
+      return;
+    }
+    const syncReviewBoardTarget = event.target.closest("[data-sync-review-board]");
+    if (syncReviewBoardTarget) {
+      syncOpportunityReviewBoard(syncReviewBoardTarget.dataset.syncReviewBoard || "").catch(
+        toastError("会审队列生成失败"),
+      );
       return;
     }
     const addStakeholderTarget = event.target.closest("[data-add-opportunity-stakeholder]");

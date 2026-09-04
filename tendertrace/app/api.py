@@ -100,6 +100,12 @@ from tendertrace.opportunity_requirements import (
 )
 from tendertrace.requirement_extraction import extract_and_save_requirements
 from tendertrace.requirement_change_impact import requirement_change_impact
+from tendertrace.requirement_review_board import (
+    list_requirement_review_cases,
+    requirement_review_summary,
+    resolve_requirement_review_case,
+    sync_requirement_review_cases,
+)
 from tendertrace.organization_memory import (
     OrganizationWorkspace,
     add_members as add_organization_members,
@@ -1081,6 +1087,46 @@ def create_app():
             "requirement": requirement.to_dict(),
             "summary": requirement_summary(settings, notice_id),
             "impact": requirement_change_impact(settings, notice_id),
+        }
+
+    @app.get("/api/opportunities/{notice_id}/review-board")
+    def opportunity_review_board(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return {
+            "items": [item.to_dict() for item in list_requirement_review_cases(settings, notice_id)],
+            "summary": requirement_review_summary(settings, notice_id),
+        }
+
+    @app.post("/api/opportunities/{notice_id}/review-board/sync")
+    def sync_opportunity_review_board(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return sync_requirement_review_cases(settings, notice_id)
+
+    @app.post("/api/opportunities/{notice_id}/review-board/{review_id}/resolve")
+    def resolve_opportunity_review_board_item(
+        notice_id: str,
+        review_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            item = resolve_requirement_review_case(
+                settings,
+                notice_id,
+                review_id,
+                decision=str(request.get("decision") or ""),
+                actor=str(request.get("actor") or ""),
+                note=str(request.get("note") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "status": "resolved",
+            "item": item.to_dict(),
+            "summary": requirement_review_summary(settings, notice_id),
         }
 
     @app.post("/api/opportunities/{notice_id}/team")

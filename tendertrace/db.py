@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 
 DDL = (
@@ -528,6 +528,25 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS requirement_review_cases (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        requirement_id TEXT NOT NULL,
+        reviewer_role TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        decision TEXT,
+        decision_note TEXT,
+        decided_by TEXT,
+        decided_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (requirement_id, reviewer_role, reason),
+        FOREIGN KEY (notice_id) REFERENCES notices(id),
+        FOREIGN KEY (requirement_id) REFERENCES opportunity_requirements(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS feishu_lead_import_runs (
         id TEXT PRIMARY KEY,
         mode TEXT NOT NULL,
@@ -706,6 +725,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_notice ON opportunity_requirements(notice_id, status, requirement_type)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_assignee ON opportunity_requirements(assignee_member_id, status, due_at)",
+    "CREATE INDEX IF NOT EXISTS idx_requirement_review_cases_notice ON requirement_review_cases(notice_id, status, reviewer_role)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_organization_workspaces_status ON organization_workspaces(status, updated_at)",
