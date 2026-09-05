@@ -9,6 +9,7 @@ from tendertrace.db import connection, init_db
 from tendertrace.delivery.feishu_bitable import FeishuBitableResult
 from tendertrace.integrations.feishu import FeishuError
 from tendertrace.integrations.feishu_requirement_sync import (
+    sync_requirement_task_status,
     sync_requirements_to_bitable,
     sync_requirements_to_feishu,
 )
@@ -40,6 +41,21 @@ class _FakeFeishuClient:
             }
         )
         return {"data": {"task": {"guid": guid}}}
+
+
+class _TaskStatusClient:
+    def __init__(self, *, completed: bool) -> None:
+        self.completed = completed
+
+    def get_task(self, task_guid: str) -> dict[str, object]:
+        return {
+            "data": {
+                "task": {
+                    "guid": task_guid,
+                    "completed_at": "1700000000000" if self.completed else "",
+                }
+            }
+        }
 
 
 class FeishuRequirementSyncTests(unittest.TestCase):
@@ -104,6 +120,50 @@ class FeishuRequirementSyncTests(unittest.TestCase):
         self.assertEqual(captured["summary"]["total_count"], 1)
         self.assertEqual(len(captured["requirements"]), 1)
 
+    def test_sync_task_status_flags_conflict_when_feishu_completed_but_local_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            requirement = _requirement(settings, "QUAL-01", mandatory=True, status="pending")
+            _set_task_guid(settings, requirement.id, "task-1")
+
+            result = sync_requirement_task_status(
+                settings,
+                "notice-1",
+                client=_TaskStatusClient(completed=True),
+            )
+            with connection(settings) as conn:
+                refreshed = conn.execute(
+                    "SELECT feishu_task_status FROM opportunity_requirements WHERE id = ?",
+                    (requirement.id,),
+                ).fetchone()
+                conflict = conn.execute(
+                    "SELECT COUNT(*) FROM opportunity_events WHERE notice_id = 'notice-1' "
+                    "AND action = 'requirement_task_conflict'"
+                ).fetchone()[0]
+
+        self.assertEqual(result.status, "finished")
+        self.assertEqual(result.updated_count, 1)
+        self.assertEqual(result.conflict_count, 1)
+        self.assertEqual(refreshed["feishu_task_status"], "completed")
+        self.assertEqual(conflict, 1)
+
+    def test_sync_task_status_records_no_conflict_when_local_is_completed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            requirement = _requirement(settings, "QUAL-01", mandatory=True, status="completed")
+            _set_task_guid(settings, requirement.id, "task-1")
+
+            result = sync_requirement_task_status(
+                settings,
+                "notice-1",
+                client=_TaskStatusClient(completed=True),
+            )
+
+        self.assertEqual(result.updated_count, 1)
+        self.assertEqual(result.conflict_count, 0)
+
     def test_create_task_failure_is_recorded_without_blocking_others(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))
@@ -155,6 +215,14 @@ def _requirement(settings: Settings, key: str, *, mandatory: bool, status: str):
         status=status,
         actor="测试",
     )
+
+
+def _set_task_guid(settings: Settings, requirement_id: str, task_guid: str) -> None:
+    with connection(settings) as conn:
+        conn.execute(
+            "UPDATE opportunity_requirements SET feishu_task_guid = ? WHERE id = ?",
+            (task_guid, requirement_id),
+        )
 
 
 if __name__ == "__main__":

@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 import hashlib
+import json
 from typing import Any
+from uuid import uuid4
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
@@ -19,6 +21,8 @@ class RequirementSyncResult:
     created_count: int
     skipped_count: int
     failed_count: int
+    updated_count: int = 0
+    conflict_count: int = 0
     failures: tuple[dict[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, object]:
@@ -102,6 +106,106 @@ def sync_requirements_to_bitable(
         requirements=requirements,
     )
     return result.to_dict()
+
+
+def sync_requirement_task_status(
+    settings: Settings,
+    notice_id: str,
+    *,
+    client: FeishuClient | None = None,
+    limit: int = 100,
+) -> RequirementSyncResult:
+    """Read Feishu task status back into the requirement ledger.
+
+    When Feishu reports a task as completed but the local requirement is not, a
+    conflict event is recorded instead of auto-completing the requirement — a human
+    must confirm the write-back.
+    """
+    init_db(settings)
+    feishu = client or FeishuClient(settings)
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, feishu_task_guid, status
+            FROM opportunity_requirements
+            WHERE notice_id = ? AND COALESCE(feishu_task_guid, '') <> ''
+            LIMIT ?
+            """,
+            (notice_id.strip(), max(1, min(int(limit), 500))),
+        ).fetchall()
+
+    updated_count = 0
+    conflict_count = 0
+    failures: list[dict[str, str]] = []
+    for row in rows:
+        requirement_id = str(row["id"])
+        task_guid = str(row["feishu_task_guid"])
+        try:
+            payload = feishu.get_task(task_guid)
+            task = _nested_dict(payload, "data", "task")
+            completed = _task_completed(task)
+        except (FeishuError, ValueError, TypeError, KeyError) as exc:
+            failures.append(
+                {"requirement_id": requirement_id, "error": f"{type(exc).__name__}: {exc}"[:500]}
+            )
+            continue
+        status = "completed" if completed else "open"
+        with connection(settings) as conn:
+            conn.execute(
+                "UPDATE opportunity_requirements SET feishu_task_status = ?, updated_at = datetime('now') WHERE id = ?",
+                (status, requirement_id),
+            )
+        updated_count += 1
+        if completed and str(row["status"]) != "completed":
+            _record_task_conflict(settings, notice_id, requirement_id)
+            conflict_count += 1
+
+    return RequirementSyncResult(
+        status="partial" if failures else "finished",
+        scanned_count=len(rows),
+        created_count=0,
+        skipped_count=0,
+        failed_count=len(failures),
+        updated_count=updated_count,
+        conflict_count=conflict_count,
+        failures=tuple(failures),
+    )
+
+
+def _record_task_conflict(settings: Settings, notice_id: str, requirement_id: str) -> None:
+    with connection(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO opportunity_events(id, notice_id, action, actor_open_id, payload_json)
+            VALUES (?, ?, 'requirement_task_conflict', 'feishu', ?)
+            """,
+            (
+                str(uuid4()),
+                notice_id,
+                json.dumps(
+                    {
+                        "requirement_id": requirement_id,
+                        "reason": "feishu task completed but local requirement not completed",
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            ),
+        )
+
+
+def _nested_dict(payload: dict[str, Any], *keys: str) -> dict[str, Any]:
+    current: Any = payload
+    for key in keys:
+        if not isinstance(current, dict):
+            return {}
+        current = current.get(key)
+    return current if isinstance(current, dict) else {}
+
+
+def _task_completed(task: dict[str, Any]) -> bool:
+    value = str(task.get("completed_at") or "").strip()
+    return bool(value) and value not in {"0", "None", "null"}
 
 
 def _should_sync(requirement: Any) -> bool:
