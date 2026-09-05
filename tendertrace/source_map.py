@@ -577,7 +577,13 @@ def _merge_fetch_stats(bucket: dict[str, object], fetch_stats: dict[str, Any]) -
 
 def _qianlima_login_expired(health: dict[str, object]) -> bool:
     error = str(health.get("last_error") or "").casefold()
-    return "qianlima login session expired" in error
+    return any(
+        marker in error
+        for marker in (
+            "qianlima login session expired",
+            "qianlima member apis rejected saved session",
+        )
+    )
 
 
 def _loads(value: str) -> dict[str, Any]:

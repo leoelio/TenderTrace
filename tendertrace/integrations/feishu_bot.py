@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 import importlib.util
 import json
 from typing import Any, Callable
+from urllib.parse import quote
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
@@ -182,7 +183,8 @@ def process_feishu_message_event(
                 event.message_id,
                 (
                     f"已记录项目协作意见：{note.content[:100]}\n"
-                    f"回到 TenderTrace：{settings.public_base_url}/?view=opportunityView"
+                    "回到 TenderTrace："
+                    f"{settings.public_base_url}/?view=opportunityView&opportunity={quote(notice_id, safe='')}"
                 ),
             )
             updated = get_feishu_message_event(settings, event_id)

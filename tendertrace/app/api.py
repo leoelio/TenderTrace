@@ -920,6 +920,13 @@ def create_app():
             "returned": len(items),
         }
 
+    @app.get("/api/opportunities/{notice_id}")
+    def opportunity_detail(notice_id: str) -> dict[str, object]:
+        item = get_opportunity(settings, notice_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return item
+
     @app.post("/api/opportunities/changes/send-feishu")
     def send_opportunity_changes(
         request: dict[str, object] = Body(default={}),

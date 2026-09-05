@@ -3889,6 +3889,98 @@ body.theme-dark .smart-card strong {
   font-size: 18px;
 }
 
+.opportunity-journey {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(246, 250, 255, 0.48);
+}
+
+.opportunity-journey-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.opportunity-journey-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.opportunity-journey-heading strong {
+  font-size: 13px;
+}
+
+.opportunity-journey-heading span,
+.opportunity-journey-heading small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.opportunity-journey-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.opportunity-journey-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 7px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.46);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.opportunity-journey-step b {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #16a34a;
+  font-size: 10px;
+}
+
+.opportunity-journey-step span {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.opportunity-journey-step small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.opportunity-journey-step.is-attention {
+  border-color: rgba(196, 133, 22, 0.3);
+  background: rgba(255, 251, 235, 0.62);
+}
+
+.opportunity-journey-step.is-attention b {
+  background: #c48516;
+}
+
+.opportunity-journey-step:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
 .opportunity-detail-section {
   padding: 18px;
   border-bottom: 1px solid var(--line);
@@ -5007,6 +5099,19 @@ body.theme-dark .grade-c {
 
   .opportunity-detail-metrics > div:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line-soft);
+  }
+
+  .opportunity-journey {
+    padding: 12px 14px;
+  }
+
+  .opportunity-journey-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .opportunity-journey-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .qualification-gates {

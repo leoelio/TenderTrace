@@ -151,6 +151,41 @@ class SourceObservabilityTests(unittest.TestCase):
         self.assertEqual(source_map["qianlima"]["validation"], "expired")
         self.assertIn("login session expired", qianlima["health"]["last_error"])
 
+    def test_member_api_session_rejection_marks_saved_session_expired(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            settings.ensure_directories()
+            (settings.secrets_dir / "qianlima_storage_state.json").write_text(
+                '{"cookies":[{"domain":".qianlima.com","name":"session","value":"hidden"}],"origins":[]}',
+                encoding="utf-8",
+            )
+            start_run(settings, run_id="run-member-rejected", original_query="上海服务器采购", mode="full")
+            finish_run(
+                settings,
+                run_id="run-member-rejected",
+                status="finished",
+                output_docx_path=None,
+                stats={
+                    "source_stats": [
+                        {
+                            "source": "qianlima",
+                            "status": "failed",
+                            "count": 0,
+                            "error": "qianlima member APIs rejected saved session",
+                        }
+                    ]
+                },
+            )
+
+            source_map = build_source_map(settings)
+
+        qianlima = next(item for item in source_map["items"] if item["site"] == "qianlima")
+        self.assertEqual(qianlima["status"], "login_expired")
+        self.assertFalse(source_map["login_source_ready"])
+        self.assertEqual(source_map["qianlima"]["validation"], "expired")
+        self.assertIn("重新保存", source_map["qianlima"]["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

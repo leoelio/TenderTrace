@@ -91,6 +91,7 @@ class OpportunityCollaborationTests(unittest.TestCase):
                     json={"content": "确认售前支持范围", "actor": "销售经理"},
                 )
                 listed = client.get("/api/opportunities/notice-1/collaboration-notes")
+                detail = client.get("/api/opportunities/notice-1")
                 launched = client.post(
                     "/api/opportunities/notice-1/war-room/launch",
                     json={"workspace_id": workspace.id},
@@ -102,6 +103,8 @@ class OpportunityCollaborationTests(unittest.TestCase):
 
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(listed.json()["returned"], 1)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["notice_id"], "notice-1")
         self.assertEqual(launched.status_code, 200)
         self.assertEqual(planned.status_code, 200)
         self.assertEqual(planned.json()["steps"][0]["status"], "ready")

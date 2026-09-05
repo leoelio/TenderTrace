@@ -93,7 +93,7 @@ TenderTrace 当前覆盖 16 个来源。范围路由根据查询地区选择对�
 | 工作台 | 输入查询、预览意图、选择立即运行或创建订阅，查看 TenderGraph 的实时阶段、来源进度和 Word 输出。 |
 | 历史运行 | 搜索、筛选和排序运行记录，检查 trace、checkpoint、结果数和失败原因。 |
 | 订阅管理 | 分别管理报告订阅与后台采集计划，查看下次执行、新增/跳过数量和最近交付。 |
-| 机会情报 | 按行动优先级、等级、截止时间和阶段研判机会，维护负责人、团队、关键人、核验事实、关系行动和投标决策；在档案内启动飞书战情室、查看执行回执并沉淀跨角色协作意见。 |
+| 机会情报 | 按行动优先级、等级、截止时间和阶段研判机会，维护负责人、团队、关键人、核验事实、关系行动和投标决策；档案顶部的实时推进路径按公告变更、要求覆盖、会审队列和协同门禁标出下一步，并可直达对应工作区；可在档案内启动飞书战情室、查看执行回执并沉淀跨角色协作意见。 |
 | 数据源 | 查看范围路由、登录态、真实采集指标、可靠性、SLO 告警和处置状态。 |
 | 用户记忆 | 查看使用周报、知识偏好、风险信号和可执行建议，采纳后创建真实采集或报告订阅。 |
 | Agent 评测 | 对比意图 Harness、RAG、Agent、来源质量和人工金标 Recall@K，明确区分代理指标与正式验收。 |
@@ -271,7 +271,7 @@ The architecture is local-first. Background ingestion grows the SQLite notice li
 | Intent and retrieval | Parses topic, category synonyms, province/city/district, relative or absolute time, and frequency. Scope routing avoids silent regional fallback. Optional BGE embeddings are fused with FTS results through RRF. |
 | Collection and evidence | Handles official APIs, static pages, dynamic pages, and authenticated sources with throttling, retry, block detection, detail retrieval, and snapshots. Content is cleaned, canonicalized, deduplicated, and enriched with bounded PDF, DOCX, and XLSX extraction. |
 | Reports and schedules | Word reports include title, publish time, source URL, core facts, attachment links, and source health. APScheduler separates ingestion plans from user delivery subscriptions; `sent_history` makes scheduled output incremental and auditable. Any report in the outbox can be sent directly to the selected Feishu project group, with delivery recorded in the activity audit. |
-| Opportunity operations | Scores freshness, completeness, credibility, corroboration, and requirement coverage. Maintains one accountable owner, a stage-aware pursuit team, partners, stakeholders, evidence-backed fact overrides, and qualification gates. |
+| Opportunity operations | Scores freshness, completeness, credibility, corroboration, and requirement coverage. Maintains one accountable owner, a stage-aware pursuit team, partners, stakeholders, evidence-backed fact overrides, and qualification gates. The dossier's live execution journey derives the next action from notice changes, requirement coverage, review cases, and collaboration gates, then links directly to that work area. |
 | Decision and execution | A shared action contract governs claiming, review, Go/Hold/No-Go, bid preparation, outcome, and archive actions. Material notice changes invalidate stale decisions and enter an SLA-bound review workflow. |
 | Market and outcomes | Builds category budget benchmarks, buyer concentration, procurement-stage distributions, award suppliers, competitors, win rates, and loss reasons from local evidence. Insufficient samples are labeled instead of extrapolated. |
 | Personal and organization memory | Personal activity produces weekly profiles and executable advice. Feishu project groups have isolated organization memory that can be converted, with audit provenance, into opportunity facts or relationship actions. |
@@ -301,7 +301,7 @@ Feishu is an execution surface rather than a notification-only integration. Tend
 | Conversation entry | Immediate questions return Word to the current chat; scheduled questions create chat-bound incremental subscriptions with durable event deduplication. |
 | Interactive opportunity cards | Claim, stage, decision, and advice actions consume the same server-side action contract as the Web UI and persist to SQLite and the audit stream. |
 | Tasks and calendar | Owners are Task v2 assignees; internal and partner team members are followers. Stable idempotency keys prevent duplicate tasks, events, and reminders. |
-| War room and review | The opportunity dossier preflights cards, ownership tasks, deadline calendar, Bitable, five-role review, and requirement tasks against the selected project group. Launch first derives review cases from the evidence ledger and material notice changes, then writes every result to the opportunity audit. AI review produces evidence-based, disagreement-aware suggestions only; an explicit human decision remains the sole state-changing action. Group members can send `项目意见 <opportunity ID>：<content>` to append a collaboration note to the same opportunity ledger. |
+| War room and review | The opportunity dossier preflights cards, ownership tasks, deadline calendar, Bitable, five-role review, and requirement tasks against the selected project group. Launch first derives review cases from the evidence ledger and material notice changes, then writes every result to the opportunity audit. AI review produces evidence-based, disagreement-aware suggestions only; an explicit human decision remains the sole state-changing action. Group members can send `项目意见 <opportunity ID>：<content>` to append a collaboration note to the same opportunity ledger; the confirmation includes a deep link that opens that exact dossier. |
 | Bitable | Notices and opportunities form a shared ledger. Partner-submitted leads are validated against a public source and content fingerprint before entering SQLite and FTS. |
 | Organization memory | Each project chat owns a separate shared memory scope. Explicit record/search commands preserve meeting facts, customer signals, and decisions without mixing them into personal profiles. |
 | Operations management | Weekly summaries, opportunity briefings, material changes, decision breaches, and source incidents are delivered as actionable, receiver-deduplicated cards. |
@@ -315,7 +315,7 @@ Identity boundaries are explicit: first-time claiming obtains the member's real 
 | Workbench | Run a natural-language query or create a subscription while following TenderGraph progress and report output. |
 | Run history | Search, filter, and sort runs; inspect traces, checkpoints, result counts, and failures. |
 | Subscriptions | Manage user reports and background ingestion separately, including next run and incremental-delivery results. |
-| Opportunities | Operate ownership, teams, stakeholders, facts, relationship actions, qualification, decisions, and outcomes. |
+| Opportunities | Operate ownership, teams, stakeholders, facts, relationship actions, qualification, decisions, and outcomes; use the live execution journey to identify and open the next evidence, requirement, review, or collaboration task. |
 | Sources | Inspect routing, authentication state, collection telemetry, reliability, SLO alerts, and incidents. |
 | User memory | Review weekly activity, knowledge preferences, risks, and advice that creates real automation when accepted. |
 | Agent evaluation | Compare intent, RAG, Agent, source, proxy-recall, and manually annotated Recall@K results. |

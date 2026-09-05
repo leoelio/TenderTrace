@@ -281,6 +281,7 @@ class FeishuBotTests(unittest.TestCase):
         self.assertEqual(note["channel"], "feishu_group")
         self.assertIn("售前需确认", note["content"])
         self.assertIn("已记录项目协作意见", client.replies[0][1])
+        self.assertIn("view=opportunityView&opportunity=callback-notice", client.replies[0][1])
 
     def test_non_text_message_is_audited_without_execution(self) -> None:
         payload = _event_payload("evt-file", "msg-file", "")

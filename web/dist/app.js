@@ -1623,6 +1623,9 @@ function openOpportunityDetail(noticeId) {
       ${detailMetric("可信", scores.credibility || 0)}
       ${detailMetric("需求覆盖", review.coverage_score || 0)}
     </div>
+    <section class="opportunity-journey" data-opportunity-journey="${escapeHtml(item.notice_id)}" aria-label="机会推进路径">
+      ${renderOpportunityJourney(item)}
+    </section>
     <section class="opportunity-detail-section trust-assessment-section">
       <div class="opportunity-detail-section-title">
         <h3>来源与证据可信度</h3>
@@ -1708,7 +1711,7 @@ function openOpportunityDetail(noticeId) {
         </div>
       </div>
     </section>
-    <section class="opportunity-detail-section opportunity-change-section">
+    <section id="opportunityChangeSection" class="opportunity-detail-section opportunity-change-section">
       <div class="opportunity-detail-section-title">
         <div>
           <h3>档案时间线</h3>
@@ -1772,7 +1775,7 @@ function openOpportunityDetail(noticeId) {
         </div>
       </form>
     </section>
-    <section class="opportunity-detail-section opportunity-requirements-section">
+    <section id="opportunityRequirementsSection" class="opportunity-detail-section opportunity-requirements-section">
       <div class="opportunity-detail-section-title">
         <div>
           <h3>投标要求账本</h3>
@@ -1784,7 +1787,7 @@ function openOpportunityDetail(noticeId) {
         <div class="opportunity-revision-loading">正在加载要求账本</div>
       </div>
     </section>
-    <section class="opportunity-detail-section review-board-section">
+    <section id="opportunityReviewSection" class="opportunity-detail-section review-board-section">
       <div class="opportunity-detail-section-title">
         <div>
           <h3>五角色会审</h3>
@@ -1879,7 +1882,7 @@ function openOpportunityDetail(noticeId) {
         ${opportunityActionButtons(item)}
       </div>
     </section>
-    <section class="opportunity-detail-section">
+    <section id="opportunityCollaborationSection" class="opportunity-detail-section">
       <h3>飞书协同</h3>
       ${detailLine("销售阶段", workflow.stage_label || "线索识别")}
       ${detailLine("机会负责人", workflow.owner_name || "待认领")}
@@ -1945,6 +1948,65 @@ function verifiedFactTag(item) {
 
 function detailMetric(label, value) {
   return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function renderOpportunityJourney(item, reviewSummary = {}) {
+  const intelligence = item.intelligence || {};
+  const requirementReview = intelligence.requirement_review || {};
+  const workflow = item.workflow || {};
+  const changeReview = item.change_review || {};
+  const qualification = item.qualification || {};
+  const blockers = qualificationBlockers(qualification, "approve_bid");
+  const reviewPending = Number(reviewSummary.pending_count || 0);
+  const requirementsCovered = Number(requirementReview.coverage_score || 0);
+  const steps = [
+    {
+      label: "证据变更",
+      target: "opportunityChangeSection",
+      status: Number(changeReview.pending_count || 0) ? "attention" : "ready",
+      detail: Number(changeReview.pending_count || 0)
+        ? `${changeReview.pending_count} 条公告变更待复核`
+        : "当前版本已核对",
+    },
+    {
+      label: "要求账本",
+      target: "opportunityRequirementsSection",
+      status: requirementsCovered >= 40 ? "ready" : "attention",
+      detail: `需求覆盖 ${requirementsCovered}%${requirementsCovered >= 40 ? "，可继续推进" : "，需补齐原文要求"}`,
+    },
+    {
+      label: "五角色会审",
+      target: "opportunityReviewSection",
+      status: reviewPending ? "attention" : "ready",
+      detail: reviewPending ? `${reviewPending} 项等待人工裁决` : "会审队列已闭环或待生成",
+    },
+    {
+      label: "协同执行",
+      target: "opportunityCollaborationSection",
+      status: workflow.owner_open_id && !blockers.length ? "ready" : "attention",
+      detail: workflow.owner_open_id
+        ? (blockers.length ? `Go 前待补：${blockers.slice(0, 2).join("、")}` : "负责人和准入门禁已就绪")
+        : "先认领负责人，再启动项目群战情室",
+    },
+  ];
+  const next = steps.find((step) => step.status === "attention") || steps[steps.length - 1];
+  return `
+    <div class="opportunity-journey-heading">
+      <div><strong>机会推进路径</strong><span>下一步：${escapeHtml(next.label)}</span></div>
+      <small>${escapeHtml(next.detail)}</small>
+    </div>
+    <div class="opportunity-journey-steps">
+      ${steps.map((step, index) => `<button class="opportunity-journey-step is-${escapeHtml(step.status)}" type="button" data-scroll-opportunity-target="${escapeHtml(step.target)}"><b>${index + 1}</b><span>${escapeHtml(step.label)}</span><small>${escapeHtml(step.detail)}</small></button>`).join("")}
+    </div>
+  `;
+}
+
+function refreshOpportunityJourney(noticeId, reviewSummary = {}) {
+  const item = state.opportunities.find((value) => value.notice_id === noticeId);
+  const container = el.opportunityDetailContent?.querySelector("[data-opportunity-journey]");
+  if (item && container?.dataset.opportunityJourney === noticeId) {
+    container.innerHTML = renderOpportunityJourney(item, reviewSummary);
+  }
 }
 
 function opportunityTeamMemberRow(member) {
@@ -2305,6 +2367,7 @@ async function loadOpportunityReviewBoard(noticeId) {
   const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board`);
   const container = currentOpportunityReviewBoardContainer(noticeId);
   if (container) container.innerHTML = renderOpportunityReviewBoard(payload);
+  refreshOpportunityJourney(noticeId, payload.summary || {});
 }
 
 function currentOpportunityReviewBoardContainer(noticeId) {
@@ -3353,7 +3416,33 @@ async function refreshOpportunities() {
   const payload = await api(`/api/opportunities?${query.toString()}`);
   state.opportunityVisible = opportunityPageSize();
   renderOpportunities(payload);
+  if (
+    state.pendingOpportunityId
+    && document.getElementById("opportunityView")?.classList.contains("active")
+  ) {
+    await openRequestedOpportunity();
+  }
   return payload;
+}
+
+async function openRequestedOpportunity() {
+  const noticeId = state.pendingOpportunityId;
+  if (!noticeId) return;
+  try {
+    const item = await api(`/api/opportunities/${encodeURIComponent(noticeId)}`);
+    const index = state.opportunities.findIndex((value) => value.notice_id === noticeId);
+    if (index >= 0) state.opportunities[index] = item;
+    else state.opportunities.unshift(item);
+    state.pendingOpportunityId = "";
+    const query = new URLSearchParams(window.location.search);
+    query.delete("opportunity");
+    const suffix = query.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${suffix ? `?${suffix}` : ""}${window.location.hash}`);
+    openOpportunityDetail(noticeId);
+  } catch (error) {
+    state.pendingOpportunityId = "";
+    showToast(`无法打开飞书关联机会：${error.message}`);
+  }
 }
 
 function opportunityPageSize() {
@@ -5099,6 +5188,14 @@ function bindEvents() {
       );
       return;
     }
+    const opportunityJourneyTarget = event.target.closest("[data-scroll-opportunity-target]");
+    if (opportunityJourneyTarget) {
+      const target = el.opportunityDetailContent?.querySelector(
+        `#${opportunityJourneyTarget.dataset.scrollOpportunityTarget || ""}`,
+      );
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const launchWarRoomTarget = event.target.closest("[data-launch-war-room]");
     if (launchWarRoomTarget) {
       launchOpportunityWarRoom(launchWarRoomTarget.dataset.launchWarRoom || "").catch(
@@ -5443,14 +5540,17 @@ function bindEvents() {
 }
 
 async function init() {
+  const query = new URLSearchParams(window.location.search);
+  state.pendingOpportunityId = query.get("opportunity")?.trim() || "";
   normalizeWorkbenchLayout();
   bindEvents();
   applyTheme(loadTheme());
   applyDepthProfile(el.searchDepthSelect?.value || "standard");
   syncActionMode();
   await refreshAll();
-  const requestedView = new URLSearchParams(window.location.search).get("view") || "";
+  const requestedView = query.get("view") || "";
   if (document.getElementById(requestedView)?.classList.contains("view")) showView(requestedView);
+  else if (state.pendingOpportunityId) showView("opportunityView");
 }
 
 init().catch((error) => showToast(`页面初始化失败：${error.message}`));
