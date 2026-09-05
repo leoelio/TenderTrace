@@ -9,6 +9,7 @@ from tendertrace.db import connection, init_db
 from tendertrace.delivery.feishu_bitable import FeishuBitableResult
 from tendertrace.integrations.feishu import FeishuError
 from tendertrace.integrations.feishu_requirement_sync import (
+    sync_requirement_completion_to_feishu,
     sync_requirement_task_status,
     sync_requirements_to_bitable,
     sync_requirements_to_feishu,
@@ -56,6 +57,15 @@ class _TaskStatusClient:
                 }
             }
         }
+
+
+class _CompletionClient:
+    def __init__(self) -> None:
+        self.completed_guids: list[str] = []
+
+    def complete_task(self, task_guid: str) -> dict[str, object]:
+        self.completed_guids.append(task_guid)
+        return {"code": 0, "data": {"task": {"guid": task_guid, "is_completed": True}}}
 
 
 class FeishuRequirementSyncTests(unittest.TestCase):
@@ -147,6 +157,30 @@ class FeishuRequirementSyncTests(unittest.TestCase):
         self.assertEqual(result.conflict_count, 1)
         self.assertEqual(refreshed["feishu_task_status"], "completed")
         self.assertEqual(conflict, 1)
+
+    def test_sync_completion_writes_local_completion_back_to_feishu(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            requirement = _requirement(settings, "QUAL-01", mandatory=True, status="completed")
+            _set_task_guid(settings, requirement.id, "task-1")
+            client = _CompletionClient()
+
+            result = sync_requirement_completion_to_feishu(
+                settings,
+                "notice-1",
+                client=client,
+            )
+            with connection(settings) as conn:
+                refreshed = conn.execute(
+                    "SELECT feishu_task_status FROM opportunity_requirements WHERE id = ?",
+                    (requirement.id,),
+                ).fetchone()
+
+        self.assertEqual(result.status, "finished")
+        self.assertEqual(result.updated_count, 1)
+        self.assertEqual(client.completed_guids, ["task-1"])
+        self.assertEqual(refreshed["feishu_task_status"], "completed")
 
     def test_sync_task_status_records_no_conflict_when_local_is_completed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

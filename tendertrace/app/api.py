@@ -60,6 +60,7 @@ from tendertrace.integrations.feishu_source_incidents import (
 )
 from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
 from tendertrace.integrations.feishu_requirement_sync import (
+    sync_requirement_completion_to_feishu,
     sync_requirement_task_status,
     sync_requirements_to_bitable,
     sync_requirements_to_feishu,
@@ -1082,6 +1083,12 @@ def create_app():
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return sync_requirement_task_status(settings, notice_id).to_dict()
+
+    @app.post("/api/opportunities/{notice_id}/requirements/sync-completion")
+    def sync_opportunity_requirement_completion(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return sync_requirement_completion_to_feishu(settings, notice_id).to_dict()
 
     @app.post("/api/opportunities/{notice_id}/requirements")
     def save_opportunity_requirement(

@@ -178,6 +178,20 @@ class FeishuClient:
         )
         return self._parse_response(response)
 
+    def complete_task(self, task_guid: str) -> dict[str, Any]:
+        if not task_guid.strip():
+            raise FeishuError("task_guid is required")
+        token = self.get_tenant_access_token()
+        response = self._client.post(
+            self._url(f"/open-apis/task/v2/tasks/{quote(task_guid, safe='')}/complete"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            params={"user_id_type": "open_id"},
+        )
+        return self._parse_response(response)
+
     def add_task_members(
         self,
         task_guid: str,

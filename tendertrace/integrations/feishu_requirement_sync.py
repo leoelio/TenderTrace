@@ -172,6 +172,62 @@ def sync_requirement_task_status(
     )
 
 
+def sync_requirement_completion_to_feishu(
+    settings: Settings,
+    notice_id: str,
+    *,
+    client: FeishuClient | None = None,
+    limit: int = 100,
+) -> RequirementSyncResult:
+    """Write local requirement completion back to Feishu Task v2.
+
+    Only requirements that already have a Feishu task and were completed locally are
+    pushed; the local ledger remains the source of truth.
+    """
+    init_db(settings)
+    feishu = client or FeishuClient(settings)
+    with connection(settings) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, feishu_task_guid
+            FROM opportunity_requirements
+            WHERE notice_id = ? AND COALESCE(feishu_task_guid, '') <> ''
+              AND status = 'completed' AND COALESCE(feishu_task_status, '') <> 'completed'
+            LIMIT ?
+            """,
+            (notice_id.strip(), max(1, min(int(limit), 500))),
+        ).fetchall()
+
+    updated_count = 0
+    failures: list[dict[str, str]] = []
+    for row in rows:
+        requirement_id = str(row["id"])
+        task_guid = str(row["feishu_task_guid"])
+        try:
+            feishu.complete_task(task_guid)
+        except (FeishuError, ValueError, TypeError, KeyError) as exc:
+            failures.append(
+                {"requirement_id": requirement_id, "error": f"{type(exc).__name__}: {exc}"[:500]}
+            )
+            continue
+        with connection(settings) as conn:
+            conn.execute(
+                "UPDATE opportunity_requirements SET feishu_task_status = 'completed', updated_at = datetime('now') WHERE id = ?",
+                (requirement_id,),
+            )
+        updated_count += 1
+
+    return RequirementSyncResult(
+        status="partial" if failures else "finished",
+        scanned_count=len(rows),
+        created_count=0,
+        skipped_count=0,
+        failed_count=len(failures),
+        updated_count=updated_count,
+        failures=tuple(failures),
+    )
+
+
 def _record_task_conflict(settings: Settings, notice_id: str, requirement_id: str) -> None:
     with connection(settings) as conn:
         conn.execute(
