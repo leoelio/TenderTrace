@@ -241,6 +241,7 @@ def cmd_classify_notices(args: argparse.Namespace) -> int:
         settings,
         limit=args.limit,
         only_unclassified=not args.all,
+        with_model=args.with_model,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("status") == "finished" else 1
@@ -692,6 +693,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--all",
         action="store_true",
         help="Re-classify every notice instead of only unclassified ones.",
+    )
+    classify_notices_parser.add_argument(
+        "--with-model",
+        action="store_true",
+        help="Use the model fallback for notices the rules cannot classify.",
     )
     classify_notices_parser.set_defaults(func=cmd_classify_notices)
     summarize_notice_parser = sub.add_parser(

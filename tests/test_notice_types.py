@@ -6,12 +6,32 @@ import unittest
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
+from tendertrace.llm.gateway import ModelCallResult
 from tendertrace.pipeline.notice_types import (
     EXCLUDED_FROM_TENDER_SEARCH,
     classify_and_persist_notice,
     classify_notice_type,
+    classify_notice_type_with_model,
     classify_notices,
 )
+
+
+class _FakeGateway:
+    def __init__(self, notice_type: str | None) -> None:
+        self.notice_type = notice_type
+        self.calls = 0
+
+    def generate_json(self, *, system: str, user: str) -> ModelCallResult:
+        self.calls += 1
+        if self.notice_type is None:
+            return ModelCallResult(mode="local", provider="ollama", model="m", status="failed")
+        return ModelCallResult(
+            mode="local",
+            provider="ollama",
+            model="m",
+            status="ok",
+            parsed={"notice_type": self.notice_type, "confidence": 60},
+        )
 
 
 class NoticeTypeClassifierTests(unittest.TestCase):
@@ -55,6 +75,39 @@ class NoticeTypeClassifierTests(unittest.TestCase):
         self.assertNotIn("other", EXCLUDED_FROM_TENDER_SEARCH)
         self.assertTrue(classify_notice_type("某项目中标公告").exclude_from_tender_search)
         self.assertFalse(classify_notice_type("某项目招标公告").exclude_from_tender_search)
+
+    def test_model_fallback_only_runs_for_other_and_is_constrained(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            rule_matched = classify_notice_type_with_model(
+                settings,
+                "某服务器采购项目招标公告",
+                gateway=_FakeGateway("award"),
+            )
+            fallback = classify_notice_type_with_model(
+                settings,
+                "某项目公告",
+                content_text="详见附件。",
+                gateway=_FakeGateway("award"),
+            )
+            invalid = classify_notice_type_with_model(
+                settings,
+                "某项目公告",
+                gateway=_FakeGateway("not-a-real-type"),
+            )
+            failed = classify_notice_type_with_model(
+                settings,
+                "某项目公告",
+                gateway=_FakeGateway(None),
+            )
+
+        self.assertEqual(rule_matched.notice_type, "tender")
+        self.assertEqual(rule_matched.matched_in, "title")
+        self.assertEqual(fallback.notice_type, "award")
+        self.assertEqual(fallback.matched_in, "model")
+        self.assertEqual(invalid.notice_type, "other")
+        self.assertEqual(failed.notice_type, "other")
 
     def test_classify_and_persist_notice_writes_type_and_label(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
