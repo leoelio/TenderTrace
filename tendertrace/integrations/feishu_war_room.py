@@ -11,6 +11,10 @@ from tendertrace.integrations.feishu_opportunity import start_opportunity_collab
 from tendertrace.integrations.feishu_requirement_sync import sync_requirements_to_feishu
 from tendertrace.opportunity import get_opportunity
 from tendertrace.opportunity_requirements import list_requirements, requirement_summary
+from tendertrace.requirement_review_board import (
+    requirement_review_summary,
+    sync_requirement_review_cases,
+)
 
 
 def build_war_room_plan(
@@ -27,6 +31,7 @@ def build_war_room_plan(
     workflow = _mapping(opportunity.get("workflow"))
     requirements = list_requirements(settings, notice_id)
     summary = requirement_summary(settings, notice_id)
+    review_summary = requirement_review_summary(settings, notice_id)
     owner_ready = bool(workflow.get("owner_open_id"))
     group_ready = bool(
         settings.feishu_message_app_id_present
@@ -70,6 +75,13 @@ def build_war_room_plan(
             "同步机会、负责人和推进状态到飞书多维表格",
             "需要配置飞书多维表格应用和数据表",
         ),
+        _step(
+            "review_board",
+            "五角色会审",
+            True,
+            _review_board_detail(review_summary),
+            "",
+        ),
     ]
     return {
         "mode": "local_plan",
@@ -85,6 +97,7 @@ def build_war_room_plan(
             **summary,
             "task_candidate_count": task_candidates,
         },
+        "review_board": review_summary,
         "steps": steps,
         "ready_step_count": sum(step["status"] == "ready" for step in steps),
         "launch": {
@@ -128,6 +141,11 @@ def launch_war_room(
         )
     opportunity = get_opportunity(settings, notice_id)
     assert opportunity is not None
+    review_result = sync_requirement_review_cases(settings, notice_id)
+    opportunity = {
+        **opportunity,
+        "review_board": review_result.get("summary", {}),
+    }
     workflow = _mapping(opportunity.get("workflow"))
     try:
         collaboration = collaboration_starter(
@@ -157,7 +175,13 @@ def launch_war_room(
         requirement_result = requirement_syncer(settings, notice_id, client=client)
     except (FeishuError, ValueError, TypeError) as exc:
         requirement_error = f"{type(exc).__name__}: {exc}"
-    steps = _launch_steps(plan, collaboration, requirement_result, requirement_error)
+    steps = _launch_steps(
+        plan,
+        collaboration,
+        requirement_result,
+        requirement_error,
+        review_result,
+    )
     failed_count = sum(step["status"] == "failed" for step in steps)
     status = "partial" if failed_count else "started"
     message = "飞书战情室已启动" if not failed_count else "飞书战情室已部分启动，请处理失败步骤"
@@ -184,11 +208,22 @@ def _mapping(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _review_board_detail(summary: dict[str, object]) -> str:
+    pending = int(summary.get("pending_count") or 0)
+    total = int(summary.get("total_count") or 0)
+    if pending:
+        return f"会审队列已就绪，待裁决 {pending} 项"
+    if total:
+        return f"会审项已全部裁决，共 {total} 项"
+    return "启动时按要求账本与公告变更生成会审项"
+
+
 def _launch_steps(
     plan: dict[str, object],
     collaboration: object,
     requirement_result: object | None,
     requirement_error: str,
+    review_result: dict[str, object],
 ) -> list[dict[str, str]]:
     existing_steps = plan.get("steps") if isinstance(plan.get("steps"), list) else []
     values = {str(step.get("key")): dict(step) for step in existing_steps if isinstance(step, dict)}
@@ -207,6 +242,18 @@ def _launch_steps(
         step = values.get(key, {"key": key, "label": key})
         status, detail = outcomes[key]
         launched.append({**step, "status": status, "detail": detail})
+    review_summary = _mapping(review_result.get("summary"))
+    review_step = values.get("review_board", {"key": "review_board", "label": "五角色会审"})
+    launched.append(
+        {
+            **review_step,
+            "status": "completed",
+            "detail": (
+                f"会审队列已同步：新增 {review_result.get('created_count', 0)} 项；"
+                f"待裁决 {review_summary.get('pending_count', 0)} 项"
+            ),
+        }
+    )
     sync_status = str(getattr(requirement_result, "status", "") or "")
     sync_detail = (
         f"已同步 {getattr(requirement_result, 'created_count', 0)} 项要求任务"

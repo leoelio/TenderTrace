@@ -39,6 +39,8 @@ class FeishuWarRoomTests(unittest.TestCase):
         self.assertEqual(plan["requirements"]["task_candidate_count"], 1)
         self.assertEqual(steps["owner_task"]["status"], "ready")
         self.assertEqual(steps["group_card"]["status"], "needs_configuration")
+        self.assertEqual(steps["review_board"]["status"], "ready")
+        self.assertIn("启动时按要求账本", steps["review_board"]["detail"])
         self.assertEqual(plan["launch"]["endpoint"], "/api/opportunities/notice-1/war-room/launch")
         self.assertEqual(plan["event"]["type"], "war_room.plan_ready")
 
@@ -61,10 +63,22 @@ class FeishuWarRoomTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))
             _insert_notice(settings)
+            upsert_requirement(
+                settings,
+                notice_id="notice-1",
+                requirement_key="QUAL-01",
+                requirement_type="qualification",
+                title="营业执照有效",
+                evidence_text="投标人须具有有效的营业执照。",
+                source_url="https://example.com/notice-1",
+                source_locator="招标文件第 3 页",
+                mandatory=True,
+            )
             calls: list[str] = []
 
             def starter(*args, **kwargs):
                 calls.append("collaboration")
+                self.assertEqual(args[1]["review_board"]["pending_count"], 2)
                 return SimpleNamespace(
                     message_id="om_war_room",
                     task_guid="task_war_room",
@@ -94,7 +108,9 @@ class FeishuWarRoomTests(unittest.TestCase):
                 ]
 
         self.assertEqual(result["status"], "started")
-        self.assertEqual(result["completed_count"], 5)
+        self.assertEqual(result["completed_count"], 6)
+        review_step = next(step for step in result["steps"] if step["key"] == "review_board")
+        self.assertIn("新增 2 项；待裁决 2 项", review_step["detail"])
         self.assertEqual(calls, ["collaboration", "requirements"])
         self.assertIn("war_room_launched", actions)
 

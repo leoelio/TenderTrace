@@ -1790,7 +1790,10 @@ function openOpportunityDetail(noticeId) {
           <h3>五角色会审</h3>
           <small>低置信度、强制待处理和公告变化会进入人工可裁决队列</small>
         </div>
-        <button class="link-button" type="button" data-sync-review-board="${escapeHtml(item.notice_id)}">生成会审项</button>
+        <div class="review-board-actions">
+          <button class="ghost-button" type="button" data-run-review-agents="${escapeHtml(item.notice_id)}">运行 AI 会审</button>
+          <button class="link-button" type="button" data-sync-review-board="${escapeHtml(item.notice_id)}">生成会审项</button>
+        </div>
       </div>
       <div class="requirement-review-board" data-requirement-review-board="${escapeHtml(item.notice_id)}">
         <div class="opportunity-revision-loading">正在加载会审队列</div>
@@ -2312,6 +2315,14 @@ function currentOpportunityReviewBoardContainer(noticeId) {
 function renderOpportunityReviewBoard(payload) {
   const items = Array.isArray(payload.items) ? payload.items : [];
   const summary = payload.summary || {};
+  const opinions = Array.isArray(payload.opinions) ? payload.opinions : [];
+  const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+  const opinionsByReview = new Map();
+  opinions.forEach((opinion) => {
+    const current = opinionsByReview.get(opinion.review_id) || [];
+    current.push(opinion);
+    opinionsByReview.set(opinion.review_id, current);
+  });
   return `
     <div class="requirement-review-summary">
       <span>待会审 <strong>${escapeHtml(summary.pending_count || 0)}</strong> 项</span>
@@ -2320,6 +2331,25 @@ function renderOpportunityReviewBoard(payload) {
     <div class="requirement-review-list">
       ${items.length ? items.map(requirementReviewCase).join("") : '<div class="opportunity-requirement-empty">尚无会审项。生成后不会自动改变要求账本结论。</div>'}
     </div>
+    ${suggestions.length ? `<section class="review-agent-panel" aria-label="AI 会审建议">
+      <div><strong>AI 会审建议</strong><small>建议只辅助人工裁决，不会改写要求账本。</small></div>
+      <div class="review-agent-suggestion-list">${suggestions.map((suggestion) => reviewAgentSuggestion(suggestion, opinionsByReview.get(suggestion.review_id) || [])).join("")}</div>
+    </section>` : ""}
+  `;
+}
+
+function reviewAgentSuggestion(suggestion, opinions) {
+  const consensusLabel = {
+    unanimous: "一致",
+    single: "单一意见",
+    split: "存在分歧",
+  }[suggestion.consensus] || "待判断";
+  return `
+    <article class="review-agent-suggestion ${suggestion.disagreement ? "has-disagreement" : ""}">
+      <div><strong>${escapeHtml(suggestion.requirement_key || "未命名要求")}</strong><span>${escapeHtml(suggestion.suggestion_label || suggestion.suggestion || "待判断")} · ${escapeHtml(consensusLabel)}</span></div>
+      <small>${escapeHtml(suggestion.opinion_count || 0)} 位 Agent 已给出意见</small>
+      <div class="review-agent-opinion-list">${opinions.map((opinion) => `<p><strong>${escapeHtml(opinion.agent_label || opinion.agent_role || "Agent")}</strong><span>${escapeHtml(opinion.decision_label || opinion.decision || "待判断")} · ${escapeHtml(opinion.confidence || 0)}%</span><small>${escapeHtml(opinion.rationale || "未提供依据")}</small></p>`).join("")}</div>
+    </article>
   `;
 }
 
@@ -2346,6 +2376,16 @@ async function syncOpportunityReviewBoard(noticeId) {
   const container = currentOpportunityReviewBoardContainer(noticeId);
   if (container) container.innerHTML = renderOpportunityReviewBoard(payload);
   showToast(`会审队列已生成：新增 ${payload.created_count || 0} 项`);
+}
+
+async function runOpportunityReviewAgents(noticeId) {
+  const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/agents`, { method: "POST" });
+  await loadOpportunityReviewBoard(noticeId);
+  if (result.mode === "multi_agent") {
+    showToast(`AI 会审完成：${result.opinion_count || 0} 条独立意见`);
+  } else {
+    showToast("当前模型未启用，已保留规则会审队列供人工裁决");
+  }
 }
 
 async function resolveOpportunityReviewCase(form) {
@@ -5049,6 +5089,13 @@ function bindEvents() {
     if (syncReviewBoardTarget) {
       syncOpportunityReviewBoard(syncReviewBoardTarget.dataset.syncReviewBoard || "").catch(
         toastError("会审队列生成失败"),
+      );
+      return;
+    }
+    const runReviewAgentsTarget = event.target.closest("[data-run-review-agents]");
+    if (runReviewAgentsTarget) {
+      runOpportunityReviewAgents(runReviewAgentsTarget.dataset.runReviewAgents || "").catch(
+        toastError("AI 会审失败"),
       );
       return;
     }

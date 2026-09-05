@@ -349,6 +349,7 @@ class OpportunityWorkflowTests(unittest.TestCase):
         self.assertTrue(card["config"]["update_multi"])
         self.assertIn("机会编号", str(card))
         self.assertIn("项目意见 notice-1", str(card))
+        self.assertIn("五角色会审", str(card))
         self.assertIn("多源已印证", str(card))
         self.assertIn("采集可靠度 95%", str(card))
         self.assertIn("客户关系", str(card))
