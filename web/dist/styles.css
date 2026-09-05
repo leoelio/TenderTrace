@@ -5559,12 +5559,12 @@ body.theme-dark .delivery-options {
   }
 
   .chat-panel {
-    grid-template-rows: minmax(190px, 300px) auto;
+    grid-template-rows: minmax(400px, 400px) auto;
   }
 
   .chat-stream {
-    min-height: 190px;
-    max-height: 300px;
+    min-height: 400px;
+    max-height: 400px;
   }
 
   .smart-start {
@@ -6942,12 +6942,12 @@ body.theme-dark .setting-tile {
   }
 
   .chat-panel {
-    grid-template-rows: minmax(210px, 300px) auto;
+    grid-template-rows: minmax(400px, 400px) auto;
   }
 
   .chat-stream {
-    min-height: 210px;
-    max-height: 300px;
+    min-height: 400px;
+    max-height: 400px;
   }
 
   .smart-grid {
@@ -7359,21 +7359,104 @@ body.theme-dark .owner-assignment-actions {
 /* Keep the TT conversation aligned with the report rail on wide workspaces. */
 @media (min-width: 1101px) {
   .workbench-grid {
-    align-items: stretch;
+    align-items: start;
   }
 
   .main-stack {
-    align-self: stretch;
+    align-self: start;
   }
 
   .main-stack > .chat-panel {
-    height: 100%;
-    grid-template-rows: minmax(320px, 1fr) auto;
+    height: auto;
+    grid-template-rows: minmax(370px, min(40vh, 400px)) auto;
   }
 
   .main-stack > .chat-panel .chat-stream {
-    min-height: 320px;
-    max-height: none;
+    min-height: 370px;
+    max-height: min(40vh, 400px);
+  }
+}
+
+.workbench-context {
+  display: grid;
+  gap: 8px;
+  max-width: min(880px, calc(100% - 46px));
+  margin: 10px 0 0 46px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.workbench-context-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.workbench-context-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.42);
+  overflow: hidden;
+}
+
+.workbench-context-item {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  min-height: 102px;
+  padding: 10px 12px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.workbench-context-item:last-child {
+  border-right: 0;
+}
+
+.workbench-context-item > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.workbench-context-item strong,
+.workbench-context-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbench-context-item strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.workbench-context-item small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.context-action {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  color: var(--accent-strong);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.context-action:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .workbench-context {
+    display: none;
   }
 }
 

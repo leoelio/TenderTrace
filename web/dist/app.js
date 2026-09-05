@@ -78,6 +78,7 @@ const el = {
   chatStream: document.querySelector("#chatStream"),
   smartStartPanel: document.querySelector("#smartStartPanel"),
   smartStartMeta: document.querySelector("#smartStartMeta"),
+  workbenchContext: document.querySelector("#workbenchContext"),
   intentPreview: document.querySelector("#intentPreview"),
   searchDepthSelect: document.querySelector("#searchDepthSelect"),
   modelStrategySelect: document.querySelector("#modelStrategySelect"),
@@ -797,10 +798,12 @@ function renderCheckpoints(checkpoints) {
 function renderOutbox(items) {
   renderLatestDownload(items[0]);
   renderSmartStart();
+  renderWorkbenchContext();
 }
 
 function renderSubscriptions(items) {
   renderSubscriptionTable(el.subscriptionPageBody, items);
+  renderWorkbenchContext();
 }
 
 function filterOutboxItems(items) {
@@ -1434,6 +1437,7 @@ function renderOpportunities(payload) {
   const summary = payload?.summary || {};
   state.opportunities = items;
   state.opportunitySummaryData = summary;
+  renderWorkbenchContext();
   const visibleItems = items.slice(0, state.opportunityVisible);
   if (el.opportunitySummary) {
     const levels = summary.levels || {};
@@ -2921,6 +2925,52 @@ function renderSmartStart() {
       ? `${mode} · ${strategy} · 当前问题已就绪`
       : "选择模板后可继续修改";
   }
+}
+
+function renderWorkbenchContext() {
+  if (!el.workbenchContext) return;
+  const latestReport = state.outbox?.[0];
+  const activeSubscriptions = (state.subscriptions || []).filter((item) => item.status === "enabled");
+  const opportunityTotal = Number(state.opportunitySummaryData?.total ?? state.opportunities?.length ?? 0);
+  const reportName = latestReport?.name || "尚无报告";
+  const reportTime = latestReport?.created_at
+    ? `生成于 ${compactDateTimeText(latestReport.created_at)}`
+    : "完成一次查询后会保留可下载交付物";
+  const reportAction = latestReport
+    ? `<a class="context-action" href="${escapeHtml(latestReport.download_url || `/api/outbox/${encodeURIComponent(reportName)}`)}" data-download-outbox-name="${escapeHtml(reportName)}">下载 Word</a>`
+    : '<button class="context-action" type="button" data-workbench-view="historyView">查看历史运行</button>';
+  const subscriptionDetail = activeSubscriptions.length
+    ? `已启用 ${activeSubscriptions.length} 项增量追踪，仅推送新增公告`
+    : "尚未启用自动追踪，可按查询结果创建订阅";
+  const opportunityDetail = opportunityTotal
+    ? `已沉淀 ${opportunityTotal} 条可研判机会，可进入要求账本与会审`
+    : "运行后会把可行动公告沉淀为机会、要求账本与会审项";
+  el.workbenchContext.innerHTML = `
+    <div class="workbench-context-label">当前工作上下文</div>
+    <div class="workbench-context-grid">
+      <article class="workbench-context-item">
+        <span>最近交付</span>
+        <strong title="${escapeHtml(reportName)}">${escapeHtml(reportName)}</strong>
+        <small>${escapeHtml(reportTime)}</small>
+        ${reportAction}
+      </article>
+      <article class="workbench-context-item">
+        <span>自动追踪</span>
+        <strong>${activeSubscriptions.length ? `${activeSubscriptions.length} 项订阅已启用` : "尚未启用订阅"}</strong>
+        <small>${escapeHtml(subscriptionDetail)}</small>
+        <button class="context-action" type="button" data-workbench-view="subscriptionsView">管理订阅</button>
+      </article>
+      <article class="workbench-context-item">
+        <span>协作推进</span>
+        <strong>${opportunityTotal ? `${opportunityTotal} 条机会待研判` : "等待首个机会"}</strong>
+        <small>${escapeHtml(opportunityDetail)}</small>
+        <button class="context-action" type="button" data-workbench-view="opportunityView">打开机会情报</button>
+      </article>
+    </div>
+  `;
+  el.workbenchContext.querySelectorAll("[data-workbench-view]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.workbenchView));
+  });
 }
 
 function renderMemoryDigest(report) {
