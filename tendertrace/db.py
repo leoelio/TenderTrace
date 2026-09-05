@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 
 DDL = (
@@ -547,6 +547,27 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS requirement_review_opinions (
+        id TEXT PRIMARY KEY,
+        review_id TEXT NOT NULL,
+        notice_id TEXT NOT NULL,
+        requirement_id TEXT NOT NULL,
+        agent_role TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        confidence INTEGER NOT NULL DEFAULT 0,
+        rationale TEXT NOT NULL DEFAULT '',
+        concerns_json TEXT NOT NULL DEFAULT '[]',
+        model_status TEXT NOT NULL DEFAULT '',
+        model_provider TEXT NOT NULL DEFAULT '',
+        model_name TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (review_id, agent_role),
+        FOREIGN KEY (notice_id) REFERENCES notices(id),
+        FOREIGN KEY (requirement_id) REFERENCES opportunity_requirements(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS feishu_lead_import_runs (
         id TEXT PRIMARY KEY,
         mode TEXT NOT NULL,
@@ -726,6 +747,8 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_notice ON opportunity_requirements(notice_id, status, requirement_type)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_assignee ON opportunity_requirements(assignee_member_id, status, due_at)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_cases_notice ON requirement_review_cases(notice_id, status, reviewer_role)",
+    "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_review ON requirement_review_opinions(review_id, agent_role)",
+    "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_notice ON requirement_review_opinions(notice_id, agent_role)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_organization_workspaces_status ON organization_workspaces(status, updated_at)",
@@ -761,6 +784,10 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "feishu_task_status TEXT NOT NULL DEFAULT 'not_created'",
         "feishu_task_completed_at TEXT",
         "feishu_task_synced_at TEXT",
+    ),
+    "opportunity_requirements": (
+        "feishu_task_guid TEXT",
+        "feishu_task_status TEXT NOT NULL DEFAULT 'not_created'",
     ),
 }
 

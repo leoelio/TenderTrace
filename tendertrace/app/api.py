@@ -59,6 +59,7 @@ from tendertrace.integrations.feishu_source_incidents import (
     sync_source_incidents,
 )
 from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
+from tendertrace.integrations.feishu_requirement_sync import sync_requirements_to_feishu
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
@@ -105,6 +106,11 @@ from tendertrace.requirement_review_board import (
     requirement_review_summary,
     resolve_requirement_review_case,
     sync_requirement_review_cases,
+)
+from tendertrace.requirement_review_agents import (
+    list_review_opinions,
+    review_agent_suggestions,
+    run_review_agents,
 )
 from tendertrace.organization_memory import (
     OrganizationWorkspace,
@@ -1055,6 +1061,12 @@ def create_app():
             "impact": requirement_change_impact(settings, notice_id),
         }
 
+    @app.post("/api/opportunities/{notice_id}/requirements/sync-feishu")
+    def sync_opportunity_requirements_to_feishu(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return sync_requirements_to_feishu(settings, notice_id).to_dict()
+
     @app.post("/api/opportunities/{notice_id}/requirements")
     def save_opportunity_requirement(
         notice_id: str,
@@ -1096,6 +1108,8 @@ def create_app():
         return {
             "items": [item.to_dict() for item in list_requirement_review_cases(settings, notice_id)],
             "summary": requirement_review_summary(settings, notice_id),
+            "opinions": [item.to_dict() for item in list_review_opinions(settings, notice_id)],
+            "suggestions": review_agent_suggestions(settings, notice_id),
         }
 
     @app.post("/api/opportunities/{notice_id}/review-board/sync")
@@ -1103,6 +1117,12 @@ def create_app():
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return sync_requirement_review_cases(settings, notice_id)
+
+    @app.post("/api/opportunities/{notice_id}/review-board/agents")
+    def run_opportunity_review_agents(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return run_review_agents(settings, notice_id)
 
     @app.post("/api/opportunities/{notice_id}/review-board/{review_id}/resolve")
     def resolve_opportunity_review_board_item(
