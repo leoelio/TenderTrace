@@ -750,18 +750,27 @@ def _table_name(settings: Settings, client: httpx.Client, token: str) -> str:
 
 
 def _list_fields(settings: Settings, client: httpx.Client, token: str) -> dict[str, str]:
-    data = _request_json(
-        client.get(
-            _table_url(settings, "fields"),
-            params={"page_size": 100},
-            headers=_auth_header(token),
+    fields: dict[str, str] = {}
+    page_token = ""
+    while True:
+        params: dict[str, object] = {"page_size": 100}
+        if page_token:
+            params["page_token"] = page_token
+        data = _request_json(
+            client.get(
+                _table_url(settings, "fields"),
+                params=params,
+                headers=_auth_header(token),
+            )
         )
-    )
-    return {
-        str(item.get("field_name") or ""): str(item.get("field_id") or "")
-        for item in _items(data)
-        if item.get("field_name")
-    }
+        for item in _items(data):
+            if item.get("field_name"):
+                fields[str(item["field_name"])] = str(item.get("field_id") or "")
+        if not data.get("has_more"):
+            return fields
+        page_token = str(data.get("page_token") or "")
+        if not page_token:
+            return fields
 
 
 def _record_count(settings: Settings, client: httpx.Client, token: str) -> int:

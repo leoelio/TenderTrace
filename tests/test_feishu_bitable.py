@@ -143,6 +143,35 @@ class MissingFieldClient(FakeFeishuClient):
         return super().get(url, params=params, headers=headers)
 
 
+class PaginatedFieldsClient(FakeFeishuClient):
+    EXTRA_FIELDS = [f"额外字段{index}" for index in range(30)]
+
+    def get(self, url: str, *, params=None, headers=None):
+        if url.endswith("/fields"):
+            names = list(REQUIRED_FIELDS) + self.EXTRA_FIELDS
+            all_fields = [
+                {"field_id": f"fld-{name}", "field_name": name, "type": 1}
+                for name in names
+            ]
+            page_size = int((params or {}).get("page_size", 100))
+            page_token = str((params or {}).get("page_token") or "")
+            if not page_token:
+                chunk = all_fields[:page_size]
+                has_more = len(all_fields) > page_size
+                next_token = "page-2" if has_more else ""
+            else:
+                chunk = all_fields[page_size:]
+                has_more = False
+                next_token = ""
+            return FakeResponse(
+                {
+                    "code": 0,
+                    "data": {"items": chunk, "has_more": has_more, "page_token": next_token},
+                }
+            )
+        return super().get(url, params=params, headers=headers)
+
+
 class PartnerLeadClient(FakeFeishuClient):
     def get(self, url: str, *, params=None, headers=None):
         if url.endswith("/records"):
@@ -234,6 +263,16 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(result.table_name, "招标机会")
         self.assertEqual(result.record_count, 1)
         self.assertEqual(result.missing_fields, ())
+
+    def test_check_lists_fields_across_pagination_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            result = check_feishu_bitable(settings, http_client_factory=PaginatedFieldsClient)
+
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.missing_fields, ())
+        self.assertGreater(result.field_count, 100)
 
     def test_check_can_create_missing_fields_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
