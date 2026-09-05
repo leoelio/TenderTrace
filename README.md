@@ -79,7 +79,7 @@ TenderTrace 当前覆盖 16 个来源。范围路由根据查询地区选择对�
 | 群聊入口 | 自然语言即时查询生成 Word；包含频率的请求创建当前会话专属订阅。消息事件持久化去重，失败后可恢复。 |
 | 机会卡片 | 认领、阶段推进、Go/Hold/No-Go 和建议反馈使用服务端统一动作契约；卡片回调写回 SQLite、Web 状态和审计事件。 |
 | 任务与日程 | 负责人作为 Task v2 `assignee`，团队与伙伴作为 `follower`；截止日可同步日历。任务创建、更新和提醒使用稳定幂等键，避免重复。 |
-| 战情室与会审 | 机会详情先给出卡片、负责人任务、截止日历、多维表格、五角色会审与要求任务的启动前检查；已选项目群会成为预检和启动的同一接收目标，确认后会先按要求账本和公告变更生成会审 case，再执行飞书资源创建并将逐步结果写入机会审计事件。AI 会审只形成带分歧标记的证据建议，人工裁决仍是唯一可改变会审状态的动作；飞书群成员也可发送 `项目意见 <机会编号>：<内容>` 回写同一机会账本。 |
+| 战情室与会审 | 机会详情先给出卡片、负责人任务、截止日历、多维表格、五角色会审与要求任务的启动前检查；已选项目群会成为预检和启动的同一接收目标，确认后会先按要求账本和公告变更生成会审 case，再执行飞书资源创建并将逐步结果写入机会审计事件。AI 会审只形成带分歧标记的证据建议，人工裁决仍是唯一可改变会审状态的动作；会审摘要卡可按当前账本状态同步到项目群并去重，群成员可发送 `项目意见 <机会编号>：<内容>` 回写同一机会账本。 |
 | 多维表格 | 公告和机会可同步为协同台账；伙伴提交的外部线索先预检公网来源和内容指纹，再进入本地库与 FTS，并回写核验状态。 |
 | 组织记忆 | 每个项目群拥有独立共享记忆。明确的记录/查询指令用于沉淀会议事实、客户信号和决策依据，普通招标问题仍走报告或订阅。 |
 | 经营管理 | 周报、机会晨报、重大变更、决策逾期和来源 SLO 可发送为可操作卡片；成功投递按接收人和业务指纹去重。 |
@@ -301,7 +301,7 @@ Feishu is an execution surface rather than a notification-only integration. Tend
 | Conversation entry | Immediate questions return Word to the current chat; scheduled questions create chat-bound incremental subscriptions with durable event deduplication. |
 | Interactive opportunity cards | Claim, stage, decision, and advice actions consume the same server-side action contract as the Web UI and persist to SQLite and the audit stream. |
 | Tasks and calendar | Owners are Task v2 assignees; internal and partner team members are followers. Stable idempotency keys prevent duplicate tasks, events, and reminders. |
-| War room and review | The opportunity dossier preflights cards, ownership tasks, deadline calendar, Bitable, five-role review, and requirement tasks against the selected project group. Launch first derives review cases from the evidence ledger and material notice changes, then writes every result to the opportunity audit. AI review produces evidence-based, disagreement-aware suggestions only; an explicit human decision remains the sole state-changing action. Group members can send `项目意见 <opportunity ID>：<content>` to append a collaboration note to the same opportunity ledger; the confirmation includes a deep link that opens that exact dossier. |
+| War room and review | The opportunity dossier preflights cards, ownership tasks, deadline calendar, Bitable, five-role review, and requirement tasks against the selected project group. Launch first derives review cases from the evidence ledger and material notice changes, then writes every result to the opportunity audit. AI review produces evidence-based, disagreement-aware suggestions only; an explicit human decision remains the sole state-changing action. The current evidence-ledger state can be sent as a deduplicated review digest card to that group. Group members can send `项目意见 <opportunity ID>：<content>` to append a collaboration note to the same opportunity ledger; the confirmation includes a deep link that opens that exact dossier. |
 | Bitable | Notices and opportunities form a shared ledger. Partner-submitted leads are validated against a public source and content fingerprint before entering SQLite and FTS. |
 | Organization memory | Each project chat owns a separate shared memory scope. Explicit record/search commands preserve meeting facts, customer signals, and decisions without mixing them into personal profiles. |
 | Operations management | Weekly summaries, opportunity briefings, material changes, decision breaches, and source incidents are delivered as actionable, receiver-deduplicated cards. |

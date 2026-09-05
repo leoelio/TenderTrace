@@ -9,6 +9,7 @@ from uuid import uuid4
 from tendertrace.app import api as api_module
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
+from tendertrace.integrations.feishu_review_board import ReviewBoardDeliveryResult
 from tendertrace.opportunity_requirements import list_requirements, upsert_requirement
 from tendertrace.requirement_review_board import (
     list_requirement_review_cases,
@@ -99,6 +100,38 @@ class RequirementReviewBoardTests(unittest.TestCase):
         self.assertGreater(synced.json()["created_count"], 0)
         self.assertEqual(resolved.status_code, 200)
         self.assertEqual(listed.json()["summary"]["resolved_count"], 1)
+
+    def test_review_board_api_can_deliver_the_current_board_to_feishu(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            result = ReviewBoardDeliveryResult(
+                status="sent",
+                notice_id="notice-1",
+                pending_count=2,
+                suggestion_count=1,
+                artifact_key="review-key",
+                message_id="om_review",
+            )
+            with patch.object(api_module.Settings, "load", return_value=settings), patch.object(
+                api_module,
+                "send_requirement_review_digest",
+                return_value=result,
+            ) as sender:
+                client = TestClient(api_module.create_app())
+                response = client.post("/api/opportunities/notice-1/review-board/send-feishu")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message_id"], "om_review")
+        sender.assert_called_once_with(
+            settings,
+            "notice-1",
+            receive_id=None,
+            receive_id_type=None,
+            force=False,
+        )
 
 
 def _settings(root: Path) -> Settings:

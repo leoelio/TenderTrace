@@ -73,6 +73,7 @@ from tendertrace.integrations.feishu_briefing import send_opportunity_briefing
 from tendertrace.integrations.feishu_escalation import (
     send_opportunity_escalation_summary,
 )
+from tendertrace.integrations.feishu_review_board import send_requirement_review_digest
 from tendertrace.integrations.feishu_bot import (
     accept_feishu_message_event,
     feishu_long_connection_available,
@@ -1267,6 +1268,36 @@ def create_app():
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return run_review_agents(settings, notice_id)
+
+    @app.post("/api/opportunities/{notice_id}/review-board/send-feishu")
+    def send_opportunity_review_board_to_feishu(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        workspace_id = _optional_string(request.get("workspace_id"))
+        workspace = get_organization_workspace(settings, workspace_id) if workspace_id else None
+        if workspace_id and workspace is None:
+            raise HTTPException(status_code=404, detail="organization workspace not found")
+        try:
+            result = send_requirement_review_digest(
+                settings,
+                notice_id,
+                receive_id=workspace.feishu_chat_id if workspace is not None else None,
+                receive_id_type="chat_id" if workspace is not None else None,
+                force=bool(request.get("force", False)),
+            )
+        except (FeishuError, LookupError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="feishu_review_board_send",
+            target=notice_id,
+            label=f"会审摘要{result.status}",
+            metadata=result.to_dict(),
+        )
+        return result.to_dict()
 
     @app.post("/api/opportunities/{notice_id}/review-board/{review_id}/resolve")
     def resolve_opportunity_review_board_item(

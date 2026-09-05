@@ -1795,6 +1795,7 @@ function openOpportunityDetail(noticeId) {
         </div>
         <div class="review-board-actions">
           <button class="ghost-button" type="button" data-run-review-agents="${escapeHtml(item.notice_id)}">运行 AI 会审</button>
+          <button class="ghost-button" type="button" data-send-review-board-feishu="${escapeHtml(item.notice_id)}">同步群内会审</button>
           <button class="link-button" type="button" data-sync-review-board="${escapeHtml(item.notice_id)}">生成会审项</button>
         </div>
       </div>
@@ -2449,6 +2450,18 @@ async function runOpportunityReviewAgents(noticeId) {
   } else {
     showToast("当前模型未启用，已保留规则会审队列供人工裁决");
   }
+}
+
+async function sendOpportunityReviewBoardToFeishu(noticeId) {
+  const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/send-feishu`, {
+    method: "POST",
+    body: JSON.stringify({ workspace_id: state.organizationWorkspaceId || "" }),
+  });
+  showToast(
+    result.status === "sent"
+      ? `会审摘要已同步到飞书群：待裁决 ${result.pending_count || 0} 项`
+      : "当前会审状态已同步过，无需重复发送",
+  );
 }
 
 async function resolveOpportunityReviewCase(form) {
@@ -5179,6 +5192,13 @@ function bindEvents() {
       syncOpportunityReviewBoard(syncReviewBoardTarget.dataset.syncReviewBoard || "").catch(
         toastError("会审队列生成失败"),
       );
+      return;
+    }
+    const sendReviewBoardTarget = event.target.closest("[data-send-review-board-feishu]");
+    if (sendReviewBoardTarget) {
+      sendOpportunityReviewBoardToFeishu(
+        sendReviewBoardTarget.dataset.sendReviewBoardFeishu || "",
+      ).catch(toastError("同步群内会审失败"));
       return;
     }
     const runReviewAgentsTarget = event.target.closest("[data-run-review-agents]");
