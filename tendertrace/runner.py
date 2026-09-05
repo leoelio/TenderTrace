@@ -44,6 +44,11 @@ from tendertrace.scheduling.ledger import mark_sent, unsent_cluster_keys
 from tendertrace.source_trust import source_trust_profiles
 
 
+# Reflection loop bound: when the evidence node produces no notices, route back to
+# collect at most this many times (with a relaxed region scope) before giving up.
+_MAX_REPAIR_ROUNDS = 1
+
+
 class NoticeAdapter(Protocol):
     def collect(
         self,
@@ -122,7 +127,15 @@ def run_once(
         )
 
     def collect(state: RunState, context) -> RunState:
-        local_result = search_notices(settings, state.intent, max_results=max_results)
+        repairing = state.repair_rounds > 0
+        intent = _repair_intent(state.intent) if repairing else state.intent
+        pages = max_pages + (1 if repairing else 0)
+        if repairing:
+            context.emit_tool_call(
+                "collect.repair",
+                {"round": state.repair_rounds, "relaxed_region": True, "max_pages": pages},
+            )
+        local_result = search_notices(settings, intent, max_results=max_results)
         local_notices = local_result.notices
         pre_skipped_keys: set[str] = set()
         if subscription_id and incremental:
@@ -132,10 +145,10 @@ def run_once(
                 notices=local_notices,
             )
         source_stats = [local_result.stats]
-        if _can_use_local_only(local_notices, max_results, source_adapter, state.intent):
+        if _can_use_local_only(local_notices, max_results, source_adapter, intent):
             dedup_result = clean_and_cluster_notices(local_notices[:max_results])
             notices = dedup_result.notices
-            region_scope = _region_scope_summary(state.intent, source_stats)
+            region_scope = _region_scope_summary(intent, source_stats)
             context.emit_tool_call(
                 "retrieval.local_fts",
                 {
@@ -147,7 +160,7 @@ def run_once(
             )
             context.emit_tool_call("pipeline.clean_dedup", dedup_result.stats)
             return state.with_updates(
-                intent=_with_region_scope(state.intent, region_scope),
+                intent=_with_region_scope(intent, region_scope),
                 notices=[notice.to_dict() for notice in notices],
                 funnel={
                     "collected": len(local_notices),
@@ -166,15 +179,15 @@ def run_once(
         context.emit_tool_call(
             f"adapter.{getattr(source_adapter, 'name', 'custom')}.collect",
             {
-                "max_pages": max_pages,
+                "max_pages": pages,
                 "max_results": max_results,
                 "local_retrieved": len(local_notices),
                 "local_source_sites": _source_sites(local_notices),
             },
         )
         collected = source_adapter.collect(
-            state.intent,
-            max_pages=max_pages,
+            intent,
+            max_pages=pages,
             max_results=max_results,
         )
         source_stats.extend(
@@ -190,13 +203,13 @@ def run_once(
                 notices=notices,
             )
             pre_skipped_keys |= pre_skipped_keys_after_collect
-        region_scope = _region_scope_summary(state.intent, source_stats)
+        region_scope = _region_scope_summary(intent, source_stats)
         collected_count = len(local_result.notices) + len(collected)
         dedup_result = clean_and_cluster_notices(notices)
         notices = dedup_result.notices
         context.emit_tool_call("pipeline.clean_dedup", dedup_result.stats)
         return state.with_updates(
-            intent=_with_region_scope(state.intent, region_scope),
+            intent=_with_region_scope(intent, region_scope),
             notices=[notice.to_dict() for notice in notices],
             funnel={
                 "collected": collected_count,
@@ -255,13 +268,21 @@ def run_once(
             if subscription_id and incremental
             else 0
         )
+        needs_repair = len(notices) == 0 and state.repair_rounds < _MAX_REPAIR_ROUNDS
+        if needs_repair:
+            context.emit_tool_call(
+                "pipeline.repair_requested",
+                {"round": state.repair_rounds + 1, "reason": "no notices after evidence"},
+            )
         return state.with_updates(
+            repair_rounds=state.repair_rounds + (1 if needs_repair else 0),
             notices=[notice.to_dict() for notice in notices],
             funnel={
                 **state.funnel,
                 "new": len(notices),
                 "skipped_sent": skipped_sent,
                 "source_sites": _source_sites(notices),
+                "repair_rounds": state.repair_rounds + (1 if needs_repair else 0),
                 **attachment_result.stats,
                 **structured_result.stats,
                 **evidence_result.stats,
@@ -272,6 +293,7 @@ def run_once(
                 "structured_fields": structured_result.stats,
                 "evidence": evidence_result.stats,
                 "opportunity": opportunity_result.stats,
+                "needs_repair": needs_repair,
             },
         )
 
@@ -360,6 +382,11 @@ def run_once(
             },
         )
 
+    def evidence_router(state: RunState) -> str:
+        if state.quality.get("needs_repair"):
+            return "collect"
+        return "report"
+
     graph = (
         TenderGraph()
         .add_node("intent", intent)
@@ -368,7 +395,7 @@ def run_once(
         .add_node("report", report)
         .add_edge("intent", "collect")
         .add_edge("collect", "evidence")
-        .add_edge("evidence", "report")
+        .add_conditional_edge("evidence", evidence_router)
     )
 
     start_run(
@@ -602,6 +629,22 @@ def _attach_model_summaries(
             fields = {}
             notice["fields"] = fields
         fields["model_summary"] = summary.to_dict()
+
+
+def _repair_intent(intent: dict[str, Any]) -> dict[str, Any]:
+    """Relax a BidQL region so a repair round searches more broadly.
+
+    Dropping city/district aliases makes retrieval and source adapters fall back to
+    the province scope, which is the intended "broaden instead of silently fail"
+    behavior for cold topics.
+    """
+    repaired = deepcopy(intent)
+    region = repaired.get("region")
+    if isinstance(region, dict):
+        for key in ("city_aliases", "district_aliases", "city", "district"):
+            region.pop(key, None)
+        region["repair_relaxed"] = True
+    return repaired
 
 
 def persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> None:
