@@ -354,6 +354,7 @@ def run_once(
                 subscription_id=subscription_id,
                 receive_id=feishu_receive_id,
                 receive_id_type=feishu_receive_id_type,
+                report_summary=_feishu_report_summary(state, incremental=incremental),
             ).to_dict()
         else:
             feishu_message_result = {
@@ -932,3 +933,23 @@ def _source_sites(notices: list[Notice]) -> list[str]:
         elif notice.source_site:
             sites.add(notice.source_site)
     return sorted(sites)
+
+
+def _feishu_report_summary(state: RunState, *, incremental: bool) -> dict[str, object]:
+    notices = [item for item in state.notices if isinstance(item, dict)]
+    source_sites = state.funnel.get("source_sites")
+    return {
+        "query": state.original_query,
+        "notice_count": len(notices),
+        "evidence_passed": state.funnel.get("evidence_passed", 0),
+        "source_sites": source_sites if isinstance(source_sites, list) else [],
+        "incremental": incremental,
+        "highlights": [
+            {
+                "title": str(item.get("title") or ""),
+                "source": str(item.get("source_site") or ""),
+                "published": str(item.get("publish_time") or ""),
+            }
+            for item in notices[:3]
+        ],
+    }

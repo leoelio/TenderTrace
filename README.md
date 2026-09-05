@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 415 automated tests pass</sub>
+  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 424 automated tests pass</sub>
 </p>
 
 ---
@@ -48,7 +48,7 @@ flowchart LR
 |---|---|
 | 意图与检索 | 解析主题、品类同义词、省市区、相对或绝对时间、执行频率；完整行政区划与范围路由避免静默降级。检索支持 FTS5 + BM25，本地结果不足时自动补采；安装可选依赖后可使用 BGE 向量召回并通过 RRF 与关键词结果融合。 |
 | 采集与证据 | 统一适配公开 API、静态页面、动态页面和登录态来源；支持限流、`Retry-After`、指数退避、阻断识别、详情批量抓取和页面快照。正文经过模板清理、URL 规范化、项目编号提取与 SimHash 去重，PDF、DOCX、XLSX 附件可受限下载并抽取证据片段。 |
-| 报告与订阅 | Word 报告包含标题、发布时间、来源链接、核心内容、附件链接和来源健康信息。APScheduler 分离“后台采集订阅”和“用户报告订阅”，后者依靠 `sent_history` 保证增量不重复，并记录新增数、跳过历史数、下次执行和交付结果；已选飞书项目群可直接接收任一 outbox 报告，投递结果写入活动审计。 |
+| 报告与订阅 | Word 报告包含标题、发布时间、来源链接、核心内容、附件链接和来源健康信息。APScheduler 分离“后台采集订阅”和“用户报告订阅”，后者依靠 `sent_history` 保证增量不重复，并记录新增数、跳过历史数、下次执行和交付结果；飞书项目群会同时接收 Word 附件和由同次真实运行统计生成的检索简报卡，附件成功与简报失败分开审计，避免误报交付状态。 |
 | 机会经营 | 根据时效、完整度、可信度、多源佐证和需求覆盖计算机会等级；维护唯一负责人、阶段化团队、合作伙伴和客户关键人。采购主体、预算、项目编号、截止时间等字段可附证据人工核验，核验后重算销售准入。 |
 | 决策与执行 | 统一动作契约控制认领、事实复核、Go/Hold/No-Go、投标准备、结果和归档。团队覆盖、客户关系、证据完整度、机会评分和投标窗口共同构成可解释门禁；重大公告变更会使旧决策失效并进入复核与 SLA 升级。会审队列、Agent 建议和人工裁决均保留原文证据，不覆盖要求账本。 |
 | 市场与复盘 | 从本地公告形成品类预算基准、采购主体集中度、采购阶段分布和成交供应商画像。赢标或失标结果记录原因、经验、后续行动与证据，并回流胜率、败因、竞品和成交价格基准。样本不足时明确降级，不生成伪精确结论。 |
@@ -270,7 +270,7 @@ The architecture is local-first. Background ingestion grows the SQLite notice li
 |---|---|
 | Intent and retrieval | Parses topic, category synonyms, province/city/district, relative or absolute time, and frequency. Scope routing avoids silent regional fallback. Optional BGE embeddings are fused with FTS results through RRF. |
 | Collection and evidence | Handles official APIs, static pages, dynamic pages, and authenticated sources with throttling, retry, block detection, detail retrieval, and snapshots. Content is cleaned, canonicalized, deduplicated, and enriched with bounded PDF, DOCX, and XLSX extraction. |
-| Reports and schedules | Word reports include title, publish time, source URL, core facts, attachment links, and source health. APScheduler separates ingestion plans from user delivery subscriptions; `sent_history` makes scheduled output incremental and auditable. Any report in the outbox can be sent directly to the selected Feishu project group, with delivery recorded in the activity audit. |
+| Reports and schedules | Word reports include title, publish time, source URL, core facts, attachment links, and source health. APScheduler separates ingestion plans from user delivery subscriptions; `sent_history` makes scheduled output incremental and auditable. A Feishu project group receives both the Word attachment and a digest card built from the same run's real evidence and coverage; file and digest outcomes are audited independently. |
 | Opportunity operations | Scores freshness, completeness, credibility, corroboration, and requirement coverage. Maintains one accountable owner, a stage-aware pursuit team, partners, stakeholders, evidence-backed fact overrides, and qualification gates. The dossier's live execution journey derives the next action from notice changes, requirement coverage, review cases, and collaboration gates, then links directly to that work area. |
 | Decision and execution | A shared action contract governs claiming, review, Go/Hold/No-Go, bid preparation, outcome, and archive actions. Material notice changes invalidate stale decisions and enter an SLA-bound review workflow. |
 | Market and outcomes | Builds category budget benchmarks, buyer concentration, procurement-stage distributions, award suppliers, competitors, win rates, and loss reasons from local evidence. Insufficient samples are labeled instead of extrapolated. |

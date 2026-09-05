@@ -4021,7 +4021,15 @@ async function sendReportToFeishu(name, runId = "", subscriptionId = "") {
     body: JSON.stringify({ run_id: runId || null, subscription_id: subscriptionId || null }),
   });
   await Promise.all([refreshOutbox(), refreshFeishu()]);
-  showToast(result.status === "sent" ? "Word 报告已发送到飞书" : "飞书发送未完成");
+  if (result.status !== "sent") {
+    showToast("飞书发送未完成");
+  } else if (result.digest_status === "sent") {
+    showToast("Word 报告和群内检索简报已发送");
+  } else if (result.digest_status === "failed") {
+    showToast("Word 报告已发送；群内简报发送失败，可稍后重试");
+  } else {
+    showToast("Word 报告已发送到飞书");
+  }
 }
 
 async function sendMemoryWeeklyToFeishu() {

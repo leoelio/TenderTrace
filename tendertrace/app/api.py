@@ -740,20 +740,26 @@ def create_app():
         if not path.exists():
             raise HTTPException(status_code=404, detail="file not found")
         request = request or {}
+        run_id = _optional_string(request.get("run_id"))
         result = deliver_report_to_feishu(
             settings,
             docx_path=path,
-            run_id=_optional_string(request.get("run_id")),
+            run_id=run_id,
             subscription_id=_optional_string(request.get("subscription_id")),
             receive_id=workspace.feishu_chat_id,
             receive_id_type="chat_id",
+            report_summary=_report_delivery_summary(settings, run_id),
         )
         record_activity(
             settings,
             event_type="organization_report_send",
             target=workspace_id,
             label=path.name,
-            metadata={"status": result.status, "workspace": workspace.name},
+            metadata={
+                "status": result.status,
+                "digest_status": result.digest_status,
+                "workspace": workspace.name,
+            },
         )
         if result.status != "sent":
             raise HTTPException(status_code=400, detail=result.to_dict())
@@ -2154,20 +2160,26 @@ def create_app():
         if not path.exists():
             raise HTTPException(status_code=404, detail="file not found")
         request = request or {}
+        run_id = _optional_string(request.get("run_id"))
         result = deliver_report_to_feishu(
             settings,
             docx_path=path,
-            run_id=_optional_string(request.get("run_id")),
+            run_id=run_id,
             subscription_id=_optional_string(request.get("subscription_id")),
             receive_id=_optional_string(request.get("receive_id")),
             receive_id_type=_optional_string(request.get("receive_id_type")),
+            report_summary=_report_delivery_summary(settings, run_id),
         )
         record_activity(
             settings,
             event_type="feishu_report_send",
             target="outbox",
             label=path.name,
-            metadata={"filename": path.name, "status": result.status},
+            metadata={
+                "filename": path.name,
+                "status": result.status,
+                "digest_status": result.digest_status,
+            },
         )
         if result.status != "sent":
             raise HTTPException(status_code=400, detail=result.to_dict())
@@ -2617,6 +2629,23 @@ def _resolve_outbox_path(settings: Settings, filename: str) -> Path:
 
         raise HTTPException(status_code=400, detail="invalid outbox path")
     return path
+
+
+def _report_delivery_summary(settings: Settings, run_id: str | None) -> dict[str, object]:
+    if not run_id:
+        return {}
+    run = get_run(settings, run_id)
+    if run is None:
+        return {}
+    stats = run.get("stats") if isinstance(run.get("stats"), dict) else {}
+    source_sites = stats.get("source_sites") if isinstance(stats.get("source_sites"), list) else []
+    return {
+        "query": str(run.get("original_query") or ""),
+        "notice_count": _int_stat(stats, "notice_count"),
+        "evidence_passed": _int_stat(stats, "evidence_passed"),
+        "source_sites": source_sites,
+        "incremental": str(run.get("mode") or "") == "incremental",
+    }
 
 
 def _opportunity_message(opportunity: dict[str, object]) -> str:

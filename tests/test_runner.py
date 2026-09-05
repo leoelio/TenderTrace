@@ -3,6 +3,7 @@ from io import BytesIO
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from docx import Document
@@ -11,6 +12,7 @@ from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.adapters.multi import MultiSourceAdapter
 from tendertrace.config import Settings
 from tendertrace.db import connection
+from tendertrace.delivery.feishu_report import FeishuReportDelivery
 from tendertrace.llm.gateway import ModelCallResult
 from tendertrace.runlog import get_run, list_outbox_messages
 from tendertrace.runner import _can_use_local_only, run_once
@@ -313,6 +315,30 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(
             any(event.payload.get("tool") == "delivery.feishu_bitable" for event in events)
         )
+
+    def test_run_once_sends_evidence_summary_with_feishu_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            delivery = FeishuReportDelivery(
+                status="sent",
+                file_name="report.docx",
+                attempt_id="attempt-1",
+                digest_status="sent",
+            )
+            with patch("tendertrace.runner.deliver_report_to_feishu", return_value=delivery) as sender:
+                run_once(
+                    settings=settings,
+                    query="最近1个月上海服务器招标信息都有哪些",
+                    now=datetime(2026, 7, 6, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+                    adapter=FakeAdapter(),
+                    delivery_channels=("web", "outbox", "feishu"),
+                )
+
+        summary = sender.call_args.kwargs["report_summary"]
+        self.assertEqual(summary["query"], "最近1个月上海服务器招标信息都有哪些")
+        self.assertEqual(summary["notice_count"], 1)
+        self.assertIn("ccgp", summary["source_sites"])
+        self.assertEqual(summary["highlights"][0]["title"], "上海某单位服务器采购公开招标公告")
 
     def test_run_once_applies_model_enhancement_and_records_audit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
