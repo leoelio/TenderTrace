@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
@@ -160,7 +160,16 @@ class ManagedFetcher:
         result = self._request_http(method, url, **kwargs)
         if self._should_try_browser(method, result):
             browser_result = self._request_browser(url, attempt_count=result.attempt_count)
-            result = browser_result if browser_result.ok else result
+            if browser_result.ok:
+                result = browser_result
+            else:
+                result = replace(
+                    result,
+                    error=(
+                        browser_result.error
+                        or "blocked response; browser fallback did not produce usable content"
+                    ),
+                )
         self._record(result)
         return result
 

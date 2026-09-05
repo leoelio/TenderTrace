@@ -1888,6 +1888,12 @@ function openOpportunityDetail(noticeId) {
         <span>正在生成本地战情室编排方案…</span>
       </div>
     </section>
+    <section class="opportunity-detail-section collaboration-notes-section">
+      <div class="opportunity-detail-section-title">
+        <div><h3>协作意见</h3><small>网页与飞书群内意见进入同一条机会审计链</small></div>
+      </div>
+      <div class="collaboration-notes" data-collaboration-notes="${escapeHtml(item.notice_id)}"><span>正在加载协作意见…</span></div>
+    </section>
     <div class="opportunity-detail-footer">
       <button class="primary-lite-button" type="button" data-send-opportunity-feishu="${escapeHtml(item.notice_id)}">${collaborationButtonLabel(workflow)}</button>
       ${item.source_url ? `<a class="ghost-button" href="${escapeHtml(item.source_url)}" target="_blank" rel="noreferrer">查看原文</a>` : ""}
@@ -1909,6 +1915,10 @@ function openOpportunityDetail(noticeId) {
   loadOpportunityWarRoomPlan(noticeId).catch((error) => {
     const container = currentOpportunityWarRoomPlanContainer(noticeId);
     if (container) container.innerHTML = `<span>战情室编排方案加载失败：${escapeHtml(error.message || error)}</span>`;
+  });
+  loadOpportunityCollaborationNotes(noticeId).catch((error) => {
+    const container = currentOpportunityCollaborationNotesContainer(noticeId);
+    if (container) container.innerHTML = `<span>协作意见加载失败：${escapeHtml(error.message || error)}</span>`;
   });
 }
 
@@ -2356,13 +2366,77 @@ function renderOpportunityWarRoomPlan(plan) {
   return `
     <div class="war-room-plan-heading">
       <strong>投标战情室编排</strong>
-      <span>本地方案 · ${escapeHtml(plan.ready_step_count || 0)} / ${escapeHtml(steps.length)} 步就绪</span>
+      <span>启动前检查 · ${escapeHtml(plan.ready_step_count || 0)} / ${escapeHtml(steps.length)} 步就绪</span>
     </div>
-    <small>强制要求待处理 ${escapeHtml(requirements.task_candidate_count || 0)} 项；启动后才会创建飞书资源。</small>
+    <small>强制要求待处理 ${escapeHtml(requirements.task_candidate_count || 0)} 项；仅在确认启动后创建飞书资源。</small>
     <div class="war-room-steps">
       ${steps.map((step) => `<div class="war-room-step status-${escapeHtml(step.status || "needs_configuration")}"><strong>${escapeHtml(step.label || step.key || "未命名步骤")}</strong><span>${escapeHtml(step.status === "ready" ? "就绪" : "待配置")}</span><small>${escapeHtml(step.detail || "")}</small></div>`).join("")}
     </div>
+    <div class="war-room-actions">
+      <button class="primary-lite-button" type="button" data-launch-war-room="${escapeHtml(plan.notice_id || "")}" ${plan.launch?.ready ? "" : "disabled"}>启动飞书战情室</button>
+      ${plan.launch?.ready ? "" : "<small>完成飞书默认接收群配置后即可启动。</small>"}
+    </div>
   `;
+}
+
+function renderOpportunityWarRoomLaunch(result) {
+  const steps = Array.isArray(result.steps) ? result.steps : [];
+  const statusLabel = { started: "已启动", partial: "部分启动", blocked: "待配置", failed: "启动失败" }[result.status] || "已处理";
+  return `
+    <div class="war-room-plan-heading"><strong>投标战情室</strong><span>${escapeHtml(statusLabel)}</span></div>
+    <small>${escapeHtml(result.message || "执行结果已记录")}</small>
+    <div class="war-room-steps">
+      ${steps.map((step) => `<div class="war-room-step status-${escapeHtml(step.status || "skipped")}"><strong>${escapeHtml(step.label || step.key || "未命名步骤")}</strong><span>${escapeHtml({ completed: "已完成", skipped: "已跳过", blocked: "已阻止", failed: "失败" }[step.status] || step.status || "待处理")}</span><small>${escapeHtml(step.detail || "")}</small></div>`).join("")}
+    </div>
+    <div class="war-room-actions"><button class="link-button" type="button" data-reload-war-room="${escapeHtml(result.notice_id || "")}">重新检查启动条件</button></div>
+  `;
+}
+
+async function launchOpportunityWarRoom(noticeId) {
+  const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/war-room/launch`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const container = currentOpportunityWarRoomPlanContainer(noticeId);
+  if (container) container.innerHTML = renderOpportunityWarRoomLaunch(result);
+  await refreshFeishu();
+  showToast(result.status === "started" ? "飞书战情室已启动" : (result.message || "飞书战情室未完全启动"));
+}
+
+async function loadOpportunityCollaborationNotes(noticeId) {
+  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/collaboration-notes`);
+  const container = currentOpportunityCollaborationNotesContainer(noticeId);
+  if (container) container.innerHTML = renderOpportunityCollaborationNotes(payload, noticeId);
+}
+
+function currentOpportunityCollaborationNotesContainer(noticeId) {
+  const container = el.opportunityDetailContent?.querySelector("[data-collaboration-notes]");
+  return container?.dataset.collaborationNotes === noticeId ? container : null;
+}
+
+function renderOpportunityCollaborationNotes(payload, noticeId) {
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  return `
+    <div class="collaboration-note-list">
+      ${items.length ? items.map((item) => `<article class="collaboration-note"><p>${escapeHtml(item.content || "")}</p><small>${escapeHtml(item.actor || "协作成员")} · ${escapeHtml(item.channel === "feishu_group" ? "飞书群" : "网页")} · ${escapeHtml(compactDateTimeText(item.created_at || ""))}</small></article>`).join("") : '<p class="opportunity-requirement-empty">暂无协作意见。可在此记录，也可在飞书群中发送“项目意见 机会编号：内容”。</p>'}
+    </div>
+    <form class="collaboration-note-form" data-collaboration-note-form="${escapeHtml(noticeId)}">
+      <input name="content" required maxlength="2000" placeholder="记录项目判断、客户反馈或会审依据" />
+      <input name="actor" required maxlength="120" value="admin" aria-label="记录人" />
+      <button class="link-button" type="submit">记录意见</button>
+    </form>
+  `;
+}
+
+async function saveOpportunityCollaborationNote(form) {
+  const noticeId = form.dataset.collaborationNoteForm || "";
+  const values = new FormData(form);
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/collaboration-notes`, {
+    method: "POST",
+    body: JSON.stringify({ content: values.get("content") || "", actor: values.get("actor") || "admin", channel: "web" }),
+  });
+  await loadOpportunityCollaborationNotes(noticeId);
+  showToast("协作意见已写入机会审计链");
 }
 
 function renderOpportunityRequirements(payload, item) {
@@ -4772,6 +4846,12 @@ function normalizeWorkbenchLayout() {
 
 function bindEvents() {
   document.addEventListener("submit", (event) => {
+    const collaborationNoteForm = event.target.closest("[data-collaboration-note-form]");
+    if (collaborationNoteForm) {
+      event.preventDefault();
+      saveOpportunityCollaborationNote(collaborationNoteForm).catch(toastError("协作意见保存失败"));
+      return;
+    }
     const reviewForm = event.target.closest("[data-requirement-review-form]");
     if (reviewForm) {
       event.preventDefault();
@@ -4918,6 +4998,20 @@ function bindEvents() {
     if (syncReviewBoardTarget) {
       syncOpportunityReviewBoard(syncReviewBoardTarget.dataset.syncReviewBoard || "").catch(
         toastError("会审队列生成失败"),
+      );
+      return;
+    }
+    const launchWarRoomTarget = event.target.closest("[data-launch-war-room]");
+    if (launchWarRoomTarget) {
+      launchOpportunityWarRoom(launchWarRoomTarget.dataset.launchWarRoom || "").catch(
+        toastError("飞书战情室启动失败"),
+      );
+      return;
+    }
+    const reloadWarRoomTarget = event.target.closest("[data-reload-war-room]");
+    if (reloadWarRoomTarget) {
+      loadOpportunityWarRoomPlan(reloadWarRoomTarget.dataset.reloadWarRoom || "").catch(
+        toastError("战情室状态加载失败"),
       );
       return;
     }

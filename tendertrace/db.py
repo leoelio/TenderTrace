@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 
 DDL = (
@@ -387,6 +387,19 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS opportunity_collaboration_notes (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        source_message_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (notice_id) REFERENCES notices(id),
+        UNIQUE (source_message_id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS opportunity_outcomes (
         notice_id TEXT PRIMARY KEY,
         result TEXT NOT NULL,
@@ -736,6 +749,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_delivery_attempts_status ON delivery_attempts(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_workflows_stage ON opportunity_workflows(stage, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_events_notice ON opportunity_events(notice_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_collaboration_notes_notice ON opportunity_collaboration_notes(notice_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_outcomes_result ON opportunity_outcomes(result, finalized_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_team_notice ON opportunity_team_members(notice_id, status, role)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_team_sync ON opportunity_team_members(feishu_sync_status, updated_at)",

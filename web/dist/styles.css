@@ -6002,6 +6002,75 @@ tbody tr:hover {
   border-left: 3px solid #c48516;
 }
 
+.war-room-step.status-completed {
+  border-left: 3px solid #16a34a;
+}
+
+.war-room-step.status-skipped,
+.war-room-step.status-blocked {
+  border-left: 3px solid #c48516;
+}
+
+.war-room-step.status-failed {
+  border-left: 3px solid #dc2626;
+}
+
+.war-room-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.war-room-actions small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.collaboration-notes,
+.collaboration-note-list {
+  display: grid;
+  gap: 8px;
+}
+
+.collaboration-note-list {
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.collaboration-note {
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.44);
+}
+
+.collaboration-note p,
+.collaboration-note small {
+  margin: 0;
+}
+
+.collaboration-note p {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.collaboration-note small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.collaboration-note-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px auto;
+  gap: 8px;
+  margin-top: 9px;
+}
+
 .requirement-review-board,
 .requirement-review-list {
   display: grid;

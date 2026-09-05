@@ -528,15 +528,13 @@ def _reliability_score(bucket: dict[str, object]) -> float:
         if request_success is not None
         else run_success
     )
-    hit_rate = float(bucket["hit_rate"] or 0.0)
     blocked_ratio = float(bucket["blocked"]) / requests if requests else 0.0
     latency_ms = int(bucket["avg_elapsed_ms"])
     latency_score = 1.0 if latency_ms <= 1500 else 0.7 if latency_ms <= 4000 else 0.35
     return round(
         max(
             0.0,
-            0.55 * success
-            + 0.20 * hit_rate
+            0.75 * success
             + 0.15 * (1 - blocked_ratio)
             + 0.10 * latency_score,
         ),
@@ -569,7 +567,12 @@ def _merge_fetch_stats(bucket: dict[str, object], fetch_stats: dict[str, Any]) -
             / total_requests
         )
     if fetch_stats.get("last_error") and not bucket["last_error"]:
-        bucket["last_error"] = str(fetch_stats["last_error"])
+        error = str(fetch_stats["last_error"])
+        bucket["last_error"] = (
+            "blocked response returned HTTP 200"
+            if error == "HTTP 200" and int(fetch_stats.get("blocked") or 0)
+            else error
+        )
 
 
 def _qianlima_login_expired(health: dict[str, object]) -> bool:

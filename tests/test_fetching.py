@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import httpx
 
-from tendertrace.fetching import FetchError, FetchPolicy, ManagedFetcher
+from tendertrace.fetching import FetchError, FetchPolicy, FetchResult, ManagedFetcher
 from tendertrace.pipeline.artifacts import page_artifact_from_fetch
 
 
@@ -40,6 +40,34 @@ class ManagedFetcherTests(unittest.TestCase):
         with self.assertRaises(FetchError):
             result.raise_for_status()
         self.assertEqual(fetcher.stats.to_dict()["blocked"], 1)
+
+    def test_blocked_http_200_keeps_browser_fallback_failure_reason(self) -> None:
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(200, text="<html>captcha required</html>")
+        )
+        fallback = FetchResult(
+            url="https://example.com/protected",
+            final_url="https://example.com/protected",
+            method="GET",
+            status_code=0,
+            text="",
+            content_type="",
+            fetched_at="2026-09-05T00:00:00+00:00",
+            elapsed_ms=1,
+            attempt_count=1,
+            fetcher="playwright",
+            error="browser fallback unavailable",
+        )
+        with patch.object(ManagedFetcher, "_request_browser", return_value=fallback):
+            with ManagedFetcher(
+                FetchPolicy(max_retries=0, browser_fallback=True),
+                transport=transport,
+            ) as fetcher:
+                result = fetcher.get("https://example.com/protected")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "browser fallback unavailable")
+        self.assertEqual(fetcher.stats.to_dict()["last_error"], "browser fallback unavailable")
 
     def test_retry_delay_respects_retry_after_and_exponential_backoff(self) -> None:
         calls = 0

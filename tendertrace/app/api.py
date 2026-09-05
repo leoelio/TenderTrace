@@ -42,7 +42,7 @@ from tendertrace.integrations.feishu_card_actions import (
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_notice_changes import send_opportunity_change_alerts
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
-from tendertrace.integrations.feishu_war_room import build_war_room_plan
+from tendertrace.integrations.feishu_war_room import build_war_room_plan, launch_war_room
 from tendertrace.integrations.feishu_relationship_actions import (
     create_relationship_action_task,
     sync_relationship_action_tasks,
@@ -99,6 +99,10 @@ from tendertrace.opportunity import (
 )
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
 from tendertrace.opportunity_outcomes import record_outcome
+from tendertrace.opportunity_collaboration import (
+    list_collaboration_notes,
+    record_collaboration_note,
+)
 from tendertrace.opportunity_requirements import (
     list_requirements,
     requirement_summary,
@@ -976,6 +980,63 @@ def create_app():
             return build_war_room_plan(settings, notice_id)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/war-room/launch")
+    def launch_opportunity_war_room(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        receive_id, receive_id_type = resolve_feishu_receiver(
+            settings,
+            receive_id=_optional_string(request.get("receive_id")),
+            receive_id_type=_optional_string(request.get("receive_id_type")),
+        )
+        try:
+            result = launch_war_room(
+                settings,
+                notice_id,
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+            )
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        record_activity(
+            settings,
+            event_type="war_room_launch",
+            target=notice_id,
+            label=str(result.get("message") or "飞书战情室启动"),
+            metadata={"status": result.get("status"), "failed_count": result.get("failed_count", 0)},
+        )
+        return result
+
+    @app.get("/api/opportunities/{notice_id}/collaboration-notes")
+    def opportunity_collaboration_notes(notice_id: str, limit: int = 50) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        items = list_collaboration_notes(settings, notice_id, limit=limit)
+        return {"items": [item.to_dict() for item in items], "returned": len(items)}
+
+    @app.post("/api/opportunities/{notice_id}/collaboration-notes")
+    def save_opportunity_collaboration_note(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        try:
+            note = record_collaboration_note(
+                settings,
+                notice_id=notice_id,
+                content=str(request.get("content") or ""),
+                actor=str(request.get("actor") or "admin"),
+                channel=str(request.get("channel") or "web"),
+                source_message_id=str(request.get("source_message_id") or ""),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "saved", "note": note.to_dict()}
 
     @app.post("/api/opportunities/send-feishu")
     def send_opportunity_feishu(request: dict[str, object] = Body(...)) -> dict[str, object]:

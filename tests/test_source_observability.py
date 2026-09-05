@@ -94,7 +94,7 @@ class SourceObservabilityTests(unittest.TestCase):
         self.assertEqual(health["ccgp"]["skipped_runs"], 1)
         self.assertEqual(health["ccgp"]["health_status"], "unknown")
         self.assertEqual(health["qianlima"]["hit_rate"], 0.0)
-        self.assertEqual(health["qianlima"]["health_status"], "degraded")
+        self.assertEqual(health["qianlima"]["health_status"], "healthy")
         self.assertEqual(health["ggzy"]["runs"], 2)
         self.assertEqual(health["ggzy"]["hit_rate"], 0.5)
 

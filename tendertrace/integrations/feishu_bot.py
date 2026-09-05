@@ -21,6 +21,8 @@ from tendertrace.organization_memory import (
     record_memory,
     search_memories,
 )
+from tendertrace.opportunity import get_opportunity
+from tendertrace.opportunity_collaboration import record_collaboration_note
 from tendertrace.runner import RunOnceResult, run_once
 from tendertrace.scheduling.scheduler import (
     schedule_ingest_subscription,
@@ -151,6 +153,38 @@ def process_feishu_message_event(
                 command_kind=organization_command,
             )
             feishu.reply_text(event.message_id, reply)
+            updated = get_feishu_message_event(settings, event_id)
+            if updated is None:
+                raise RuntimeError("Feishu message event disappeared after processing")
+            return updated
+        collaboration_note = _opportunity_note_command(event.query)
+        if collaboration_note:
+            if event.chat_type != "group":
+                raise ValueError("项目意见仅支持飞书群聊")
+            notice_id, content = collaboration_note
+            if get_opportunity(settings, notice_id) is None:
+                raise ValueError("未找到对应机会，请从机会详情复制机会编号")
+            note = record_collaboration_note(
+                settings,
+                notice_id=notice_id,
+                content=content,
+                actor=event.sender_open_id or "飞书成员",
+                channel="feishu_group",
+                source_message_id=event.message_id,
+            )
+            _update_event(
+                settings,
+                event_id,
+                status="completed",
+                command_kind="opportunity_note",
+            )
+            feishu.reply_text(
+                event.message_id,
+                (
+                    f"已记录项目协作意见：{note.content[:100]}\n"
+                    f"回到 TenderTrace：{settings.public_base_url}/?view=opportunityView"
+                ),
+            )
             updated = get_feishu_message_event(settings, event_id)
             if updated is None:
                 raise RuntimeError("Feishu message event disappeared after processing")
@@ -453,6 +487,26 @@ def _organization_command(query: str) -> tuple[str, str]:
                         raise ValueError(f"{prefix} 后需要填写内容")
                     return command, value
     return "", ""
+
+
+def _opportunity_note_command(query: str) -> tuple[str, str] | None:
+    """Parse `项目意见 <机会编号>：<意见>` without colliding with tender queries."""
+    normalized = query.strip()
+    for prefix in ("项目意见", "机会意见"):
+        if not normalized.startswith(prefix):
+            continue
+        remainder = normalized[len(prefix) :].strip()
+        if not remainder:
+            raise ValueError(f"{prefix} 后需要填写机会编号和意见")
+        for separator in ("：", ":"):
+            if separator not in remainder:
+                continue
+            notice_id, content = (part.strip() for part in remainder.split(separator, 1))
+            if not notice_id or not content:
+                raise ValueError(f"请使用：{prefix} <机会编号>：<意见>")
+            return notice_id[:200], content[:2000]
+        raise ValueError(f"请使用：{prefix} <机会编号>：<意见>")
+    return None
 
 
 def _update_event(settings: Settings, event_id: str, **values: str) -> None:

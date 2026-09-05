@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from tendertrace.config import Settings
-from tendertrace.db import connection
+from tendertrace.db import connection, init_db
 from tendertrace.integrations.feishu_bot import (
     accept_feishu_message_event,
     list_feishu_message_events,
@@ -251,6 +251,36 @@ class FeishuBotTests(unittest.TestCase):
         self.assertIn("已沉淀为组织记忆", client.replies[0][1])
         self.assertIn("客户要求支持国产数据库", client.replies[1][1])
         self.assertIn("organizationView", client.replies[1][1])
+
+    def test_group_project_opinion_is_saved_without_running_tender_collection(self) -> None:
+        def should_not_run(**kwargs):
+            self.fail("project opinion must not trigger tender collection")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_card_notice(settings)
+            event = accept_feishu_message_event(
+                settings,
+                _event_payload("evt-note", "msg-note", "项目意见 callback-notice：售前需确认存储扩容边界"),
+            )
+            client = FakeFeishuClient()
+            result = process_feishu_message_event(
+                settings,
+                event.event_id,
+                client=client,
+                run_func=should_not_run,
+            )
+            with connection(settings) as conn:
+                note = conn.execute(
+                    "SELECT content, channel FROM opportunity_collaboration_notes WHERE notice_id = ?",
+                    ("callback-notice",),
+                ).fetchone()
+
+        self.assertEqual(result.command_kind, "opportunity_note")
+        self.assertEqual(note["channel"], "feishu_group")
+        self.assertIn("售前需确认", note["content"])
+        self.assertIn("已记录项目协作意见", client.replies[0][1])
 
     def test_non_text_message_is_audited_without_execution(self) -> None:
         payload = _event_payload("evt-file", "msg-file", "")
