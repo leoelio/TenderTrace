@@ -1959,6 +1959,7 @@ function renderOpportunityJourney(item, reviewSummary = {}) {
   const qualification = item.qualification || {};
   const blockers = qualificationBlockers(qualification, "approve_bid");
   const reviewPending = Number(reviewSummary.pending_count || 0);
+  const reviewTotal = Number(reviewSummary.total_count || 0);
   const requirementsCovered = Number(requirementReview.coverage_score || 0);
   const steps = [
     {
@@ -1979,7 +1980,9 @@ function renderOpportunityJourney(item, reviewSummary = {}) {
       label: "五角色会审",
       target: "opportunityReviewSection",
       status: reviewPending ? "attention" : "ready",
-      detail: reviewPending ? `${reviewPending} 项等待人工裁决` : "会审队列已闭环或待生成",
+      detail: reviewPending
+        ? `${reviewPending} 项等待人工裁决`
+        : reviewTotal ? "会审项已全部裁决" : "暂无待裁决项",
     },
     {
       label: "协同执行",

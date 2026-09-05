@@ -93,6 +93,7 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("/review-board/send-feishu", js)
         self.assertIn("opportunity-journey", js)
         self.assertIn("renderOpportunityJourney", js)
+        self.assertIn("暂无待裁决项", js)
         self.assertIn("data-scroll-opportunity-target", js)
         self.assertIn("opportunityChangeSection", js)
         self.assertIn("opportunityRequirementsSection", js)
