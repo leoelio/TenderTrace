@@ -441,6 +441,15 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
             GROUP BY source_site
             """
         ).fetchall()
+        observations = conn.execute(
+            """
+            SELECT source_site, status, notice_count, error, fetch_stats_json, observed_at
+            FROM source_observations
+            ORDER BY observed_at DESC, id DESC
+            LIMIT ?
+            """,
+            (max(1, limit) * 20,),
+        ).fetchall()
     artifact_counts = {row["source_site"]: int(row["count"]) for row in artifacts}
     health: dict[str, dict[str, object]] = {}
     for row in rows:
@@ -454,30 +463,19 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
             site = str(item.get("source") or "").strip()
             if not site:
                 continue
-            bucket = health.setdefault(site, _empty_health())
-            status = str(item.get("status") or "")
-            if status == "skipped":
-                bucket["skipped_runs"] = int(bucket["skipped_runs"]) + 1
-                continue
-            bucket["runs"] = int(bucket["runs"]) + 1
-            if not bucket["last_run_at"]:
-                bucket["last_run_at"] = str(row["started_at"] or "")
-            if status == "failed":
-                bucket["failed_runs"] = int(bucket["failed_runs"]) + 1
-                if not bucket["last_failure_at"]:
-                    bucket["last_failure_at"] = str(row["started_at"] or "")
-            else:
-                bucket["finished_runs"] = int(bucket["finished_runs"]) + 1
-                if not bucket["last_success_at"]:
-                    bucket["last_success_at"] = str(row["started_at"] or "")
-            if int(item.get("count") or 0) > 0:
-                bucket["hit_runs"] = int(bucket["hit_runs"]) + 1
-            bucket["notices"] = int(bucket["notices"]) + int(item.get("count") or 0)
-            fetch_stats = item.get("fetch_stats")
-            if isinstance(fetch_stats, dict):
-                _merge_fetch_stats(bucket, fetch_stats)
-            if item.get("error") and not bucket["last_error"]:
-                bucket["last_error"] = str(item["error"])
+            _merge_source_stat(bucket=health.setdefault(site, _empty_health()), item=item, observed_at=str(row["started_at"] or ""))
+    for row in observations:
+        fetch_stats = _loads(str(row["fetch_stats_json"] or "{}"))
+        _merge_source_stat(
+            bucket=health.setdefault(str(row["source_site"]), _empty_health()),
+            item={
+                "status": row["status"],
+                "count": row["notice_count"],
+                "error": row["error"],
+                "fetch_stats": fetch_stats,
+            },
+            observed_at=str(row["observed_at"] or ""),
+        )
     for site, count in artifact_counts.items():
         bucket = health.setdefault(site, _empty_health())
         bucket["page_artifacts"] = count
@@ -494,6 +492,74 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
         bucket["reliability_score"] = _reliability_score(bucket)
         bucket["health_status"] = _health_status(bucket)
     return health
+
+
+def record_source_observations(
+    settings: Settings,
+    source_stats: list[dict[str, object]] | tuple[dict[str, object], ...],
+) -> None:
+    rows: list[tuple[str, str, int, str | None, str]] = []
+    for item in source_stats:
+        site = str(item.get("source") or "").strip()
+        if not site:
+            continue
+        fetch_stats = item.get("fetch_stats")
+        rows.append(
+            (
+                site,
+                str(item.get("status") or "unknown"),
+                int(item.get("count") or 0),
+                str(item.get("error") or "") or None,
+                json.dumps(fetch_stats if isinstance(fetch_stats, dict) else {}, ensure_ascii=False),
+            )
+        )
+    if not rows:
+        return
+    with connection(settings) as conn:
+        conn.executemany(
+            """
+            INSERT INTO source_observations(
+                source_site, status, notice_count, error, fetch_stats_json
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
+
+def _merge_source_stat(
+    *,
+    bucket: dict[str, object],
+    item: dict[str, object],
+    observed_at: str,
+) -> None:
+    status = str(item.get("status") or "")
+    if status == "skipped":
+        bucket["skipped_runs"] = int(bucket["skipped_runs"]) + 1
+        return
+    bucket["runs"] = int(bucket["runs"]) + 1
+    if _is_newer(observed_at, str(bucket["last_run_at"])):
+        bucket["last_run_at"] = observed_at
+    if status == "failed":
+        bucket["failed_runs"] = int(bucket["failed_runs"]) + 1
+        if _is_newer(observed_at, str(bucket["last_failure_at"])):
+            bucket["last_failure_at"] = observed_at
+    else:
+        bucket["finished_runs"] = int(bucket["finished_runs"]) + 1
+        if _is_newer(observed_at, str(bucket["last_success_at"])):
+            bucket["last_success_at"] = observed_at
+    if int(item.get("count") or 0) > 0:
+        bucket["hit_runs"] = int(bucket["hit_runs"]) + 1
+    bucket["notices"] = int(bucket["notices"]) + int(item.get("count") or 0)
+    fetch_stats = item.get("fetch_stats")
+    if isinstance(fetch_stats, dict):
+        _merge_fetch_stats(bucket, fetch_stats)
+    if item.get("error") and not bucket["last_error"]:
+        bucket["last_error"] = str(item["error"])
+
+
+def _is_newer(candidate: str, current: str) -> bool:
+    return bool(candidate and (not current or candidate > current))
 
 
 def _empty_health() -> dict[str, object]:

@@ -10,6 +10,7 @@ from tendertrace.db import connection
 from tendertrace.ingest import run_ingest_cycle
 from tendertrace.intent import compile_intent
 from tendertrace.retrieval import search_notices
+from tendertrace.source_map import source_health
 
 
 class PoolAdapter:
@@ -26,7 +27,13 @@ class PoolAdapter:
     ) -> list[Notice]:
         self.calls += 1
         self.last_source_stats = [
-            {"source": "fake", "status": "finished", "count": 1, "error": None}
+            {
+                "source": "fake",
+                "status": "finished",
+                "count": 1,
+                "error": None,
+                "fetch_stats": {"requests": 1, "succeeded": 1, "avg_elapsed_ms": 12},
+            }
         ]
         return [
             Notice(
@@ -63,11 +70,17 @@ class IngestTests(unittest.TestCase):
             local = search_notices(settings, bidql, max_results=5)
             with connection(settings) as conn:
                 notice_count = conn.execute("SELECT COUNT(*) FROM notices").fetchone()[0]
+                observation_count = conn.execute("SELECT COUNT(*) FROM source_observations").fetchone()[0]
+            health = source_health(settings)["fake"]
 
         self.assertEqual(result.query_count, 1)
         self.assertEqual(result.persisted, 1)
         self.assertEqual(adapter.calls, 1)
         self.assertEqual(notice_count, 1)
+        self.assertEqual(observation_count, 1)
+        self.assertEqual(health["runs"], 1)
+        self.assertEqual(health["notices"], 1)
+        self.assertEqual(health["health_status"], "healthy")
         self.assertEqual(local.notices[0].title, "苏州充电设施采购公开招标公告")
 
 

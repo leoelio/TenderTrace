@@ -10,6 +10,7 @@ from tendertrace.db import init_db
 from tendertrace.intent import compile_intent
 from tendertrace.pipeline.dedup import clean_and_cluster_notices
 from tendertrace.runner import NoticeAdapter, persist_notices_and_clusters
+from tendertrace.source_map import record_source_observations
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ def run_ingest_cycle(
 
     deduped = clean_and_cluster_notices(collected).notices
     persist_notices_and_clusters(settings, deduped)
+    record_source_observations(settings, source_stats)
     return IngestCycleResult(
         status="finished",
         query_count=len(topic_pool) * len(region_pool),

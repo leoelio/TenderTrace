@@ -6,10 +6,56 @@ import unittest
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
 from tendertrace.runlog import finish_run, start_run
-from tendertrace.source_map import build_source_map
+from tendertrace.source_map import build_source_map, record_source_observations, source_health
 
 
 class SourceObservabilityTests(unittest.TestCase):
+    def test_background_observations_refresh_source_health(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            record_source_observations(
+                settings,
+                [
+                    {
+                        "source": "ccgp",
+                        "status": "failed",
+                        "count": 0,
+                        "error": "temporary timeout",
+                        "fetch_stats": {"requests": 1, "failed": 1},
+                    }
+                ],
+            )
+            with connection(settings) as conn:
+                conn.execute(
+                    "UPDATE source_observations SET observed_at = '2026-08-15 08:00:00'"
+                )
+            record_source_observations(
+                settings,
+                [
+                    {
+                        "source": "ccgp",
+                        "status": "finished",
+                        "count": 2,
+                        "fetch_stats": {"requests": 1, "succeeded": 1},
+                    }
+                ],
+            )
+            with connection(settings) as conn:
+                conn.execute(
+                    "UPDATE source_observations SET observed_at = '2026-08-16 08:00:00' "
+                    "WHERE status = 'finished'"
+                )
+
+            health = source_health(settings)["ccgp"]
+
+        self.assertEqual(health["runs"], 2)
+        self.assertEqual(health["notices"], 2)
+        self.assertEqual(health["last_failure_at"], "2026-08-15 08:00:00")
+        self.assertEqual(health["last_success_at"], "2026-08-16 08:00:00")
+        self.assertEqual(health["last_run_at"], "2026-08-16 08:00:00")
+        self.assertEqual(health["health_status"], "degraded")
+
     def test_skipped_sources_are_not_counted_as_attempts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

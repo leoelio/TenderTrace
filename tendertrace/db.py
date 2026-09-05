@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 
 DDL = (
@@ -705,6 +705,17 @@ DDL = (
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS source_observations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_site TEXT NOT NULL,
+        status TEXT NOT NULL,
+        notice_count INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        fetch_stats_json TEXT NOT NULL DEFAULT '{}',
+        observed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
 )
 
 
@@ -771,6 +782,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_organization_memories_notice ON organization_memories(related_notice_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_organization_memory_events_workspace ON organization_memory_events(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_source_incidents_status ON source_incidents(status, updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_source_observations_site_time ON source_observations(source_site, observed_at)",
 )
 
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
