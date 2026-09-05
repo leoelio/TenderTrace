@@ -3103,8 +3103,15 @@ async function ensureIntentReady(query) {
   if (!clarifications.length) return true;
   const message = clarifications.map((item) => item.question).join("；");
   appendMessage("assistant", `我需要先确认一下：${escapeHtml(message)}`);
-  showToast(message);
-  return false;
+  const proceed = window.confirm(
+    `${message}\n\n是否按当前解析继续运行？\n选择"取消"可修改问题后再试。`
+  );
+  if (!proceed) {
+    showToast("已取消，请补充主题或地区后重试");
+    return false;
+  }
+  showToast("已确认，按当前解析继续");
+  return true;
 }
 
 async function refreshHealth() {
