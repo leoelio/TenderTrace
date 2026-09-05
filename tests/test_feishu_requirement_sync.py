@@ -6,8 +6,12 @@ import unittest
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
+from tendertrace.delivery.feishu_bitable import FeishuBitableResult
 from tendertrace.integrations.feishu import FeishuError
-from tendertrace.integrations.feishu_requirement_sync import sync_requirements_to_feishu
+from tendertrace.integrations.feishu_requirement_sync import (
+    sync_requirements_to_bitable,
+    sync_requirements_to_feishu,
+)
 from tendertrace.opportunity_requirements import list_requirements, upsert_requirement
 
 
@@ -77,6 +81,28 @@ class FeishuRequirementSyncTests(unittest.TestCase):
         self.assertEqual(guid, "task-1")
         self.assertEqual(refreshed.status, "confirmed")
         self.assertEqual(refreshed.title, requirement.title)
+
+    def test_sync_requirements_to_bitable_delegates_with_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            _requirement(settings, "QUAL-01", mandatory=True, status="pending")
+            captured: dict[str, object] = {}
+
+            def fake_writer(settings, *, notice_id, summary, requirements):
+                captured["notice_id"] = notice_id
+                captured["summary"] = summary
+                captured["requirements"] = requirements
+                return FeishuBitableResult(status="sent", updated_count=1)
+
+            result = sync_requirements_to_bitable(
+                settings, "notice-1", bitable_writer=fake_writer
+            )
+
+        self.assertEqual(result["status"], "sent")
+        self.assertEqual(captured["notice_id"], "notice-1")
+        self.assertEqual(captured["summary"]["total_count"], 1)
+        self.assertEqual(len(captured["requirements"]), 1)
 
     def test_create_task_failure_is_recorded_without_blocking_others(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

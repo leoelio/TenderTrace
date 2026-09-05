@@ -104,6 +104,12 @@ REQUIRED_FIELDS = (
     "事实核验人",
     "事实核验摘要",
     "事实核验时间",
+    "要求总数",
+    "要求已确认",
+    "要求已完成",
+    "强制要求待处理",
+    "要求覆盖率",
+    "要求账本",
 )
 
 
@@ -328,6 +334,70 @@ def update_opportunity_workflow_in_bitable(
                 token,
                 record_id,
                 workflow_fields,
+            )
+    except Exception as exc:
+        return FeishuBitableResult(
+            status="failed",
+            message=f"{type(exc).__name__}: {exc}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    return FeishuBitableResult(
+        status="sent",
+        record_count=updated_count,
+        updated_count=updated_count,
+        app_token=settings.feishu_bitable_app_token,
+        table_id=settings.feishu_bitable_table_id,
+    )
+
+
+def update_requirements_in_bitable(
+    settings: Settings,
+    *,
+    notice_id: str,
+    summary: dict[str, object],
+    requirements: list[dict[str, object]],
+    http_client_factory=httpx.Client,
+) -> FeishuBitableResult:
+    """Write a requirement-ledger summary onto the opportunity's Bitable record."""
+    missing_settings = _missing_settings(settings)
+    if missing_settings:
+        return FeishuBitableResult(
+            status="skipped",
+            message=f"missing Feishu settings: {', '.join(missing_settings)}",
+            app_token=settings.feishu_bitable_app_token,
+            table_id=settings.feishu_bitable_table_id,
+        )
+    try:
+        with _client_context(http_client_factory, settings.feishu_timeout) as client:
+            token = _tenant_access_token(settings, client)
+            fields = _list_fields(settings, client, token)
+            requirement_fields = _requirement_fields(summary, requirements)
+            missing_fields = [name for name in requirement_fields if name not in fields]
+            if missing_fields:
+                return FeishuBitableResult(
+                    status="failed",
+                    message=f"missing Feishu fields: {', '.join(missing_fields)}",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            record_id = _record_id_for_notice(
+                _existing_records_by_notice_id(settings, client, token),
+                notice_id,
+            )
+            if not record_id:
+                return FeishuBitableResult(
+                    status="skipped",
+                    message="opportunity has not been synced to Feishu bitable",
+                    app_token=settings.feishu_bitable_app_token,
+                    table_id=settings.feishu_bitable_table_id,
+                )
+            updated_count = _update_record(
+                settings,
+                client,
+                token,
+                record_id,
+                requirement_fields,
             )
     except Exception as exc:
         return FeishuBitableResult(
@@ -1054,6 +1124,30 @@ def _opportunity_fact_fields(opportunity: dict[str, object]) -> dict[str, object
         "事实核验人": str(latest_fact.get("actor") or ""),
         "事实核验摘要": summary,
         "事实核验时间": verified_at,
+    }
+
+
+def _requirement_fields(
+    summary: dict[str, object],
+    requirements: list[dict[str, object]],
+) -> dict[str, object]:
+    ledger_lines = []
+    for requirement in requirements:
+        if not isinstance(requirement, dict):
+            continue
+        status = str(requirement.get("status_label") or requirement.get("status") or "")
+        title = str(requirement.get("title") or "")
+        kind = str(requirement.get("requirement_type_label") or requirement.get("requirement_type") or "")
+        locator = str(requirement.get("source_locator") or "")
+        suffix = f" · {locator}" if locator else ""
+        ledger_lines.append(f"- [{status}] {title}（{kind}{suffix}）")
+    return {
+        "要求总数": str(summary.get("total_count") or 0),
+        "要求已确认": str(summary.get("confirmed_count") or 0),
+        "要求已完成": str(summary.get("completed_count") or 0),
+        "强制要求待处理": str(summary.get("mandatory_pending_count") or 0),
+        "要求覆盖率": f"{summary.get('coverage_score') or 0}%",
+        "要求账本": "\n".join(ledger_lines),
     }
 
 

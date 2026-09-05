@@ -7,8 +7,9 @@ from typing import Any
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
+from tendertrace.delivery.feishu_bitable import update_requirements_in_bitable
 from tendertrace.integrations.feishu import FeishuClient, FeishuError
-from tendertrace.opportunity_requirements import list_requirements
+from tendertrace.opportunity_requirements import list_requirements, requirement_summary
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,28 @@ def sync_requirements_to_feishu(
         failed_count=len(failures),
         failures=tuple(failures),
     )
+
+
+def sync_requirements_to_bitable(
+    settings: Settings,
+    notice_id: str,
+    *,
+    bitable_writer=update_requirements_in_bitable,
+) -> dict[str, object]:
+    """Write the requirement-ledger summary onto the opportunity's Bitable record.
+
+    Returns a redacted result; the real Feishu App Token and table id are never
+    surfaced to callers.
+    """
+    summary = requirement_summary(settings, notice_id)
+    requirements = [item.to_dict() for item in list_requirements(settings, notice_id)]
+    result = bitable_writer(
+        settings,
+        notice_id=notice_id,
+        summary=summary,
+        requirements=requirements,
+    )
+    return result.to_dict()
 
 
 def _should_sync(requirement: Any) -> bool:

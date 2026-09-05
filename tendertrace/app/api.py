@@ -59,7 +59,10 @@ from tendertrace.integrations.feishu_source_incidents import (
     sync_source_incidents,
 )
 from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
-from tendertrace.integrations.feishu_requirement_sync import sync_requirements_to_feishu
+from tendertrace.integrations.feishu_requirement_sync import (
+    sync_requirements_to_bitable,
+    sync_requirements_to_feishu,
+)
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
     list_feishu_lead_import_runs,
@@ -1066,6 +1069,12 @@ def create_app():
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return sync_requirements_to_feishu(settings, notice_id).to_dict()
+
+    @app.post("/api/opportunities/{notice_id}/requirements/sync-bitable")
+    def sync_opportunity_requirements_to_bitable(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return sync_requirements_to_bitable(settings, notice_id)
 
     @app.post("/api/opportunities/{notice_id}/requirements")
     def save_opportunity_requirement(

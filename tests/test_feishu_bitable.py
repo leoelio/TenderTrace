@@ -15,6 +15,7 @@ from tendertrace.delivery.feishu_bitable import (
     update_opportunity_team_in_bitable,
     update_opportunity_stakeholders_in_bitable,
     update_opportunity_workflow_in_bitable,
+    update_requirements_in_bitable,
 )
 from tendertrace.integrations.feishu_leads import (
     import_partner_leads,
@@ -521,6 +522,49 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(fields["关系行动逾期"], "1")
         self.assertIn("张三", fields["下一关系行动"])
         self.assertNotIn("private-task-guid", str(fields))
+        self.assertNotIn("标题", fields)
+
+    def test_requirement_ledger_update_writes_summary_and_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+
+            result = update_requirements_in_bitable(
+                settings,
+                notice_id="existing",
+                summary={
+                    "total_count": 2,
+                    "confirmed_count": 1,
+                    "completed_count": 0,
+                    "mandatory_pending_count": 1,
+                    "coverage_score": 50,
+                },
+                requirements=[
+                    {
+                        "title": "营业执照有效",
+                        "status_label": "已确认",
+                        "requirement_type_label": "资格条件",
+                        "source_locator": "招标文件第 3 页",
+                    },
+                    {
+                        "title": "投标截止时间",
+                        "status_label": "待确认",
+                        "requirement_type_label": "截止时间",
+                        "source_locator": "公告第 1 页",
+                    },
+                ],
+                http_client_factory=FakeFeishuClient,
+            )
+
+        self.assertEqual(result.status, "sent")
+        fields = FakeFeishuClient.updated_records[0][1]
+        self.assertEqual(fields["要求总数"], "2")
+        self.assertEqual(fields["要求已确认"], "1")
+        self.assertEqual(fields["要求已完成"], "0")
+        self.assertEqual(fields["强制要求待处理"], "1")
+        self.assertEqual(fields["要求覆盖率"], "50%")
+        self.assertIn("营业执照有效", fields["要求账本"])
+        self.assertIn("投标截止时间", fields["要求账本"])
+        self.assertIn("招标文件第 3 页", fields["要求账本"])
         self.assertNotIn("标题", fields)
 
     def test_partner_lead_import_persists_fts_and_marks_bitable_record(self) -> None:
