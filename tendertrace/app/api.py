@@ -726,6 +726,42 @@ def create_app():
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "invited", "members": stored}
 
+    @app.post("/api/organization/workspaces/{workspace_id}/outbox/{filename}/send-feishu")
+    def send_workspace_outbox_to_feishu(
+        workspace_id: str,
+        filename: str,
+        request: dict[str, object] | None = Body(default=None),
+    ) -> dict[str, object]:
+        workspace = get_organization_workspace(settings, workspace_id)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="organization workspace not found")
+        path = _resolve_outbox_path(settings, filename)
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="file not found")
+        request = request or {}
+        result = deliver_report_to_feishu(
+            settings,
+            docx_path=path,
+            run_id=_optional_string(request.get("run_id")),
+            subscription_id=_optional_string(request.get("subscription_id")),
+            receive_id=workspace.feishu_chat_id,
+            receive_id_type="chat_id",
+        )
+        record_activity(
+            settings,
+            event_type="organization_report_send",
+            target=workspace_id,
+            label=path.name,
+            metadata={"status": result.status, "workspace": workspace.name},
+        )
+        if result.status != "sent":
+            raise HTTPException(status_code=400, detail=result.to_dict())
+        return {
+            "status": "sent",
+            "workspace": _organization_workspace_payload(workspace),
+            "delivery": result.to_dict(),
+        }
+
     @app.get("/api/organization/workspaces/{workspace_id}/memories")
     def organization_memories(
         workspace_id: str,
@@ -975,9 +1011,19 @@ def create_app():
         return payload
 
     @app.get("/api/opportunities/{notice_id}/war-room")
-    def opportunity_war_room_plan(notice_id: str) -> dict[str, object]:
+    def opportunity_war_room_plan(
+        notice_id: str,
+        workspace_id: str = "",
+    ) -> dict[str, object]:
         try:
-            return build_war_room_plan(settings, notice_id)
+            workspace = get_organization_workspace(settings, workspace_id) if workspace_id else None
+            if workspace_id and workspace is None:
+                raise HTTPException(status_code=404, detail="organization workspace not found")
+            return build_war_room_plan(
+                settings,
+                notice_id,
+                receive_id=workspace.feishu_chat_id if workspace is not None else "",
+            )
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -988,11 +1034,18 @@ def create_app():
     ) -> dict[str, object]:
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
-        receive_id, receive_id_type = resolve_feishu_receiver(
-            settings,
-            receive_id=_optional_string(request.get("receive_id")),
-            receive_id_type=_optional_string(request.get("receive_id_type")),
-        )
+        workspace_id = _optional_string(request.get("workspace_id"))
+        workspace = get_organization_workspace(settings, workspace_id) if workspace_id else None
+        if workspace_id and workspace is None:
+            raise HTTPException(status_code=404, detail="organization workspace not found")
+        if workspace is not None:
+            receive_id, receive_id_type = workspace.feishu_chat_id, "chat_id"
+        else:
+            receive_id, receive_id_type = resolve_feishu_receiver(
+                settings,
+                receive_id=_optional_string(request.get("receive_id")),
+                receive_id_type=_optional_string(request.get("receive_id_type")),
+            )
         try:
             result = launch_war_room(
                 settings,

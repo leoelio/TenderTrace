@@ -6,7 +6,9 @@ from unittest.mock import patch
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
+from tendertrace.delivery.feishu_report import FeishuReportDelivery
 from tendertrace.integrations.feishu import FeishuError
+from tendertrace.organization_memory import create_workspace
 
 
 class FakeFeishuClient:
@@ -164,6 +166,52 @@ class OrganizationMemoryApiTests(unittest.TestCase):
         self.assertEqual(created.status_code, 200)
         self.assertEqual(created.json()["notification"]["status"], "failed")
         self.assertEqual(listed.json()["items"][0]["name"], "通知降级测试群")
+
+    def test_outbox_report_is_delivered_to_the_selected_project_group(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app import api as api_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = _environment(root)
+            previous = {key: os.environ.get(key) for key in values}
+            os.environ.update(values)
+            try:
+                settings = Settings.load()
+                init_db(settings)
+                workspace = create_workspace(
+                    settings,
+                    name="服务器项目群",
+                    feishu_chat_id="oc_project_group",
+                )
+                settings.outbox_dir.mkdir(parents=True, exist_ok=True)
+                report_path = settings.outbox_dir / "服务器机会日报.docx"
+                report_path.write_bytes(b"test docx")
+                delivery = FeishuReportDelivery(
+                    status="sent",
+                    file_name=report_path.name,
+                    attempt_id="delivery-1",
+                    message_id="om-report-1",
+                )
+                with patch.object(api_module, "deliver_report_to_feishu", return_value=delivery) as sender:
+                    with TestClient(api_module.create_app()) as client:
+                        response = client.post(
+                            f"/api/organization/workspaces/{workspace.id}/outbox/{report_path.name}/send-feishu",
+                            json={"run_id": "run-1"},
+                        )
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workspace"]["id"], workspace.id)
+        self.assertEqual(response.json()["delivery"]["message_id"], "om-report-1")
+        self.assertEqual(sender.call_args.kwargs["receive_id"], "oc_project_group")
+        self.assertEqual(sender.call_args.kwargs["receive_id_type"], "chat_id")
 
 
 def _environment(root: Path) -> dict[str, str]:

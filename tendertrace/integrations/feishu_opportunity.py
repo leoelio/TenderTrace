@@ -234,8 +234,8 @@ def build_opportunity_card(
                 "text": {
                     "tag": "lark_md",
                     "content": (
-                        f"**机会等级** {level} · {score} 分   **地区** {region}\n"
-                        f"**来源** {source}   **截止时间** {deadline}\n"
+                        f"**机会编号** {opportunity.get('notice_id') or '-'}   **机会等级** {level} · {score} 分\n"
+                        f"**地区** {region}   **来源** {source}   **截止时间** {deadline}\n"
                         f"**负责人** {owner}   **阶段** {workflow.stage_label}\n"
                         f"**协作团队** {team.get('member_count') or 0} 人 · "
                         f"覆盖 {team.get('coverage_score', 0)}%   **缺口** {team_gap}\n"
@@ -255,6 +255,7 @@ def build_opportunity_card(
                         f"**可信依据** {trust.get('verification_label') or '证据待核验'} · {trust_text}\n"
                         f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
                         f"**变更复核** {change_review_text}\n"
+                        f"**群内意见** 发送“项目意见 {opportunity.get('notice_id') or '-'}：内容”可回写机会审计链\n"
                         f"**关系风险** {relationship_risk_text}\n"
                         f"**关系行动** 待办 {relationship_actions.get('open_count', 0)} · "
                         f"逾期 {relationship_actions.get('overdue_count', 0)} · "

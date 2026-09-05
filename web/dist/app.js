@@ -235,6 +235,7 @@ const el = {
   organizationMemorySearch: document.querySelector("#organizationMemorySearch"),
   organizationMemoryTypeFilter: document.querySelector("#organizationMemoryTypeFilter"),
   organizationSummary: document.querySelector("#organizationSummary"),
+  organizationReportDelivery: document.querySelector("#organizationReportDelivery"),
   organizationMemoryMeta: document.querySelector("#organizationMemoryMeta"),
   organizationMemoryList: document.querySelector("#organizationMemoryList"),
   organizationMemoryForm: document.querySelector("#organizationMemoryForm"),
@@ -2283,7 +2284,10 @@ function currentOpportunityRequirementContainer(noticeId) {
 }
 
 async function loadOpportunityWarRoomPlan(noticeId) {
-  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/war-room`);
+  const workspaceQuery = state.organizationWorkspaceId
+    ? `?workspace_id=${encodeURIComponent(state.organizationWorkspaceId)}`
+    : "";
+  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/war-room${workspaceQuery}`);
   const container = currentOpportunityWarRoomPlanContainer(noticeId);
   if (!container) return;
   container.innerHTML = renderOpportunityWarRoomPlan(payload);
@@ -2373,8 +2377,8 @@ function renderOpportunityWarRoomPlan(plan) {
       ${steps.map((step) => `<div class="war-room-step status-${escapeHtml(step.status || "needs_configuration")}"><strong>${escapeHtml(step.label || step.key || "未命名步骤")}</strong><span>${escapeHtml(step.status === "ready" ? "就绪" : "待配置")}</span><small>${escapeHtml(step.detail || "")}</small></div>`).join("")}
     </div>
     <div class="war-room-actions">
-      <button class="primary-lite-button" type="button" data-launch-war-room="${escapeHtml(plan.notice_id || "")}" ${plan.launch?.ready ? "" : "disabled"}>启动飞书战情室</button>
-      ${plan.launch?.ready ? "" : "<small>完成飞书默认接收群配置后即可启动。</small>"}
+      <button class="primary-lite-button" type="button" data-launch-war-room="${escapeHtml(plan.notice_id || "")}" ${(plan.launch?.ready || state.organizationWorkspaceId) ? "" : "disabled"}>启动飞书战情室</button>
+      ${state.organizationWorkspaceId ? "<small>将发送到当前已选项目群。</small>" : (plan.launch?.ready ? "" : "<small>完成飞书默认接收群配置后即可启动。</small>")}
     </div>
   `;
 }
@@ -2395,7 +2399,7 @@ function renderOpportunityWarRoomLaunch(result) {
 async function launchOpportunityWarRoom(noticeId) {
   const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/war-room/launch`, {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify({ workspace_id: state.organizationWorkspaceId || "" }),
   });
   const container = currentOpportunityWarRoomPlanContainer(noticeId);
   if (container) container.innerHTML = renderOpportunityWarRoomLaunch(result);
@@ -3208,6 +3212,9 @@ async function refreshOutbox() {
   const payload = await api("/api/outbox");
   state.outbox = payload.items || [];
   renderOutbox(state.outbox);
+  renderOrganizationReportDelivery(
+    state.organizationWorkspaces.find((item) => item.id === state.organizationWorkspaceId),
+  );
   renderNotifications();
 }
 
@@ -3354,6 +3361,7 @@ function renderOrganizationSummary() {
       el.openOrganizationWorkspaceButton.hidden = true;
       el.openOrganizationWorkspaceButton.removeAttribute("href");
     }
+    renderOrganizationReportDelivery(null);
     return;
   }
   if (el.openOrganizationWorkspaceButton) {
@@ -3368,6 +3376,28 @@ function renderOrganizationSummary() {
     <div><span>协作成员</span><strong>${Number(workspace.member_count || 0)}</strong></div>
     <div><span>共享知识</span><strong>${Number(workspace.memory_count || 0)}</strong></div>
     <div><span>连接状态</span><strong class="organization-online">飞书已连接</strong></div>`;
+  renderOrganizationReportDelivery(workspace);
+}
+
+function renderOrganizationReportDelivery(workspace) {
+  if (!el.organizationReportDelivery) return;
+  if (!workspace) {
+    el.organizationReportDelivery.hidden = true;
+    el.organizationReportDelivery.innerHTML = "";
+    return;
+  }
+  const reports = state.outbox.slice(0, 3);
+  el.organizationReportDelivery.hidden = false;
+  el.organizationReportDelivery.innerHTML = `
+    <div class="section-heading">
+      <div><h2 id="organizationReportDeliveryTitle">共享报告</h2><span>发送到 ${escapeHtml(workspace.name)}</span></div>
+    </div>
+    ${reports.length ? `<div class="organization-report-list">${reports.map((report) => `
+      <article class="organization-report-row">
+        <div><strong title="${escapeHtml(report.name || "")}">${escapeHtml(report.name || "未命名报告")}</strong><small>${escapeHtml(compactDateTimeText(report.created_at || ""))}</small></div>
+        <div class="organization-report-actions"><a class="text-link" href="${escapeHtml(report.download_url || "#")}" target="_blank" rel="noreferrer">下载</a><button class="text-link" type="button" data-send-workspace-report="${escapeHtml(report.name || "")}" data-workspace-id="${escapeHtml(workspace.id)}">发送到群</button></div>
+      </article>`).join("")}</div>` : '<p class="organization-report-empty">暂无可共享的 Word 报告。</p>'}
+  `;
 }
 
 async function refreshOrganizationMemories() {
@@ -3448,6 +3478,19 @@ async function saveOrganizationMemory(event) {
   el.organizationMemoryForm?.reset();
   showToast("组织记忆已保存");
   await refreshOrganizationWorkspaces();
+}
+
+async function sendWorkspaceReport(workspaceId, filename) {
+  const report = state.outbox.find((item) => item.name === filename) || {};
+  await api(
+    `/api/organization/workspaces/${encodeURIComponent(workspaceId)}/outbox/${encodeURIComponent(filename)}/send-feishu`,
+    {
+      method: "POST",
+      body: JSON.stringify({ run_id: report.run_id || "", subscription_id: report.subscription_id || "" }),
+    },
+  );
+  await Promise.all([refreshOutbox(), refreshFeishu()]);
+  showToast("Word 报告已发送到当前飞书项目群");
 }
 
 async function openOrganizationGroupDialog(mode) {
@@ -4937,6 +4980,14 @@ function bindEvents() {
         sendFeishuTarget.dataset.sendFeishuRun || "",
         sendFeishuTarget.dataset.sendFeishuSubscription || "",
       ).catch(toastError("飞书发送失败"));
+      return;
+    }
+    const sendWorkspaceReportTarget = event.target.closest("[data-send-workspace-report]");
+    if (sendWorkspaceReportTarget) {
+      sendWorkspaceReport(
+        sendWorkspaceReportTarget.dataset.workspaceId,
+        sendWorkspaceReportTarget.dataset.sendWorkspaceReport,
+      ).catch(toastError("发送项目群失败"));
       return;
     }
     const sendOpportunityTarget = event.target.closest("[data-send-opportunity-feishu]");

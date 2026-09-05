@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
+from tendertrace.organization_memory import create_workspace
 from tendertrace.opportunity_collaboration import (
     list_collaboration_notes,
     record_collaboration_note,
@@ -67,6 +68,11 @@ class OpportunityCollaborationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))
             _insert_notice(settings)
+            workspace = create_workspace(
+                settings,
+                name="机会战情室",
+                feishu_chat_id="oc_workspace_team",
+            )
             with patch.object(api_module.Settings, "load", return_value=settings), patch.object(
                 api_module,
                 "launch_war_room",
@@ -87,19 +93,31 @@ class OpportunityCollaborationTests(unittest.TestCase):
                 listed = client.get("/api/opportunities/notice-1/collaboration-notes")
                 launched = client.post(
                     "/api/opportunities/notice-1/war-room/launch",
-                    json={"receive_id": "oc_team", "receive_id_type": "chat_id"},
+                    json={"workspace_id": workspace.id},
+                )
+                planned = client.get(
+                    "/api/opportunities/notice-1/war-room",
+                    params={"workspace_id": workspace.id},
                 )
 
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(listed.json()["returned"], 1)
         self.assertEqual(launched.status_code, 200)
+        self.assertEqual(planned.status_code, 200)
+        self.assertEqual(planned.json()["steps"][0]["status"], "ready")
+        self.assertIn("当前项目群", planned.json()["steps"][0]["detail"])
         launcher.assert_called_once()
+        self.assertEqual(launcher.call_args.kwargs["receive_id"], "oc_workspace_team")
+        self.assertEqual(launcher.call_args.kwargs["receive_id_type"], "chat_id")
         self.assertEqual(launched.json()["status"], "started")
 
 
 def _settings(root: Path) -> Settings:
     (root / ".env.local").write_text(
-        "TENDERTRACE_DB_PATH=data/test.sqlite3\nTENDERTRACE_SCHEDULER_ENABLED=false\n",
+        "TENDERTRACE_DB_PATH=data/test.sqlite3\n"
+        "TENDERTRACE_SCHEDULER_ENABLED=false\n"
+        "FEISHU_APP_ID=cli_test\n"
+        "FEISHU_APP_SECRET=secret-value\n",
         encoding="utf-8",
     )
     settings = Settings.load(root)

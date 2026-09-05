@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 414 automated tests pass</sub>
+  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 415 automated tests pass</sub>
 </p>
 
 ---
@@ -48,7 +48,7 @@ flowchart LR
 |---|---|
 | 意图与检索 | 解析主题、品类同义词、省市区、相对或绝对时间、执行频率；完整行政区划与范围路由避免静默降级。检索支持 FTS5 + BM25，本地结果不足时自动补采；安装可选依赖后可使用 BGE 向量召回并通过 RRF 与关键词结果融合。 |
 | 采集与证据 | 统一适配公开 API、静态页面、动态页面和登录态来源；支持限流、`Retry-After`、指数退避、阻断识别、详情批量抓取和页面快照。正文经过模板清理、URL 规范化、项目编号提取与 SimHash 去重，PDF、DOCX、XLSX 附件可受限下载并抽取证据片段。 |
-| 报告与订阅 | Word 报告包含标题、发布时间、来源链接、核心内容、附件链接和来源健康信息。APScheduler 分离“后台采集订阅”和“用户报告订阅”，后者依靠 `sent_history` 保证增量不重复，并记录新增数、跳过历史数、下次执行和交付结果。 |
+| 报告与订阅 | Word 报告包含标题、发布时间、来源链接、核心内容、附件链接和来源健康信息。APScheduler 分离“后台采集订阅”和“用户报告订阅”，后者依靠 `sent_history` 保证增量不重复，并记录新增数、跳过历史数、下次执行和交付结果；已选飞书项目群可直接接收任一 outbox 报告，投递结果写入活动审计。 |
 | 机会经营 | 根据时效、完整度、可信度、多源佐证和需求覆盖计算机会等级；维护唯一负责人、阶段化团队、合作伙伴和客户关键人。采购主体、预算、项目编号、截止时间等字段可附证据人工核验，核验后重算销售准入。 |
 | 决策与执行 | 统一动作契约控制认领、事实复核、Go/Hold/No-Go、投标准备、结果和归档。团队覆盖、客户关系、证据完整度、机会评分和投标窗口共同构成可解释门禁；重大公告变更会使旧决策失效并进入复核与 SLA 升级。会审队列、Agent 建议和人工裁决均保留原文证据，不覆盖要求账本。 |
 | 市场与复盘 | 从本地公告形成品类预算基准、采购主体集中度、采购阶段分布和成交供应商画像。赢标或失标结果记录原因、经验、后续行动与证据，并回流胜率、败因、竞品和成交价格基准。样本不足时明确降级，不生成伪精确结论。 |
@@ -79,7 +79,7 @@ TenderTrace 当前覆盖 16 个来源。范围路由根据查询地区选择对�
 | 群聊入口 | 自然语言即时查询生成 Word；包含频率的请求创建当前会话专属订阅。消息事件持久化去重，失败后可恢复。 |
 | 机会卡片 | 认领、阶段推进、Go/Hold/No-Go 和建议反馈使用服务端统一动作契约；卡片回调写回 SQLite、Web 状态和审计事件。 |
 | 任务与日程 | 负责人作为 Task v2 `assignee`，团队与伙伴作为 `follower`；截止日可同步日历。任务创建、更新和提醒使用稳定幂等键，避免重复。 |
-| 战情室与会审 | 机会详情先给出卡片、负责人任务、截止日历、多维表格与要求任务的启动前检查；确认后执行已有飞书资源创建并将逐步结果写入机会审计事件。会审意见可在 Web 提交，飞书群成员也可发送 `项目意见 <机会编号>：<内容>` 回写同一机会账本。 |
+| 战情室与会审 | 机会详情先给出卡片、负责人任务、截止日历、多维表格与要求任务的启动前检查；已选项目群会成为预检和启动的同一接收目标，确认后执行已有飞书资源创建并将逐步结果写入机会审计事件。会审意见可在 Web 提交，飞书群成员也可发送 `项目意见 <机会编号>：<内容>` 回写同一机会账本。 |
 | 多维表格 | 公告和机会可同步为协同台账；伙伴提交的外部线索先预检公网来源和内容指纹，再进入本地库与 FTS，并回写核验状态。 |
 | 组织记忆 | 每个项目群拥有独立共享记忆。明确的记录/查询指令用于沉淀会议事实、客户信号和决策依据，普通招标问题仍走报告或订阅。 |
 | 经营管理 | 周报、机会晨报、重大变更、决策逾期和来源 SLO 可发送为可操作卡片；成功投递按接收人和业务指纹去重。 |
@@ -270,7 +270,7 @@ The architecture is local-first. Background ingestion grows the SQLite notice li
 |---|---|
 | Intent and retrieval | Parses topic, category synonyms, province/city/district, relative or absolute time, and frequency. Scope routing avoids silent regional fallback. Optional BGE embeddings are fused with FTS results through RRF. |
 | Collection and evidence | Handles official APIs, static pages, dynamic pages, and authenticated sources with throttling, retry, block detection, detail retrieval, and snapshots. Content is cleaned, canonicalized, deduplicated, and enriched with bounded PDF, DOCX, and XLSX extraction. |
-| Reports and schedules | Word reports include title, publish time, source URL, core facts, attachment links, and source health. APScheduler separates ingestion plans from user delivery subscriptions; `sent_history` makes scheduled output incremental and auditable. |
+| Reports and schedules | Word reports include title, publish time, source URL, core facts, attachment links, and source health. APScheduler separates ingestion plans from user delivery subscriptions; `sent_history` makes scheduled output incremental and auditable. Any report in the outbox can be sent directly to the selected Feishu project group, with delivery recorded in the activity audit. |
 | Opportunity operations | Scores freshness, completeness, credibility, corroboration, and requirement coverage. Maintains one accountable owner, a stage-aware pursuit team, partners, stakeholders, evidence-backed fact overrides, and qualification gates. |
 | Decision and execution | A shared action contract governs claiming, review, Go/Hold/No-Go, bid preparation, outcome, and archive actions. Material notice changes invalidate stale decisions and enter an SLA-bound review workflow. |
 | Market and outcomes | Builds category budget benchmarks, buyer concentration, procurement-stage distributions, award suppliers, competitors, win rates, and loss reasons from local evidence. Insufficient samples are labeled instead of extrapolated. |
@@ -301,6 +301,7 @@ Feishu is an execution surface rather than a notification-only integration. Tend
 | Conversation entry | Immediate questions return Word to the current chat; scheduled questions create chat-bound incremental subscriptions with durable event deduplication. |
 | Interactive opportunity cards | Claim, stage, decision, and advice actions consume the same server-side action contract as the Web UI and persist to SQLite and the audit stream. |
 | Tasks and calendar | Owners are Task v2 assignees; internal and partner team members are followers. Stable idempotency keys prevent duplicate tasks, events, and reminders. |
+| War room and review | The opportunity dossier preflights cards, ownership tasks, deadline calendar, Bitable, and requirement tasks against the selected project group; its explicit launch writes step-level results to the opportunity audit. Group members can send `项目意见 <opportunity ID>：<content>` to append a collaboration note to the same opportunity ledger. |
 | Bitable | Notices and opportunities form a shared ledger. Partner-submitted leads are validated against a public source and content fingerprint before entering SQLite and FTS. |
 | Organization memory | Each project chat owns a separate shared memory scope. Explicit record/search commands preserve meeting facts, customer signals, and decisions without mixing them into personal profiles. |
 | Operations management | Weekly summaries, opportunity briefings, material changes, decision breaches, and source incidents are delivered as actionable, receiver-deduplicated cards. |

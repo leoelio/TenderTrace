@@ -1908,6 +1908,82 @@ td.file-cell {
   font-size: 13px;
 }
 
+.organization-report-delivery {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border, var(--line));
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.organization-report-delivery .section-heading {
+  margin: 0;
+  padding: 13px 16px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.organization-report-delivery h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.organization-report-delivery .section-heading span,
+.organization-report-row small,
+.organization-report-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.organization-report-list {
+  display: grid;
+}
+
+.organization-report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.organization-report-row:last-child {
+  border-bottom: 0;
+}
+
+.organization-report-row > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.organization-report-row strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-report-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.organization-report-actions .text-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.organization-report-empty {
+  margin: 0;
+  padding: 15px 16px;
+}
+
 .organization-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(290px, 0.8fr);
@@ -2058,7 +2134,8 @@ td.file-cell {
 body.theme-dark .organization-heading,
 body.theme-dark .organization-toolbar,
 body.theme-dark .organization-compose,
-body.theme-dark .organization-summary {
+body.theme-dark .organization-summary,
+body.theme-dark .organization-report-delivery {
   background: rgba(23, 32, 43, 0.5);
 }
 
@@ -2107,6 +2184,12 @@ body.theme-dark .organization-memory-row p {
   .organization-memory-stream,
   .organization-compose {
     padding: 14px;
+  }
+
+  .organization-report-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .organization-convert-grid {

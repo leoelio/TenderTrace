@@ -13,7 +13,12 @@ from tendertrace.opportunity import get_opportunity
 from tendertrace.opportunity_requirements import list_requirements, requirement_summary
 
 
-def build_war_room_plan(settings: Settings, notice_id: str) -> dict[str, object]:
+def build_war_room_plan(
+    settings: Settings,
+    notice_id: str,
+    *,
+    receive_id: str = "",
+) -> dict[str, object]:
     """Return a local, side-effect-free plan for initializing an opportunity war room."""
     opportunity = get_opportunity(settings, notice_id)
     if opportunity is None:
@@ -26,7 +31,7 @@ def build_war_room_plan(settings: Settings, notice_id: str) -> dict[str, object]
     group_ready = bool(
         settings.feishu_message_app_id_present
         and settings.feishu_message_app_secret_present
-        and settings.feishu_default_receive_id
+        and (receive_id or settings.feishu_default_receive_id)
     )
     calendar_ready = bool(settings.feishu_calendar_id and opportunity.get("bid_deadline"))
     bitable_ready = bool(
@@ -41,7 +46,7 @@ def build_war_room_plan(settings: Settings, notice_id: str) -> dict[str, object]
             "group_card",
             "战情室卡片",
             group_ready,
-            "复用已配置的飞书群并发送机会卡片",
+            "发送机会卡片到当前项目群" if receive_id else "复用已配置的飞书群并发送机会卡片",
             "需要配置飞书消息应用和默认接收群",
         ),
         _step(
@@ -111,7 +116,7 @@ def launch_war_room(
     The plan remains safe to inspect. This function is the only path that causes
     external side effects, and it reports each resource independently afterwards.
     """
-    plan = build_war_room_plan(settings, notice_id)
+    plan = build_war_room_plan(settings, notice_id, receive_id=receive_id)
     if not receive_id:
         return _record_launch(
             settings,
