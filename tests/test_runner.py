@@ -344,7 +344,7 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(model_gateway.calls[0]["system"][:11], "You enhance")
         self.assertIn("GPU服务器", expanded_terms)
         self.assertIn("废标", bidql["topic"]["negative"])
-        self.assertEqual(len(audit_rows), 1)
+        self.assertGreaterEqual(len(audit_rows), 1)
         self.assertEqual(audit_rows[0]["status"], "ok")
         self.assertTrue(any(event.payload.get("tool") == "llm.intent_enhancer" for event in events))
 

@@ -305,6 +305,15 @@ def _source_display(notice: Notice) -> str:
     return notice.source_site
 
 
+def _model_summary_text(notice: Notice) -> str:
+    value = notice.fields.get("model_summary")
+    if not isinstance(value, dict):
+        return ""
+    if value.get("source") != "model" or not value.get("fact_check_passed"):
+        return ""
+    return str(value.get("summary") or "").strip()
+
+
 def _evidence(notice: Notice) -> dict[str, Any]:
     value = notice.fields.get("evidence")
     return value if isinstance(value, dict) else {}
@@ -596,6 +605,9 @@ def write_report(
         _add_label_value(doc, "来源链接", notice.source_url)
         _add_label_value(doc, "采购人", notice.purchaser)
         _add_label_value(doc, "核心内容", notice.core_content)
+        model_summary = _model_summary_text(notice)
+        if model_summary:
+            _add_label_value(doc, "AI 摘要（事实回查通过）", model_summary)
         _add_opportunity_detail(doc, notice, market)
         _add_structured_fields(doc, notice)
         evidence = _evidence(notice)

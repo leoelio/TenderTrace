@@ -31,6 +31,7 @@ from tendertrace.pipeline.dedup import clean_and_cluster_notices
 from tendertrace.pipeline.evidence import attach_evidence
 from tendertrace.pipeline.fields import extract_structured_fields
 from tendertrace.pipeline.notice_types import classify_notice_type
+from tendertrace.pipeline.summarize import summarize_notice_with_model
 from tendertrace.retrieval import search_notices, upsert_notice_fts
 from tendertrace.report.docx_writer import write_report
 from tendertrace.runlog import finish_run, register_outbox_message, start_run
@@ -276,6 +277,13 @@ def run_once(
 
     def report(state: RunState, context) -> RunState:
         context.emit_tool_call("report.docx_writer", {"notice_count": len(state.notices)})
+        if settings.model_enhancement_enabled and state.notices:
+            _attach_model_summaries(
+                settings,
+                state.notices,
+                run_id=state.run_id,
+                gateway=model_gateway,
+            )
         report_path = write_report(
             query=state.original_query,
             bidql=state.intent,
@@ -568,6 +576,32 @@ def _notice_from_dict(value: dict[str, Any]) -> Notice:
         ],
         fields=value.get("fields", {}) if isinstance(value.get("fields"), dict) else {},
     )
+
+
+def _attach_model_summaries(
+    settings: Settings,
+    notices: list[dict[str, Any]],
+    *,
+    run_id: str,
+    gateway: ModelGateway | None = None,
+) -> None:
+    model_gateway = gateway or ModelGateway(settings)
+    for notice in notices:
+        if not isinstance(notice, dict):
+            continue
+        summary = summarize_notice_with_model(
+            settings,
+            title=str(notice.get("title") or ""),
+            content_text=str(notice.get("content_text") or ""),
+            core_content=str(notice.get("core_content") or ""),
+            gateway=model_gateway,
+            run_id=run_id,
+        )
+        fields = notice.get("fields")
+        if not isinstance(fields, dict):
+            fields = {}
+            notice["fields"] = fields
+        fields["model_summary"] = summary.to_dict()
 
 
 def persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> None:

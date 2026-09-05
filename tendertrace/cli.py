@@ -8,7 +8,7 @@ import sys
 
 from tendertrace.acceptance import run_acceptance
 from tendertrace.config import ConfigError, Settings
-from tendertrace.db import database_health, init_db
+from tendertrace.db import connection, database_health, init_db
 from tendertrace.demo_check import run_demo_check, write_demo_evidence
 from tendertrace.demo_incremental import run_incremental_demo
 from tendertrace.demo_video import generate_demo_video
@@ -45,6 +45,7 @@ from tendertrace.scheduling.ingest_subscriptions import (
     run_ingest_subscription,
 )
 from tendertrace.pipeline.notice_types import classify_notices
+from tendertrace.pipeline.summarize import summarize_notice_with_model
 from tendertrace.source_map import build_source_map
 from tendertrace.submission import create_submission_package
 from tendertrace.vault.qianlima import QianlimaSessionVault
@@ -243,6 +244,26 @@ def cmd_classify_notices(args: argparse.Namespace) -> int:
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("status") == "finished" else 1
+
+
+def cmd_summarize_notice(args: argparse.Namespace) -> int:
+    settings = _settings()
+    with connection(settings) as conn:
+        row = conn.execute(
+            "SELECT title, content_text, core_content FROM notices WHERE id = ?",
+            (args.notice_id,),
+        ).fetchone()
+    if row is None:
+        print(json.dumps({"error": "notice not found"}, ensure_ascii=False))
+        return 1
+    result = summarize_notice_with_model(
+        settings,
+        title=str(row["title"] or ""),
+        content_text=str(row["content_text"] or ""),
+        core_content=str(row["core_content"] or ""),
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
 
 
 def cmd_evaluate_gold(args: argparse.Namespace) -> int:
@@ -673,6 +694,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Re-classify every notice instead of only unclassified ones.",
     )
     classify_notices_parser.set_defaults(func=cmd_classify_notices)
+    summarize_notice_parser = sub.add_parser(
+        "summarize-notice",
+        help="Produce a fact-gated model summary for one notice.",
+    )
+    summarize_notice_parser.add_argument("--notice-id", required=True)
+    summarize_notice_parser.set_defaults(func=cmd_summarize_notice)
     evaluate_gold = sub.add_parser(
         "evaluate-gold",
         help="Evaluate local retrieval against an annotated gold benchmark.",
