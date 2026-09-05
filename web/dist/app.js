@@ -2150,40 +2150,53 @@ function escalationIssueLabel(item) {
 function renderOpportunityDecisionBoard(actionQueue) {
   if (!el.opportunityDecisionBoard) return;
   const decisions = actionQueue.decisions || {};
-  const stages = actionQueue.stage_counts || {};
   const allEscalations = Array.isArray(actionQueue.escalations) ? actionQueue.escalations : [];
   const escalations = allEscalations.slice(0, 5);
+  const priorities = state.opportunities
+    .map(opportunityNextWork)
+    .filter(Boolean)
+    .slice(0, 3);
   el.opportunityDecisionBoard.className = "opportunity-decision-board";
   el.opportunityDecisionBoard.innerHTML = `
     <section>
-      <span class="decision-board-kicker">资格与决策</span>
-      <strong>${escapeHtml(actionQueue.qualification_ready || 0)} 条可决策</strong>
-      <div class="decision-board-lines">
-        ${decisionBoardLine("阻断待补", actionQueue.qualification_blocked || 0)}
-        ${decisionBoardLine("关键关系待补", actionQueue.stakeholder_incomplete || 0)}
-        ${decisionBoardLine("关键关系高风险", actionQueue.stakeholder_critical || 0, actionQueue.stakeholder_critical ? "danger" : "")}
-        ${decisionBoardLine("关系行动逾期", actionQueue.relationship_action_overdue || 0, actionQueue.relationship_action_overdue ? "danger" : "")}
-        ${decisionBoardLine("行动结果待补", actionQueue.relationship_action_outcome_pending || 0)}
-        ${decisionBoardLine("公告变更待复核", actionQueue.change_review_pending || 0, actionQueue.change_review_overdue ? "danger" : "")}
-        ${decisionBoardLine("待管理决策", actionQueue.decision_pending || 0)}
-        ${decisionBoardLine(`超过 ${actionQueue.decision_sla_hours || 0} 小时`, actionQueue.decision_overdue || 0, actionQueue.decision_overdue ? "danger" : "")}
+      <span class="decision-board-kicker">今日推进</span>
+      <strong>${priorities.length ? `${priorities.length} 条优先处理` : "暂无优先待办"}</strong>
+      <div class="decision-priority-list">
+        ${priorities.length ? priorities.map((item) => `
+          <button type="button" class="decision-priority-item" data-view-opportunity="${escapeHtml(item.noticeId)}">
+            <strong title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</strong>
+            <small>${escapeHtml(item.action)}</small>
+          </button>
+        `).join("") : '<small>机会进入队列后会按截止、变更、门禁与协同状态自动排序。</small>'}
       </div>
     </section>
     <section>
-      <span class="decision-board-kicker">决策与转化</span>
-      <strong>${actionQueue.go_rate == null ? "暂无闭环决策" : `Go 通过率 ${escapeHtml(actionQueue.go_rate)}%`}</strong>
+      <span class="decision-board-kicker">推进门禁</span>
+      <strong>${escapeHtml(actionQueue.qualification_ready || 0)} 条可提交决策</strong>
+      <div class="decision-board-lines">
+        ${decisionBoardLine("准入待补", actionQueue.qualification_blocked || 0)}
+        ${decisionBoardLine("团队待补", actionQueue.team_incomplete || 0)}
+        ${decisionBoardLine("关键关系待补", actionQueue.stakeholder_incomplete || 0)}
+        ${decisionBoardLine("关系行动待办", actionQueue.relationship_action_open || 0)}
+      </div>
       <div class="decision-board-pipeline">
         ${decisionPipelineValue("Go", decisions.go || 0, "go")}
         ${decisionPipelineValue("Hold", decisions.hold || 0, "hold")}
         ${decisionPipelineValue("No-Go", decisions.no_go || 0, "no-go")}
       </div>
-      <small>主任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)}；关系行动：进行 ${escapeHtml(actionQueue.relationship_action_open || 0)} · 完成 ${escapeHtml(actionQueue.relationship_action_completed || 0)} · 未指派 ${escapeHtml(actionQueue.relationship_action_unassigned || 0)}</small>
+      <small>主任务：进行 ${escapeHtml(actionQueue.task_open || 0)} · 完成 ${escapeHtml(actionQueue.task_completed || 0)} · 逾期 ${escapeHtml(actionQueue.task_overdue || 0)}</small>
     </section>
     <section>
-      <span class="decision-board-kicker">协同升级队列</span>
+      <span class="decision-board-kicker">协同与风险</span>
       <div class="decision-board-heading">
         <strong>${allEscalations.length ? `${allEscalations.length} 条需要管理介入` : "当前无协同逾期"}</strong>
         ${allEscalations.length ? '<button class="text-link" type="button" data-send-opportunity-escalations>发送飞书摘要</button>' : ""}
+      </div>
+      <div class="decision-board-lines decision-board-risk-lines">
+        ${decisionBoardLine("公告变更待复核", actionQueue.change_review_pending || 0, actionQueue.change_review_overdue ? "danger" : "")}
+        ${decisionBoardLine("变更复核逾期", actionQueue.change_review_overdue || 0, actionQueue.change_review_overdue ? "danger" : "")}
+        ${decisionBoardLine("待管理决策", actionQueue.decision_pending || 0)}
+        ${decisionBoardLine(`决策超时（${actionQueue.decision_sla_hours || 0} 小时）`, actionQueue.decision_overdue || 0, actionQueue.decision_overdue ? "danger" : "")}
       </div>
       <div class="decision-escalation-list">
         ${escalations.length ? escalations.map((item) => `
@@ -2195,6 +2208,28 @@ function renderOpportunityDecisionBoard(actionQueue) {
       </div>
     </section>
   `;
+}
+
+function opportunityNextWork(item) {
+  const title = String(item?.title || "").trim();
+  const noticeId = String(item?.notice_id || "").trim();
+  if (!title || !noticeId) return null;
+  const actionState = item.action_state || {};
+  const changeReview = item.change_review || {};
+  const workflow = item.workflow || {};
+  const qualification = item.qualification || {};
+  const gates = Array.isArray(qualification.gates) ? qualification.gates : [];
+  const blockedGate = gates.find((gate) => gate?.status === "blocked");
+  let action = "查看下一步推进任务";
+  if (changeReview.overdue) action = "处理逾期公告变更复核";
+  else if (Number(changeReview.pending_count || 0)) action = "复核公告变更影响";
+  else if (actionState.decision_sla_status === "overdue") action = "完成超时投标决策";
+  else if (actionState.owner_required) action = "认领机会负责人";
+  else if (blockedGate?.label) action = `补齐${blockedGate.label}门禁`;
+  else if (actionState.due_soon) action = "确认临近截止的投标安排";
+  else if (workflow.decision === "pending" && qualification.status === "ready") action = "提交 Go / Hold / No-Go 决策";
+  else return null;
+  return { noticeId, title, action };
 }
 
 function decisionBoardLine(label, value, tone = "") {

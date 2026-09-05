@@ -3422,9 +3422,56 @@ body.theme-dark .smart-card strong {
   font-size: 10px;
 }
 
+.decision-priority-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.decision-priority-item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line-soft);
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.42);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.decision-priority-item:hover {
+  border-color: var(--accent);
+  background: rgba(240, 247, 255, 0.72);
+}
+
+.decision-priority-item strong,
+.decision-priority-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.decision-priority-item strong {
+  font-size: 11px;
+}
+
+.decision-priority-item small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .decision-board-lines {
   margin-top: 10px;
   border-top: 1px solid var(--line-soft);
+}
+
+.decision-board-risk-lines {
+  margin-top: 8px;
 }
 
 .decision-board-lines p {
