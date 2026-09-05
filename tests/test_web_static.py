@@ -229,6 +229,7 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("features.source_incident_task", js)
         self.assertIn("sourceAccessStatus", js)
         self.assertIn('label: "已登录"', js)
+        self.assertIn("health.last_failure_at", js)
         self.assertIn("会话自然语言指令", js)
         self.assertIn("conversation_commands", js)
         self.assertIn("applyExampleQuery", js)

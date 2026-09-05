@@ -1143,7 +1143,7 @@ function renderSourceList(target, items) {
           ${validation}
           ${counts}
           ${detail}
-          ${health.last_error ? `<span class="source-error-line">最近错误：${escapeHtml(health.last_error)}</span>` : ""}
+          ${health.last_error ? `<span class="source-error-line">最近错误：${escapeHtml(health.last_error)}${health.last_failure_at ? ` · ${escapeHtml(compactDateTimeText(health.last_failure_at))}` : ""}</span>` : ""}
         </div>
       `;
     })

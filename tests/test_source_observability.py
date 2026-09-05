@@ -186,6 +186,55 @@ class SourceObservabilityTests(unittest.TestCase):
         self.assertEqual(source_map["qianlima"]["validation"], "expired")
         self.assertIn("重新保存", source_map["qianlima"]["detail"])
 
+    def test_later_qianlima_success_clears_historical_expiry_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            settings.ensure_directories()
+            (settings.secrets_dir / "qianlima_storage_state.json").write_text(
+                '{"cookies":[{"domain":".qianlima.com","name":"session","value":"hidden"}],"origins":[]}',
+                encoding="utf-8",
+            )
+            for run_id, started_at, status, error in (
+                (
+                    "run-expired",
+                    "2026-08-15 08:00:00",
+                    "failed",
+                    "qianlima member APIs rejected saved session",
+                ),
+                ("run-recovered", "2026-08-16 08:00:00", "finished", ""),
+            ):
+                start_run(settings, run_id=run_id, original_query="上海服务器采购", mode="full")
+                finish_run(
+                    settings,
+                    run_id=run_id,
+                    status="finished",
+                    output_docx_path=None,
+                    stats={
+                        "source_stats": [
+                            {
+                                "source": "qianlima",
+                                "status": status,
+                                "count": 1 if status == "finished" else 0,
+                                "error": error,
+                            }
+                        ]
+                    },
+                )
+                with connection(settings) as conn:
+                    conn.execute(
+                        "UPDATE runs SET started_at = ? WHERE id = ?",
+                        (started_at, run_id),
+                    )
+
+            source_map = build_source_map(settings)
+
+        qianlima = next(item for item in source_map["items"] if item["site"] == "qianlima")
+        self.assertEqual(qianlima["status"], "configured")
+        self.assertTrue(source_map["login_source_ready"])
+        self.assertEqual(qianlima["health"]["last_failure_at"], "2026-08-15 08:00:00")
+        self.assertEqual(qianlima["health"]["last_success_at"], "2026-08-16 08:00:00")
+
 
 if __name__ == "__main__":
     unittest.main()

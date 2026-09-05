@@ -460,6 +460,8 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
                 bucket["last_run_at"] = str(row["started_at"] or "")
             if status == "failed":
                 bucket["failed_runs"] = int(bucket["failed_runs"]) + 1
+                if not bucket["last_failure_at"]:
+                    bucket["last_failure_at"] = str(row["started_at"] or "")
             else:
                 bucket["finished_runs"] = int(bucket["finished_runs"]) + 1
                 if not bucket["last_success_at"]:
@@ -513,6 +515,7 @@ def _empty_health() -> dict[str, object]:
         "health_status": "unknown",
         "last_run_at": "",
         "last_success_at": "",
+        "last_failure_at": "",
     }
 
 
@@ -577,13 +580,18 @@ def _merge_fetch_stats(bucket: dict[str, object], fetch_stats: dict[str, Any]) -
 
 def _qianlima_login_expired(health: dict[str, object]) -> bool:
     error = str(health.get("last_error") or "").casefold()
-    return any(
+    authentication_failed = any(
         marker in error
         for marker in (
             "qianlima login session expired",
             "qianlima member apis rejected saved session",
         )
     )
+    if not authentication_failed:
+        return False
+    last_failure = str(health.get("last_failure_at") or "")
+    last_success = str(health.get("last_success_at") or "")
+    return not last_success or not last_failure or last_failure >= last_success
 
 
 def _loads(value: str) -> dict[str, Any]:
