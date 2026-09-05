@@ -30,6 +30,7 @@ from tendertrace.pipeline.attachments import Downloader, enrich_attachment_snaps
 from tendertrace.pipeline.dedup import clean_and_cluster_notices
 from tendertrace.pipeline.evidence import attach_evidence
 from tendertrace.pipeline.fields import extract_structured_fields
+from tendertrace.pipeline.notice_types import classify_notice_type
 from tendertrace.retrieval import search_notices, upsert_notice_fts
 from tendertrace.report.docx_writer import write_report
 from tendertrace.runlog import finish_run, register_outbox_message, start_run
@@ -580,6 +581,11 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
             notice_pk = f"{notice.source_site}:{notice.id}"
             cluster_key = str(fields.get("cluster_key") or notice_pk)
             attachments = [attachment.__dict__ for attachment in notice.attachments]
+            classification = classify_notice_type(
+                notice.title,
+                notice.content_text,
+                notice.core_content,
+            )
             existing = conn.execute(
                 "SELECT * FROM notices WHERE id = ?",
                 (notice_pk,),
@@ -615,9 +621,9 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
                 INSERT INTO notices(
                     id, source_site, source_url, canonical_url, title, publish_time,
                     region, purchaser, content_text, core_content, attachments_json,
-                    fields_json, snapshot_sha256, simhash64
+                    fields_json, snapshot_sha256, simhash64, notice_type, notice_type_label
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     source_site = excluded.source_site,
                     source_url = excluded.source_url,
@@ -632,6 +638,8 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
                     fields_json = excluded.fields_json,
                     snapshot_sha256 = excluded.snapshot_sha256,
                     simhash64 = excluded.simhash64,
+                    notice_type = excluded.notice_type,
+                    notice_type_label = excluded.notice_type_label,
                     updated_at = CASE
                         WHEN ? THEN datetime('now') ELSE notices.updated_at
                     END,
@@ -652,6 +660,8 @@ def _persist_notices_and_clusters(settings: Settings, notices: list[Notice]) -> 
                     json_dumps(fields),
                     str(fields.get("snapshot_sha256") or ""),
                     str(fields.get("simhash64") or ""),
+                    classification.notice_type,
+                    classification.label,
                     changed,
                 ),
             )

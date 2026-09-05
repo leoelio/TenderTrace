@@ -766,6 +766,8 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "attachments_json TEXT NOT NULL DEFAULT '[]'",
         "updated_at TEXT NOT NULL DEFAULT ''",
         "last_seen_at TEXT NOT NULL DEFAULT ''",
+        "notice_type TEXT NOT NULL DEFAULT 'other'",
+        "notice_type_label TEXT NOT NULL DEFAULT '其他'",
     ),
     "feishu_lead_import_runs": (
         "verified_count INTEGER NOT NULL DEFAULT 0",

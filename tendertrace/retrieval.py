@@ -12,6 +12,7 @@ import jieba
 from tendertrace.adapters.ccgp import Attachment, Notice
 from tendertrace.config import Settings
 from tendertrace.db import FTS_DDL, connection
+from tendertrace.pipeline.notice_types import EXCLUDED_FROM_TENDER_SEARCH
 from tendertrace.vector import VectorUnavailable, cosine_similarity, embed_query
 
 
@@ -333,9 +334,13 @@ def _filters(bidql: dict[str, Any], *, relax_city: bool) -> tuple[str, list[obje
             params.extend(values)
 
     negatives = bidql.get("topic", {}).get("negative", [])
-    for term in negatives if isinstance(negatives, list) else []:
+    negative_terms = [term for term in negatives if term] if isinstance(negatives, list) else []
+    for term in negative_terms:
         clauses.append("AND n.title NOT LIKE ? AND COALESCE(n.content_text, '') NOT LIKE ?")
         params.extend([f"%{term}%", f"%{term}%"])
+    if negative_terms:
+        excluded_types = ", ".join(f"'{value}'" for value in sorted(EXCLUDED_FROM_TENDER_SEARCH))
+        clauses.append(f"AND (n.notice_type NOT IN ({excluded_types}))")
     return "\n          ".join(clauses), params
 
 

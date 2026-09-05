@@ -44,6 +44,7 @@ from tendertrace.scheduling.ingest_subscriptions import (
     list_ingest_subscriptions,
     run_ingest_subscription,
 )
+from tendertrace.pipeline.notice_types import classify_notices
 from tendertrace.source_map import build_source_map
 from tendertrace.submission import create_submission_package
 from tendertrace.vault.qianlima import QianlimaSessionVault
@@ -231,6 +232,17 @@ def cmd_embed_notices(args: argparse.Namespace) -> int:
     result = build_notice_embeddings(settings, limit=args.limit)
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0 if result.status in {"finished", "disabled"} else 1
+
+
+def cmd_classify_notices(args: argparse.Namespace) -> int:
+    settings = _settings()
+    result = classify_notices(
+        settings,
+        limit=args.limit,
+        only_unclassified=not args.all,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("status") == "finished" else 1
 
 
 def cmd_evaluate_gold(args: argparse.Namespace) -> int:
@@ -650,6 +662,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     embed_notices.add_argument("--limit", type=int, default=None)
     embed_notices.set_defaults(func=cmd_embed_notices)
+    classify_notices_parser = sub.add_parser(
+        "classify-notices",
+        help="Classify notices into tender/award/cancelled/correction/other and persist.",
+    )
+    classify_notices_parser.add_argument("--limit", type=int, default=500)
+    classify_notices_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Re-classify every notice instead of only unclassified ones.",
+    )
+    classify_notices_parser.set_defaults(func=cmd_classify_notices)
     evaluate_gold = sub.add_parser(
         "evaluate-gold",
         help="Evaluate local retrieval against an annotated gold benchmark.",
