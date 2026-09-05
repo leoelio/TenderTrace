@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 import hashlib
 import json
 import math
@@ -153,6 +154,7 @@ def vector_coverage(settings: Settings) -> dict[str, int | str | bool]:
     }
 
 
+@lru_cache(maxsize=4)
 def _load_embedder(model_name: str):
     try:
         from sentence_transformers import SentenceTransformer
