@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import tempfile
 import unittest
 
@@ -103,10 +104,12 @@ class SourceObservabilityTests(unittest.TestCase):
             settings = Settings.load(Path(tmp))
             init_db(settings)
             settings.ensure_directories()
-            (settings.secrets_dir / "qianlima_storage_state.json").write_text(
+            storage_state = settings.secrets_dir / "qianlima_storage_state.json"
+            storage_state.write_text(
                 '{"cookies":[{"domain":".qianlima.com","name":"session","value":"hidden"}],"origins":[]}',
                 encoding="utf-8",
             )
+            os.utime(storage_state, (946684800, 946684800))
             for run_id, error in (
                 ("run-old", "TimeoutError: old network timeout"),
                 (
@@ -156,10 +159,12 @@ class SourceObservabilityTests(unittest.TestCase):
             settings = Settings.load(Path(tmp))
             init_db(settings)
             settings.ensure_directories()
-            (settings.secrets_dir / "qianlima_storage_state.json").write_text(
+            storage_state = settings.secrets_dir / "qianlima_storage_state.json"
+            storage_state.write_text(
                 '{"cookies":[{"domain":".qianlima.com","name":"session","value":"hidden"}],"origins":[]}',
                 encoding="utf-8",
             )
+            os.utime(storage_state, (946684800, 946684800))
             start_run(settings, run_id="run-member-rejected", original_query="上海服务器采购", mode="full")
             finish_run(
                 settings,
@@ -234,6 +239,46 @@ class SourceObservabilityTests(unittest.TestCase):
         self.assertTrue(source_map["login_source_ready"])
         self.assertEqual(qianlima["health"]["last_failure_at"], "2026-08-15 08:00:00")
         self.assertEqual(qianlima["health"]["last_success_at"], "2026-08-16 08:00:00")
+
+    def test_newly_saved_storage_state_reenables_a_session_after_expiry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            settings.ensure_directories()
+            storage_state = settings.secrets_dir / "qianlima_storage_state.json"
+            storage_state.write_text(
+                '{"cookies":[{"domain":".qianlima.com","name":"session","value":"hidden"}],"origins":[]}',
+                encoding="utf-8",
+            )
+            os.utime(storage_state, (946684800, 946684800))
+            start_run(settings, run_id="run-expired", original_query="上海服务器采购", mode="full")
+            finish_run(
+                settings,
+                run_id="run-expired",
+                status="finished",
+                output_docx_path=None,
+                stats={
+                    "source_stats": [
+                        {
+                            "source": "qianlima",
+                            "status": "failed",
+                            "count": 0,
+                            "error": "qianlima member APIs rejected saved session",
+                        }
+                    ]
+                },
+            )
+            with connection(settings) as conn:
+                conn.execute(
+                    "UPDATE runs SET started_at = '2026-08-16 08:00:00' WHERE id = 'run-expired'"
+                )
+            os.utime(storage_state, (1797004800, 1797004800))
+
+            source_map = build_source_map(settings)
+
+        qianlima = next(item for item in source_map["items"] if item["site"] == "qianlima")
+        self.assertEqual(qianlima["status"], "configured")
+        self.assertTrue(source_map["login_source_ready"])
 
 
 if __name__ == "__main__":

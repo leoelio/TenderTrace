@@ -83,9 +83,10 @@ class MultiSourceAdapter:
         ]
         try:
             from tendertrace.vault.qianlima import QianlimaAdapter, QianlimaSessionVault
+            from tendertrace.source_map import qianlima_login_ready, source_health
 
             vault = QianlimaSessionVault(settings)
-            if vault.has_storage_state():
+            if qianlima_login_ready(vault.status(), source_health(settings).get("qianlima", {})):
                 adapters.append(QianlimaAdapter(vault=vault))
         except ImportError:
             pass

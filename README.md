@@ -290,7 +290,7 @@ TenderTrace currently routes across 16 sources without sending domestic city que
 | International institutions | UNGM, World Bank, ADB, AfDB, EBRD ECEPP, IDB |
 | National open data | CanadaBuys, Prozorro |
 
-Source trust combines authority, observed request reliability, last successful run, primary-document evidence, independent corroboration, and attachment snapshots. Sources with no observations stay explicitly unobserved. SLO incidents can produce deduplicated Feishu alerts and owner-assigned Task v2 work with a configurable response deadline.
+Source trust combines authority, observed request reliability, last successful run, primary-document evidence, independent corroboration, and attachment snapshots. After an authenticated session is actually rejected, the source leaves the collection queue to prevent repeated failures; a newly saved session or a later successful run makes it eligible again. Sources with no observations stay explicitly unobserved. SLO incidents can produce deduplicated Feishu alerts and owner-assigned Task v2 work with a configurable response deadline.
 
 ## Feishu Collaboration
 

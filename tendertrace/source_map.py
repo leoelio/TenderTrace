@@ -28,7 +28,11 @@ from tendertrace.adapters.worldbank import WORLD_BANK_API
 from tendertrace.adapters.zzcg import ZZCG_LIST_URLS
 from tendertrace.config import Settings
 from tendertrace.db import connection
-from tendertrace.vault.qianlima import QIANLIMA_MEMBER_SEARCH_URL, QianlimaSessionVault
+from tendertrace.vault.qianlima import (
+    QIANLIMA_MEMBER_SEARCH_URL,
+    QianlimaSessionStatus,
+    QianlimaSessionVault,
+)
 
 
 @dataclass(frozen=True)
@@ -63,8 +67,8 @@ def build_source_map(settings: Settings) -> dict[str, object]:
     qianlima = QianlimaSessionVault(settings)
     qianlima_status = qianlima.status()
     qianlima_health = health.get("qianlima", {})
-    qianlima_expired = _qianlima_login_expired(qianlima_health)
-    qianlima_ready = qianlima_status.ready and not qianlima_expired
+    qianlima_ready = qianlima_login_ready(qianlima_status, qianlima_health)
+    qianlima_expired = qianlima_status.ready and not qianlima_ready
     items = [
         SourceMapItem(
             site="ccgp",
@@ -578,7 +582,17 @@ def _merge_fetch_stats(bucket: dict[str, object], fetch_stats: dict[str, Any]) -
         )
 
 
-def _qianlima_login_expired(health: dict[str, object]) -> bool:
+def qianlima_login_ready(
+    status: QianlimaSessionStatus,
+    health: dict[str, object],
+) -> bool:
+    return status.ready and not _qianlima_login_expired(health, status.modified_at)
+
+
+def _qianlima_login_expired(
+    health: dict[str, object],
+    storage_state_modified_at: str | None = None,
+) -> bool:
     error = str(health.get("last_error") or "").casefold()
     authentication_failed = any(
         marker in error
@@ -591,7 +605,14 @@ def _qianlima_login_expired(health: dict[str, object]) -> bool:
         return False
     last_failure = str(health.get("last_failure_at") or "")
     last_success = str(health.get("last_success_at") or "")
-    return not last_success or not last_failure or last_failure >= last_success
+    if last_success and last_failure and last_success > last_failure:
+        return False
+    saved_state = _timestamp_key(storage_state_modified_at)
+    return not saved_state or not last_failure or saved_state <= _timestamp_key(last_failure)
+
+
+def _timestamp_key(value: str | None) -> str:
+    return str(value or "").replace("T", " ").replace("Z", "")[:19]
 
 
 def _loads(value: str) -> dict[str, Any]:

@@ -1,8 +1,14 @@
 import threading
+from pathlib import Path
+import os
+import tempfile
 import unittest
 
 from tendertrace.adapters.ccgp import Notice
 from tendertrace.adapters.multi import MultiSourceAdapter
+from tendertrace.config import Settings
+from tendertrace.db import init_db
+from tendertrace.runlog import finish_run, start_run
 
 
 class StaticAdapter:
@@ -123,6 +129,41 @@ class MultiSourceAdapterTests(unittest.TestCase):
         self.assertTrue(entered[0].is_set())
         self.assertTrue(entered[1].is_set())
         self.assertEqual([stat.status for stat in adapter.last_source_stats], ["finished", "finished"])
+
+    def test_default_omits_expired_qianlima_session_from_collection_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            settings.ensure_directories()
+            storage_state = settings.secrets_dir / "qianlima_storage_state.json"
+            storage_state.write_text(
+                '{"cookies":[{"domain":".qianlima.com","name":"session","value":"hidden"}],"origins":[]}',
+                encoding="utf-8",
+            )
+            os.utime(storage_state, (946684800, 946684800))
+            start_run(settings, run_id="expired-session", original_query="上海服务器采购", mode="full")
+            finish_run(
+                settings,
+                run_id="expired-session",
+                status="finished",
+                output_docx_path=None,
+                stats={
+                    "source_stats": [
+                        {
+                            "source": "qianlima",
+                            "status": "failed",
+                            "count": 0,
+                            "error": "qianlima member APIs rejected saved session",
+                        }
+                    ]
+                },
+            )
+            expired_adapter = MultiSourceAdapter.default(settings)
+            os.utime(storage_state, (1797004800, 1797004800))
+            recovered_adapter = MultiSourceAdapter.default(settings)
+
+        self.assertNotIn("qianlima", [item.name for item in expired_adapter.adapters])
+        self.assertIn("qianlima", [item.name for item in recovered_adapter.adapters])
 
 
 class _BarrierAdapter:
