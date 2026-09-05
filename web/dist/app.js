@@ -2460,7 +2460,9 @@ async function sendOpportunityReviewBoardToFeishu(noticeId) {
   showToast(
     result.status === "sent"
       ? `会审摘要已同步到飞书群：待裁决 ${result.pending_count || 0} 项`
-      : "当前会审状态已同步过，无需重复发送",
+      : result.reason === "review board has no cases"
+        ? "尚无会审项，请先根据要求账本生成队列"
+        : "当前会审状态已同步过，无需重复发送",
   );
 }
 
