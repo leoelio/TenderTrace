@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <sub>Current stage: P52 · Authoritative Domestic Sources · 361 automated tests pass</sub>
+  <sub>Current stage: P52+ · 16 sources · multi-agent review & fact-gated LLM summary · 407 automated tests pass</sub>
 </p>
 
 ---
