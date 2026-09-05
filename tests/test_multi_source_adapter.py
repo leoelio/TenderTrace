@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 from tendertrace.adapters.ccgp import Notice
@@ -105,6 +106,35 @@ class MultiSourceAdapterTests(unittest.TestCase):
 
         self.assertEqual(notices, [])
         self.assertEqual(adapter.last_source_stats[0].status, "skipped")
+
+    def test_collect_runs_sources_concurrently(self) -> None:
+        entered = [threading.Event(), threading.Event()]
+        barrier = threading.Barrier(2)
+        adapter = MultiSourceAdapter(
+            [
+                _BarrierAdapter("ccgp", barrier, entered[0]),
+                _BarrierAdapter("ggzy", barrier, entered[1]),
+            ]
+        )
+
+        notices = adapter.collect({}, max_results=2)
+
+        self.assertEqual(len(notices), 2)
+        self.assertTrue(entered[0].is_set())
+        self.assertTrue(entered[1].is_set())
+        self.assertEqual([stat.status for stat in adapter.last_source_stats], ["finished", "finished"])
+
+
+class _BarrierAdapter:
+    def __init__(self, name: str, barrier: threading.Barrier, entered: threading.Event) -> None:
+        self.name = name
+        self.barrier = barrier
+        self.entered = entered
+
+    def collect(self, bidql, *, max_pages: int = 1, max_results: int = 10) -> list[Notice]:
+        self.entered.set()
+        self.barrier.wait(timeout=5)
+        return [_notice(self.name, "1")]
 
 
 if __name__ == "__main__":

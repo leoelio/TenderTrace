@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -56,8 +57,9 @@ class SourceRunStat:
 class MultiSourceAdapter:
     name = "multi"
 
-    def __init__(self, adapters: list[SourceAdapter]) -> None:
+    def __init__(self, adapters: list[SourceAdapter], *, max_workers: int = 8) -> None:
         self.adapters = adapters
+        self.max_workers = max_workers
         self.last_source_stats: list[SourceRunStat] = []
 
     @classmethod
@@ -97,8 +99,7 @@ class MultiSourceAdapter:
         max_results: int = 10,
     ) -> list[Notice]:
         self.last_source_stats = []
-        results_by_source: list[list[Notice]] = []
-        seen: set[str] = set()
+        jobs: list[tuple[SourceAdapter, str] | None] = []
         for adapter in self.adapters:
             source_name = getattr(adapter, "name", adapter.__class__.__name__)
             supports = getattr(adapter, "supports", None)
@@ -106,10 +107,19 @@ class MultiSourceAdapter:
                 self.last_source_stats.append(
                     SourceRunStat(source=source_name, status="skipped")
                 )
-                results_by_source.append([])
+                jobs.append(None)
                 continue
+            jobs.append((adapter, source_name))
+
+        eligible = [job for job in jobs if job is not None]
+        workers = max(1, min(self.max_workers, len(eligible)))
+
+        def _run(job: tuple[SourceAdapter, str]) -> dict[str, object]:
+            adapter, source_name = job
             try:
-                notices = adapter.collect(bidql, max_pages=max_pages, max_results=max_results)
+                notices = adapter.collect(
+                    bidql, max_pages=max_pages, max_results=max_results
+                )
                 relaxed_city = False
                 if not notices and _has_city_scope(bidql):
                     notices = adapter.collect(
@@ -118,34 +128,61 @@ class MultiSourceAdapter:
                         max_results=max_results,
                     )
                     relaxed_city = bool(notices)
+                return {
+                    "source": source_name,
+                    "notices": notices,
+                    "relaxed_city": relaxed_city,
+                    "error": None,
+                    "fetch_stats": _fetch_stats(adapter),
+                }
             except Exception as exc:
+                return {
+                    "source": source_name,
+                    "notices": [],
+                    "relaxed_city": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "fetch_stats": _fetch_stats(adapter),
+                }
+
+        results_by_source: list[list[Notice]] = []
+        seen: set[str] = set()
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(_run, job) if job else None for job in jobs]
+            for future, job in zip(futures, jobs, strict=True):
+                if future is None or job is None:
+                    results_by_source.append([])
+                    continue
+                outcome = future.result()
+                source_name = str(outcome["source"])
+                error = outcome["error"]
+                if error is not None:
+                    self.last_source_stats.append(
+                        SourceRunStat(
+                            source=source_name,
+                            status="failed",
+                            error=str(error),
+                            fetch_stats=outcome["fetch_stats"],
+                        )
+                    )
+                    results_by_source.append([])
+                    continue
+                unique: list[Notice] = []
+                for notice in outcome["notices"]:
+                    key = _notice_key(notice)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    unique.append(notice)
                 self.last_source_stats.append(
                     SourceRunStat(
                         source=source_name,
-                        status="failed",
-                        error=f"{type(exc).__name__}: {exc}",
-                        fetch_stats=_fetch_stats(adapter),
+                        status="finished",
+                        count=len(unique),
+                        relaxed_city=bool(outcome["relaxed_city"]),
+                        fetch_stats=outcome["fetch_stats"],
                     )
                 )
-                results_by_source.append([])
-                continue
-            unique: list[Notice] = []
-            for notice in notices:
-                key = _notice_key(notice)
-                if key in seen:
-                    continue
-                seen.add(key)
-                unique.append(notice)
-            self.last_source_stats.append(
-                SourceRunStat(
-                    source=source_name,
-                    status="finished",
-                    count=len(unique),
-                    relaxed_city=relaxed_city,
-                    fetch_stats=_fetch_stats(adapter),
-                )
-            )
-            results_by_source.append(unique)
+                results_by_source.append(unique)
         return _round_robin(results_by_source, max_results)
 
 
