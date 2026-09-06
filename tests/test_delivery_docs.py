@@ -67,7 +67,7 @@ class DeliveryDocsTests(unittest.TestCase):
     def test_readme_matches_current_stage(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
         self.assertIn("Current stage: P53", readme)
-        self.assertIn("424 automated tests pass", readme)
+        self.assertIn("428 automated tests pass", readme)
         self.assertIn("16 sources", readme)
         self.assertIn("acceptance-check", readme)
 

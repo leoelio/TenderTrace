@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 424 automated tests pass</sub>
+  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 428 automated tests pass</sub>
 </p>
 
 ---
@@ -50,7 +50,7 @@ flowchart LR
 | 采集与证据 | 统一适配公开 API、静态页面、动态页面和登录态来源；支持限流、`Retry-After`、指数退避、阻断识别、详情批量抓取和页面快照。正文经过模板清理、URL 规范化、项目编号提取与 SimHash 去重，PDF、DOCX、XLSX 附件可受限下载并抽取证据片段。 |
 | 报告与订阅 | Word 报告包含标题、发布时间、来源链接、核心内容、附件链接和来源健康信息。APScheduler 分离“后台采集订阅”和“用户报告订阅”，后者依靠 `sent_history` 保证增量不重复，并记录新增数、跳过历史数、下次执行和交付结果；飞书项目群会同时接收 Word 附件和由同次真实运行统计生成的检索简报卡，附件成功与简报失败分开审计，避免误报交付状态。 |
 | 机会经营 | 根据时效、完整度、可信度、多源佐证和需求覆盖计算机会等级；维护唯一负责人、阶段化团队、合作伙伴和客户关键人。采购主体、预算、项目编号、截止时间等字段可附证据人工核验，核验后重算销售准入。 |
-| 决策与执行 | 统一动作契约控制认领、事实复核、Go/Hold/No-Go、投标准备、结果和归档。团队覆盖、客户关系、证据完整度、机会评分和投标窗口共同构成可解释门禁；重大公告变更会使旧决策失效并进入复核与 SLA 升级。会审队列、Agent 建议和人工裁决均保留原文证据，不覆盖要求账本。 |
+| 决策与执行 | 统一动作契约控制认领、事实复核、Go/Hold/No-Go、投标准备、结果和归档。团队覆盖、客户关系、证据完整度、机会评分和投标窗口共同构成可解释门禁；重大公告变更会使旧决策失效并进入复核与 SLA 升级。会审队列、Agent 建议、网页与群内人工意见以及人工裁决均保留原文证据，不覆盖要求账本。 |
 | 市场与复盘 | 从本地公告形成品类预算基准、采购主体集中度、采购阶段分布和成交供应商画像。赢标或失标结果记录原因、经验、后续行动与证据，并回流胜率、败因、竞品和成交价格基准。样本不足时明确降级，不生成伪精确结论。 |
 | 个人与组织记忆 | 个人记忆记录查询、点击、下载、订阅和运行，形成周报、偏好与可执行建议。组织记忆按飞书项目群隔离，群成员可显式记录和查询共享事实，并将其审计式转换为机会事实或客户行动；两类记忆分表存储，不互相污染。 |
 | 模型与评测 | 支持纯规则、本地 Ollama 和 OpenAI 兼容云端增强，运行时可切换。评测覆盖意图 Harness、RAG 证据、Agent checkpoint/trace、来源可靠性、Recall Proxy 和人工金标 Recall@K；代理指标不冒充严格召回率。 |
@@ -68,7 +68,7 @@ TenderTrace 当前覆盖 16 个来源。范围路由根据查询地区选择对�
 | 国际组织 | UNGM、世界银行、亚洲开发银行、非洲开发银行、EBRD ECEPP、美洲开发银行 | 国际机构采购公告；UNGM 同时覆盖多个联合国组织 |
 | 国家开放数据 | CanadaBuys、Prozorro | 加拿大联邦开放招标数据；乌克兰官方游标 feed、详情、金额、币种与附件证据 |
 
-来源健康不是静态标签。系统会按真实运行记录请求成功率、反爬阻断、延迟、最近成功时间和登录状态评估来源可用性；命中率单独作为查询覆盖观测，不把“本次无匹配公告”误判为来源故障。页面型反爬即使返回 HTTP 200 也会标明“阻断响应”，不会伪装为成功。没有运行样本的来源显示为“未观察”，来源异常可生成飞书告警和带 SLA 的 Task v2 处置任务。
+来源健康不是静态标签。系统会按真实运行记录请求成功率、反爬阻断、延迟、最近成功时间和登录状态评估来源可用性；命中率单独作为查询覆盖观测，不把“本次无匹配公告”误判为来源故障。新鲜度 SLO 仅在后台采集启用时计算，避免把未调度来源的历史样本误报为故障。页面型反爬即使返回 HTTP 200 也会标明“阻断响应”，不会伪装为成功。没有运行样本的来源显示为“未观察”，来源异常可生成飞书告警和带 SLA 的 Task v2 处置任务。
 
 ## 飞书深度协作
 
@@ -79,7 +79,7 @@ TenderTrace 当前覆盖 16 个来源。范围路由根据查询地区选择对�
 | 群聊入口 | 自然语言即时查询生成 Word；包含频率的请求创建当前会话专属订阅。消息事件持久化去重，失败后可恢复。 |
 | 机会卡片 | 认领、阶段推进、Go/Hold/No-Go 和建议反馈使用服务端统一动作契约；卡片回调写回 SQLite、Web 状态和审计事件。 |
 | 任务与日程 | 负责人作为 Task v2 `assignee`，团队与伙伴作为 `follower`；截止日可同步日历。任务创建、更新和提醒使用稳定幂等键，避免重复。 |
-| 战情室与会审 | 机会详情先给出卡片、负责人任务、截止日历、多维表格、五角色会审与要求任务的启动前检查；已选项目群会成为预检和启动的同一接收目标，确认后会先按要求账本和公告变更生成会审 case，再执行飞书资源创建并将逐步结果写入机会审计事件。AI 会审只形成带分歧标记的证据建议，人工裁决仍是唯一可改变会审状态的动作；会审摘要卡可按当前账本状态同步到项目群并去重，群成员可发送 `项目意见 <机会编号>：<内容>` 回写同一机会账本。 |
+| 战情室与会审 | 机会详情先给出卡片、负责人任务、截止日历、多维表格、五角色会审与要求任务的启动前检查；已选项目群会成为预检和启动的同一接收目标，确认后会先按要求账本和公告变更生成会审 case，再执行飞书资源创建并将逐步结果写入机会审计事件。AI 会审只形成带分歧标记的证据建议，人工裁决仍是唯一可改变会审状态的动作；会审摘要卡可按当前账本状态同步到项目群并去重。群成员可发送 `项目意见 <机会编号>：<内容>` 记录机会协作判断，或发送 `会审意见 <机会编号> <要求编号>：<内容>` 为指定要求补充正式会审依据；两类信息均带作者、渠道、时间并回写审计链。 |
 | 多维表格 | 公告和机会可同步为协同台账；伙伴提交的外部线索先预检公网来源和内容指纹，再进入本地库与 FTS，并回写核验状态。 |
 | 组织记忆 | 每个项目群拥有独立共享记忆。明确的记录/查询指令用于沉淀会议事实、客户信号和决策依据，普通招标问题仍走报告或订阅。 |
 | 经营管理 | 周报、机会晨报、重大变更、决策逾期和来源 SLO 可发送为可操作卡片；成功投递按接收人和业务指纹去重。 |
@@ -301,7 +301,7 @@ Feishu is an execution surface rather than a notification-only integration. Tend
 | Conversation entry | Immediate questions return Word to the current chat; scheduled questions create chat-bound incremental subscriptions with durable event deduplication. |
 | Interactive opportunity cards | Claim, stage, decision, and advice actions consume the same server-side action contract as the Web UI and persist to SQLite and the audit stream. |
 | Tasks and calendar | Owners are Task v2 assignees; internal and partner team members are followers. Stable idempotency keys prevent duplicate tasks, events, and reminders. |
-| War room and review | The opportunity dossier preflights cards, ownership tasks, deadline calendar, Bitable, five-role review, and requirement tasks against the selected project group. Launch first derives review cases from the evidence ledger and material notice changes, then writes every result to the opportunity audit. AI review produces evidence-based, disagreement-aware suggestions only; an explicit human decision remains the sole state-changing action. The current evidence-ledger state can be sent as a deduplicated review digest card to that group. Group members can send `项目意见 <opportunity ID>：<content>` to append a collaboration note to the same opportunity ledger; the confirmation includes a deep link that opens that exact dossier. |
+| War room and review | The opportunity dossier preflights cards, ownership tasks, deadline calendar, Bitable, five-role review, and requirement tasks against the selected project group. Launch first derives review cases from the evidence ledger and material notice changes, then writes every result to the opportunity audit. AI review produces evidence-based, disagreement-aware suggestions only; an explicit human decision remains the sole state-changing action. The current evidence-ledger state can be sent as a deduplicated review digest card to that group. Group members can send `项目意见 <opportunity ID>：<content>` for a general collaboration note, or `会审意见 <opportunity ID> <requirement key>：<content>` to attach a human review opinion to the matching requirement; both preserve author, channel, time, and an audit event. |
 | Bitable | Notices and opportunities form a shared ledger. Partner-submitted leads are validated against a public source and content fingerprint before entering SQLite and FTS. |
 | Organization memory | Each project chat owns a separate shared memory scope. Explicit record/search commands preserve meeting facts, customer signals, and decisions without mixing them into personal profiles. |
 | Operations management | Weekly summaries, opportunity briefings, material changes, decision breaches, and source incidents are delivered as actionable, receiver-deduplicated cards. |
