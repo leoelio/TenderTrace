@@ -1911,7 +1911,7 @@ td.file-cell {
 .organization-command-guide {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(104px, 0.7fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(104px, 0.7fr) repeat(4, minmax(0, 1fr));
   align-items: center;
   gap: 10px;
   padding: 11px 18px;
@@ -2195,13 +2195,19 @@ body.theme-dark .organization-memory-row p {
 }
 
 @media (max-width: 620px) {
-  .organization-heading .action-group,
+  .organization-heading .action-group {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
   .organization-toolbar {
     grid-template-columns: minmax(0, 1fr);
     width: 100%;
   }
 
   .organization-heading .action-group > * {
+    min-width: 0;
     flex: 1 1 auto;
   }
 
