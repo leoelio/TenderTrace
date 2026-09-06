@@ -81,6 +81,7 @@ class FeishuReviewBoardTests(unittest.TestCase):
         self.assertIn("QUAL-01", card_text)
         self.assertIn("建议升级", card_text)
         self.assertIn("项目意见 notice-1", card_text)
+        self.assertIn("会审意见 notice-1 QUAL-01", card_text)
         self.assertIn("opportunity=notice-1", card_text)
 
 

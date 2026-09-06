@@ -183,8 +183,10 @@ def build_requirement_review_card(
                 {
                     "tag": "plain_text",
                     "content": (
-                        f"群内补充依据请发送：项目意见 {notice_id}：内容。"
-                        "意见会进入同一机会审计链，人工裁决仍须在档案中确认。"
+                        f"项目整体意见：项目意见 {notice_id}：内容。"
+                        f"针对上方要求补充会审依据：会审意见 {notice_id} "
+                        f"{_text(cases[0].requirement_key, '要求编号')}：内容。"
+                        "群内意见会回写机会审计链，人工裁决仍须在档案中确认。"
                     ),
                 }
             ],
@@ -225,6 +227,7 @@ def _artifact_key(
     receive_id_type: str,
 ) -> str:
     state = {
+        "card_schema": 2,
         "notice_id": notice_id,
         "cases": [(item.id, item.status, item.updated_at) for item in cases],
         "suggestions": suggestions,
