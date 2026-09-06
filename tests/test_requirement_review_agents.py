@@ -113,14 +113,20 @@ class RequirementReviewAgentsTests(unittest.TestCase):
                 settings,
                 "notice-1",
                 gateway=_FakeGateway(
-                    {"compliance": "accept", "technical": "accept", "commercial": "accept", "evidence_audit": "accept"}
+                    {
+                        "project_control": "accept",
+                        "compliance": "accept",
+                        "technical": "accept",
+                        "commercial": "accept",
+                        "evidence_audit": "accept",
+                    }
                 ),
             )
             suggestions = review_agent_suggestions(settings, "notice-1")
             case_after = list_requirement_review_cases(settings, "notice-1")[0]
 
         self.assertEqual(result["mode"], "multi_agent")
-        self.assertEqual(result["opinion_count"], 4)
+        self.assertEqual(result["opinion_count"], 5)
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0]["suggestion"], "accept")
         self.assertEqual(suggestions[0]["consensus"], "unanimous")
@@ -140,7 +146,13 @@ class RequirementReviewAgentsTests(unittest.TestCase):
                 settings,
                 "notice-1",
                 gateway=_FakeGateway(
-                    {"compliance": "accept", "technical": "reject", "commercial": "accept", "evidence_audit": "reject"}
+                    {
+                        "project_control": "accept",
+                        "compliance": "accept",
+                        "technical": "reject",
+                        "commercial": "accept",
+                        "evidence_audit": "reject",
+                    }
                 ),
             )
             suggestions = review_agent_suggestions(settings, "notice-1")
@@ -149,7 +161,7 @@ class RequirementReviewAgentsTests(unittest.TestCase):
         self.assertEqual(suggestions[0]["suggestion"], "escalate")
         self.assertTrue(suggestions[0]["disagreement"])
         self.assertEqual(suggestions[0]["consensus"], "split")
-        self.assertEqual(suggestions[0]["votes"], {"accept": 2, "reject": 2})
+        self.assertEqual(suggestions[0]["votes"], {"accept": 3, "reject": 2})
 
     def test_rerun_is_idempotent_and_never_rewrites_requirement_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -157,17 +169,25 @@ class RequirementReviewAgentsTests(unittest.TestCase):
             _insert_notice(settings)
             requirement = _requirement(settings)
             sync_requirement_review_cases(settings, "notice-1")
-            gateway = _FakeGateway({"compliance": "accept", "technical": "accept", "commercial": "accept", "evidence_audit": "accept"})
+            gateway = _FakeGateway(
+                {
+                    "project_control": "accept",
+                    "compliance": "accept",
+                    "technical": "accept",
+                    "commercial": "accept",
+                    "evidence_audit": "accept",
+                }
+            )
 
             first = run_review_agents(settings, "notice-1", gateway=gateway)
             second = run_review_agents(settings, "notice-1", gateway=gateway)
             opinions = list_review_opinions(settings, "notice-1")
             refreshed = list_requirements(settings, "notice-1")[0]
 
-        self.assertEqual(first["opinion_count"], 4)
-        self.assertEqual(second["opinion_count"], 4)
-        self.assertEqual(len(opinions), 4)
-        self.assertEqual(len({opinion.id for opinion in opinions}), 4)
+        self.assertEqual(first["opinion_count"], 5)
+        self.assertEqual(second["opinion_count"], 5)
+        self.assertEqual(len(opinions), 5)
+        self.assertEqual(len({opinion.id for opinion in opinions}), 5)
         self.assertEqual(refreshed.status, requirement.status)
         self.assertEqual(refreshed.title, requirement.title)
 

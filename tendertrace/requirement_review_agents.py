@@ -30,6 +30,12 @@ AGENT_DECISION_LABELS = {
 # The prompts deliberately ask for evidence-based reasoning: an agent must point
 # back to the requirement's source text instead of free-form summarizing.
 AGENT_PERSONAS: dict[str, dict[str, str]] = {
+    "project_control": {
+        "label": "项目统筹审查",
+        "focus": (
+            "投标截止、交付窗口、资源依赖与推进门禁是否可执行，是否存在会导致项目失控的时序或责任缺口。"
+        ),
+    },
     "compliance": {
         "label": "合规审查",
         "focus": (
