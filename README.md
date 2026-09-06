@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 428 automated tests pass</sub>
+  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 429 automated tests pass</sub>
 </p>
 
 ---
@@ -200,7 +200,14 @@ python -m tendertrace feishu-bitable-check --ensure-fields
 python -m tendertrace feishu-import-leads --dry-run
 ```
 
-需要从飞书接收自然语言命令时，运行 `python -m tendertrace feishu-bot-listen`，并在飞书开放平台发布包含机器人、通讯录、消息、Task v2、多维表格等所需权限的应用版本。完整 API 可在服务启动后查看 `/docs`，README 只保留稳定的能力边界，不重复维护全部路由清单。
+需要从飞书接收自然语言命令时，运行 `python -m tendertrace feishu-bot-listen`，并在飞书开放平台发布包含机器人、通讯录、消息、Task v2、多维表格等所需权限的应用版本。Web 服务已启用调度器时，监听器应作为独立进程运行并关闭自身调度器，避免同一订阅被重复调度：
+
+```powershell
+$env:TENDERTRACE_SCHEDULER_ENABLED = "false"
+python -m tendertrace feishu-bot-listen
+```
+
+完整 API 可在服务启动后查看 `/docs`，README 只保留稳定的能力边界，不重复维护全部路由清单。
 
 ## 配置原则
 
