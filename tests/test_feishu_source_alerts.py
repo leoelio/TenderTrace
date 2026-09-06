@@ -35,7 +35,7 @@ class _FakeClient:
 class FeishuSourceAlertTests(unittest.TestCase):
     def test_snapshot_reports_observed_slo_breaches_and_login_expiry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            settings = _settings(Path(tmp))
+            settings = _settings(Path(tmp), ingest_enabled=True)
             now = datetime(2026, 8, 16, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
 
             snapshot = build_source_alert_snapshot(
@@ -53,6 +53,21 @@ class FeishuSourceAlertTests(unittest.TestCase):
             ["qianlima", "ggzy"],
         )
         self.assertNotIn("adb", [item["site"] for item in snapshot["issues"]])
+
+    def test_inactive_ingestion_does_not_turn_historical_samples_into_alerts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp), ingest_enabled=False)
+            snapshot = build_source_alert_snapshot(
+                settings,
+                source_map_loader=_source_map,
+                now=datetime(2026, 8, 16, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+            )
+
+        self.assertEqual(
+            [item["site"] for item in snapshot["issues"]],
+            ["qianlima", "ggzy"],
+        )
+        self.assertFalse(snapshot["policy"]["stale_monitoring_active"])
 
     def test_same_daily_source_state_is_sent_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -191,10 +206,11 @@ class FeishuSourceAlertTests(unittest.TestCase):
         self.assertIn("来源健康告警", text)
 
 
-def _settings(root: Path) -> Settings:
+def _settings(root: Path, *, ingest_enabled: bool = False) -> Settings:
     (root / ".env.local").write_text(
         "TENDERTRACE_SOURCE_ALERT_MIN_RELIABILITY=0.75\n"
-        "TENDERTRACE_SOURCE_ALERT_STALE_HOURS=24\n",
+        "TENDERTRACE_SOURCE_ALERT_STALE_HOURS=24\n"
+        f"TENDERTRACE_INGEST_ENABLED={'true' if ingest_enabled else 'false'}\n",
         encoding="utf-8",
     )
     return Settings.load(root)

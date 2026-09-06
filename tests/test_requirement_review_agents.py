@@ -15,6 +15,10 @@ from tendertrace.requirement_review_agents import (
     review_agent_suggestions,
     run_review_agents,
 )
+from tendertrace.requirement_review_human_opinions import (
+    list_human_review_opinions,
+    record_human_review_opinion,
+)
 from tendertrace.requirement_review_board import (
     list_requirement_review_cases,
     sync_requirement_review_cases,
@@ -47,6 +51,56 @@ class _FakeGateway:
 
 
 class RequirementReviewAgentsTests(unittest.TestCase):
+    def test_human_opinion_is_evidence_linked_without_resolving_case(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            requirement = _requirement(settings)
+            sync_requirement_review_cases(settings, "notice-1")
+            opinion = record_human_review_opinion(
+                settings,
+                notice_id="notice-1",
+                requirement_id=requirement.id,
+                content="请补充营业执照有效期的原文页码。",
+                actor="项目经理",
+                channel="web",
+            )
+            repeated = record_human_review_opinion(
+                settings,
+                notice_id="notice-1",
+                requirement_id=requirement.id,
+                content="请补充营业执照有效期的原文页码。",
+                actor="项目经理",
+                channel="web",
+                source_message_id="msg-1",
+            )
+            duplicate = record_human_review_opinion(
+                settings,
+                notice_id="notice-1",
+                requirement_id=requirement.id,
+                content="请补充营业执照有效期的原文页码。",
+                actor="项目经理",
+                channel="web",
+                source_message_id="msg-1",
+            )
+            opinions = list_human_review_opinions(settings, "notice-1")
+            review_case = list_requirement_review_cases(settings, "notice-1")[0]
+            with connection(settings) as conn:
+                events = conn.execute(
+                    """
+                    SELECT COUNT(*) AS count FROM opportunity_events
+                    WHERE action = 'requirement_review_human_opinion'
+                    """
+                ).fetchone()["count"]
+
+        self.assertEqual(opinion.requirement_key, "QUAL-01")
+        self.assertEqual(len(opinions), 2)
+        self.assertEqual(repeated.id, duplicate.id)
+        self.assertEqual(events, 2)
+        self.assertEqual(opinions[0].content, "请补充营业执照有效期的原文页码。")
+        self.assertEqual(opinions[0].channel, "web")
+        self.assertEqual(review_case.status, "pending")
+
     def test_unanimous_agents_produce_accept_suggestion_without_resolving_case(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = _review_settings(Path(tmp))
@@ -141,17 +195,28 @@ class RequirementReviewAgentsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))
             _insert_notice(settings)
-            _requirement(settings)
+            requirement = _requirement(settings)
             sync_requirement_review_cases(settings, "notice-1")
             with patch.object(api_module.Settings, "load", return_value=settings):
                 client = TestClient(api_module.create_app())
                 ran = client.post("/api/opportunities/notice-1/review-board/agents")
+                saved = client.post(
+                    "/api/opportunities/notice-1/review-board/opinions",
+                    json={
+                        "requirement_id": requirement.id,
+                        "actor": "项目经理",
+                        "content": "需要补充原文定位。",
+                    },
+                )
                 board = client.get("/api/opportunities/notice-1/review-board")
 
         self.assertEqual(ran.status_code, 200)
         self.assertEqual(ran.json()["mode"], "rule_only")
+        self.assertEqual(saved.status_code, 200)
         self.assertIn("opinions", board.json())
+        self.assertIn("human_opinions", board.json())
         self.assertIn("suggestions", board.json())
+        self.assertEqual(board.json()["human_opinions"][0]["actor"], "项目经理")
         self.assertEqual(board.json()["suggestions"], [])
 
 

@@ -73,6 +73,7 @@ def build_source_alert_snapshot(
         "policy": {
             "minimum_reliability": settings.source_alert_min_reliability,
             "stale_hours": settings.source_alert_stale_hours,
+            "stale_monitoring_active": settings.ingest_enabled,
             "automation_enabled": settings.source_alert_enabled,
             "cron": settings.source_alert_cron,
         },
@@ -345,7 +346,9 @@ def _source_issue(
             severity = "critical"
     last_success = str(health.get("last_success_at") or "")
     success_at = _parse_datetime(last_success, reference.tzinfo)
-    if runs and success_at:
+    # Freshness is only an SLO while the background collector is expected to run.
+    # Otherwise a quiet source is an unobserved source, not a source failure.
+    if settings.ingest_enabled and runs and success_at:
         age_hours = max(0, int((reference - success_at).total_seconds() // 3600))
         if age_hours > settings.source_alert_stale_hours:
             reasons.append(

@@ -17,6 +17,7 @@ from tendertrace.integrations.feishu_bot import (
 )
 from tendertrace.runner import RunOnceResult
 from tendertrace.scheduling.subscriptions import Subscription
+from tendertrace.opportunity_requirements import upsert_requirement
 
 
 class FakeFeishuClient:
@@ -282,6 +283,57 @@ class FeishuBotTests(unittest.TestCase):
         self.assertIn("售前需确认", note["content"])
         self.assertIn("已记录项目协作意见", client.replies[0][1])
         self.assertIn("view=opportunityView&opportunity=callback-notice", client.replies[0][1])
+
+    def test_group_review_opinion_is_linked_to_requirement_without_running_collection(self) -> None:
+        def should_not_run(**kwargs):
+            self.fail("review opinion must not trigger tender collection")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            _insert_card_notice(settings)
+            requirement = upsert_requirement(
+                settings,
+                notice_id="callback-notice",
+                requirement_key="TECH-01",
+                requirement_type="attachment",
+                title="存储协议",
+                evidence_text="支持指定存储协议。",
+                source_url="https://example.com/callback-notice",
+                source_locator="招标文件第 8 页",
+                confidence=60,
+                actor="测试",
+            )
+            event = accept_feishu_message_event(
+                settings,
+                _event_payload(
+                    "evt-review-opinion",
+                    "msg-review-opinion",
+                    "会审意见 callback-notice TECH-01：需要确认协议兼容边界",
+                ),
+            )
+            client = FakeFeishuClient()
+            result = process_feishu_message_event(
+                settings,
+                event.event_id,
+                client=client,
+                run_func=should_not_run,
+            )
+            with connection(settings) as conn:
+                opinion = conn.execute(
+                    """
+                    SELECT requirement_id, content, channel
+                    FROM requirement_review_human_opinions
+                    WHERE notice_id = ?
+                    """,
+                    ("callback-notice",),
+                ).fetchone()
+
+        self.assertEqual(result.command_kind, "review_opinion")
+        self.assertEqual(opinion["requirement_id"], requirement.id)
+        self.assertEqual(opinion["channel"], "feishu_group")
+        self.assertIn("兼容边界", opinion["content"])
+        self.assertIn("已记录会审意见", client.replies[0][1])
 
     def test_non_text_message_is_audited_without_execution(self) -> None:
         payload = _event_payload("evt-file", "msg-file", "")

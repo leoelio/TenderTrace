@@ -122,6 +122,10 @@ from tendertrace.requirement_review_agents import (
     review_agent_suggestions,
     run_review_agents,
 )
+from tendertrace.requirement_review_human_opinions import (
+    list_human_review_opinions,
+    record_human_review_opinion,
+)
 from tendertrace.organization_memory import (
     OrganizationWorkspace,
     add_members as add_organization_members,
@@ -1260,6 +1264,9 @@ def create_app():
             "items": [item.to_dict() for item in list_requirement_review_cases(settings, notice_id)],
             "summary": requirement_review_summary(settings, notice_id),
             "opinions": [item.to_dict() for item in list_review_opinions(settings, notice_id)],
+            "human_opinions": [
+                item.to_dict() for item in list_human_review_opinions(settings, notice_id)
+            ],
             "suggestions": review_agent_suggestions(settings, notice_id),
         }
 
@@ -1304,6 +1311,32 @@ def create_app():
             metadata=result.to_dict(),
         )
         return result.to_dict()
+
+    @app.post("/api/opportunities/{notice_id}/review-board/opinions")
+    def save_opportunity_review_opinion(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            opinion = record_human_review_opinion(
+                settings,
+                notice_id=notice_id,
+                requirement_id=str(request.get("requirement_id") or ""),
+                content=str(request.get("content") or ""),
+                actor=str(request.get("actor") or ""),
+                channel="web",
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "status": "saved",
+            "opinion": opinion.to_dict(),
+            "human_opinions": [
+                item.to_dict() for item in list_human_review_opinions(settings, notice_id)
+            ],
+        }
 
     @app.post("/api/opportunities/{notice_id}/review-board/{review_id}/resolve")
     def resolve_opportunity_review_board_item(
@@ -2461,6 +2494,8 @@ def _organization_workspace_welcome_message(
             "1. 直接发送招投标问题，生成 Word 或创建增量订阅；",
             "2. 发送“记录组织记忆：内容”，沉淀团队事实；",
             "3. 发送“查询组织记忆：关键词”，检索共享知识。",
+            "4. 发送“项目意见 机会编号：内容”，把协作判断写入机会审计链。",
+            "5. 发送“会审意见 机会编号 要求编号：内容”，补充会审依据。",
             "",
             f"返回 TenderTrace 组织协作：{workspace_url}",
         ]

@@ -1041,6 +1041,9 @@ function renderSourceAlerts(payload) {
   const latestIncident = incidentSummary.latest || null;
   const activeIncidentCount = Number(incidentSummary.active_count || 0);
   const hasActiveIncident = activeIncidentCount > 0 && latestIncident?.status !== "resolved";
+  const freshnessPolicy = policy.stale_monitoring_active
+    ? `新鲜度 ${escapeHtml(policy.stale_hours || 0)} 小时`
+    : "自动采集未开启，新鲜度 SLO 未启用";
   const incidentText = latestIncident
     ? `${sourceIncidentStatusLabel(latestIncident.status)} · ${escapeHtml((latestIncident.source_sites || []).join("、") || "来源事件")} · 截止 ${escapeHtml(compactDateTimeText(latestIncident.due_at))}`
     : "";
@@ -1049,7 +1052,7 @@ function renderSourceAlerts(payload) {
     <div>
       <span>${issues.length ? "来源 SLO 需要处理" : "来源 SLO 正常"}</span>
       <strong>${escapeHtml(payload?.source_count || 0)} 个来源 · ${escapeHtml(issues.length)} 个异常</strong>
-      <small>可靠度阈值 ${escapeHtml(percent(policy.minimum_reliability || 0))} · 新鲜度 ${escapeHtml(policy.stale_hours || 0)} 小时${incidentSlaHours ? ` · 处置 SLA ${escapeHtml(incidentSlaHours)} 小时` : ""}</small>
+      <small>可靠度阈值 ${escapeHtml(percent(policy.minimum_reliability || 0))} · ${freshnessPolicy}${incidentSlaHours ? ` · 处置 SLA ${escapeHtml(incidentSlaHours)} 小时` : ""}</small>
       ${incidentText ? `<small class="source-incident-state">处置台账：${incidentText}</small>` : ""}
     </div>
     <div class="source-alert-actions">
@@ -2422,12 +2425,19 @@ function renderOpportunityReviewBoard(payload) {
   const items = Array.isArray(payload.items) ? payload.items : [];
   const summary = payload.summary || {};
   const opinions = Array.isArray(payload.opinions) ? payload.opinions : [];
+  const humanOpinions = Array.isArray(payload.human_opinions) ? payload.human_opinions : [];
   const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
   const opinionsByReview = new Map();
+  const humanOpinionsByRequirement = new Map();
   opinions.forEach((opinion) => {
     const current = opinionsByReview.get(opinion.review_id) || [];
     current.push(opinion);
     opinionsByReview.set(opinion.review_id, current);
+  });
+  humanOpinions.forEach((opinion) => {
+    const current = humanOpinionsByRequirement.get(opinion.requirement_id) || [];
+    current.push(opinion);
+    humanOpinionsByRequirement.set(opinion.requirement_id, current);
   });
   return `
     <div class="requirement-review-summary">
@@ -2435,7 +2445,7 @@ function renderOpportunityReviewBoard(payload) {
       <span>已裁决 <strong>${escapeHtml(summary.resolved_count || 0)}</strong> 项</span>
     </div>
     <div class="requirement-review-list">
-      ${items.length ? items.map(requirementReviewCase).join("") : '<div class="opportunity-requirement-empty">尚无会审项。生成后不会自动改变要求账本结论。</div>'}
+      ${items.length ? items.map((item) => requirementReviewCase(item, humanOpinionsByRequirement.get(item.requirement_id) || [])).join("") : '<div class="opportunity-requirement-empty">尚无会审项。生成后不会自动改变要求账本结论。</div>'}
     </div>
     ${suggestions.length ? `<section class="review-agent-panel" aria-label="AI 会审建议">
       <div><strong>AI 会审建议</strong><small>建议只辅助人工裁决，不会改写要求账本。</small></div>
@@ -2459,7 +2469,7 @@ function reviewAgentSuggestion(suggestion, opinions) {
   `;
 }
 
-function requirementReviewCase(item) {
+function requirementReviewCase(item, humanOpinions) {
   const resolved = item.status === "resolved";
   return `
     <article class="requirement-review-case status-${escapeHtml(item.status || "pending")}">
@@ -2473,14 +2483,21 @@ function requirementReviewCase(item) {
           <button class="link-button" type="submit">记录裁决</button>
         </form>
       `}
+      <div class="human-review-opinion-list">
+        ${humanOpinions.length ? humanOpinions.map((opinion) => `<p><strong>${escapeHtml(opinion.actor || "协作成员")}</strong><span>${escapeHtml(opinion.channel === "feishu_group" ? "飞书群" : "网页")} · ${escapeHtml(compactDateTimeText(opinion.created_at || ""))}</span><small>${escapeHtml(opinion.content || "")}</small></p>`).join("") : '<small>暂无协作意见</small>'}
+      </div>
+      <form class="human-review-opinion-form" data-human-review-opinion-form="${escapeHtml(item.notice_id)}" data-requirement-id="${escapeHtml(item.requirement_id)}">
+        <input name="actor" required maxlength="80" placeholder="署名" />
+        <input name="content" required maxlength="2000" placeholder="补充证据、风险或判断" />
+        <button class="link-button" type="submit">补充意见</button>
+      </form>
     </article>
   `;
 }
 
 async function syncOpportunityReviewBoard(noticeId) {
   const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/sync`, { method: "POST" });
-  const container = currentOpportunityReviewBoardContainer(noticeId);
-  if (container) container.innerHTML = renderOpportunityReviewBoard(payload);
+  await loadOpportunityReviewBoard(noticeId);
   showToast(`会审队列已生成：新增 ${payload.created_count || 0} 项`);
 }
 
@@ -2522,6 +2539,21 @@ async function resolveOpportunityReviewCase(form) {
   });
   await loadOpportunityReviewBoard(noticeId);
   showToast("会审裁决已记录，原要求结论保持不变");
+}
+
+async function saveHumanReviewOpinion(form) {
+  const noticeId = form.dataset.humanReviewOpinionForm || "";
+  const values = new FormData(form);
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/opinions`, {
+    method: "POST",
+    body: JSON.stringify({
+      requirement_id: form.dataset.requirementId || "",
+      actor: values.get("actor") || "",
+      content: values.get("content") || "",
+    }),
+  });
+  await loadOpportunityReviewBoard(noticeId);
+  showToast("会审意见已记录，等待人工裁决");
 }
 
 function renderOpportunityWarRoomPlan(plan) {
@@ -3607,7 +3639,14 @@ function renderOrganizationSummary() {
     <div><span>当前空间</span><strong>${escapeHtml(workspace.name)}</strong></div>
     <div><span>协作成员</span><strong>${Number(workspace.member_count || 0)}</strong></div>
     <div><span>共享知识</span><strong>${Number(workspace.memory_count || 0)}</strong></div>
-    <div><span>连接状态</span><strong class="organization-online">飞书已连接</strong></div>`;
+    <div><span>连接状态</span><strong class="organization-online">飞书已连接</strong></div>
+    <div class="organization-command-guide">
+      <span>群聊协同</span>
+      <div><code>记录组织记忆：内容</code><small>沉淀团队事实</small></div>
+      <div><code>查询组织记忆：关键词</code><small>检索共享知识</small></div>
+      <div><code>项目意见 机会编号：内容</code><small>写入机会协作审计链</small></div>
+      <div><code>会审意见 机会编号 要求编号：内容</code><small>补充正式会审依据</small></div>
+    </div>`;
   renderOrganizationReportDelivery(workspace);
 }
 
@@ -5129,6 +5168,12 @@ function normalizeWorkbenchLayout() {
 
 function bindEvents() {
   document.addEventListener("submit", (event) => {
+    const humanReviewOpinionForm = event.target.closest("[data-human-review-opinion-form]");
+    if (humanReviewOpinionForm) {
+      event.preventDefault();
+      saveHumanReviewOpinion(humanReviewOpinionForm).catch(toastError("会审意见保存失败"));
+      return;
+    }
     const collaborationNoteForm = event.target.closest("[data-collaboration-note-form]");
     if (collaborationNoteForm) {
       event.preventDefault();

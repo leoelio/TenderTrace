@@ -1908,6 +1908,42 @@ td.file-cell {
   font-size: 13px;
 }
 
+.organization-command-guide {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(104px, 0.7fr) repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border-top: 1px solid var(--line-soft);
+  background: rgba(240, 247, 255, 0.5);
+}
+
+.organization-command-guide > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.organization-command-guide > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.organization-command-guide code {
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-command-guide small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .organization-report-delivery {
   margin-top: 12px;
   overflow: hidden;
@@ -2179,6 +2215,15 @@ body.theme-dark .organization-memory-row p {
 
   .organization-summary > div:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line-soft);
+  }
+
+  .organization-command-guide {
+    grid-template-columns: 1fr;
+  }
+
+  .human-review-opinion-list p,
+  .human-review-opinion-form {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .organization-memory-stream,
@@ -6349,6 +6394,34 @@ tbody tr:hover {
 
 .requirement-review-case p {
   margin: 0;
+}
+
+.human-review-opinion-list {
+  display: grid;
+  gap: 4px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(18, 101, 214, 0.12);
+}
+
+.human-review-opinion-list p {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: baseline;
+}
+
+.human-review-opinion-list small {
+  overflow-wrap: anywhere;
+}
+
+.human-review-opinion-form {
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.human-review-opinion-form input {
+  min-width: 0;
 }
 
 .review-board-actions {

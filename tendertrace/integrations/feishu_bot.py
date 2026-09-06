@@ -24,6 +24,10 @@ from tendertrace.organization_memory import (
 )
 from tendertrace.opportunity import get_opportunity
 from tendertrace.opportunity_collaboration import record_collaboration_note
+from tendertrace.requirement_review_human_opinions import (
+    find_requirement_by_key,
+    record_human_review_opinion,
+)
 from tendertrace.runner import RunOnceResult, run_once
 from tendertrace.scheduling.scheduler import (
     schedule_ingest_subscription,
@@ -183,6 +187,45 @@ def process_feishu_message_event(
                 event.message_id,
                 (
                     f"已记录项目协作意见：{note.content[:100]}\n"
+                    "回到 TenderTrace："
+                    f"{settings.public_base_url}/?view=opportunityView&opportunity={quote(notice_id, safe='')}"
+                ),
+            )
+            updated = get_feishu_message_event(settings, event_id)
+            if updated is None:
+                raise RuntimeError("Feishu message event disappeared after processing")
+            return updated
+        review_opinion = _review_opinion_command(event.query)
+        if review_opinion:
+            if event.chat_type != "group":
+                raise ValueError("会审意见仅支持飞书群聊")
+            notice_id, requirement_key, content = review_opinion
+            requirement = find_requirement_by_key(
+                settings,
+                notice_id=notice_id,
+                requirement_key=requirement_key,
+            )
+            if requirement is None:
+                raise ValueError("未找到对应要求，请从会审档案复制要求编号")
+            opinion = record_human_review_opinion(
+                settings,
+                notice_id=notice_id,
+                requirement_id=requirement["id"],
+                content=content,
+                actor=event.sender_open_id or "飞书成员",
+                channel="feishu_group",
+                source_message_id=event.message_id,
+            )
+            _update_event(
+                settings,
+                event_id,
+                status="completed",
+                command_kind="review_opinion",
+            )
+            feishu.reply_text(
+                event.message_id,
+                (
+                    f"已记录会审意见：{opinion.requirement_key} · {opinion.content[:100]}\n"
                     "回到 TenderTrace："
                     f"{settings.public_base_url}/?view=opportunityView&opportunity={quote(notice_id, safe='')}"
                 ),
@@ -508,6 +551,27 @@ def _opportunity_note_command(query: str) -> tuple[str, str] | None:
                 raise ValueError(f"请使用：{prefix} <机会编号>：<意见>")
             return notice_id[:200], content[:2000]
         raise ValueError(f"请使用：{prefix} <机会编号>：<意见>")
+    return None
+
+
+def _review_opinion_command(query: str) -> tuple[str, str, str] | None:
+    """Parse `会审意见 <机会编号> <要求编号>：<内容>` for group deliberation."""
+    normalized = query.strip()
+    for prefix in ("会审意见", "会审建议"):
+        if not normalized.startswith(prefix):
+            continue
+        remainder = normalized[len(prefix) :].strip()
+        if not remainder:
+            raise ValueError(f"请使用：{prefix} <机会编号> <要求编号>：<内容>")
+        for separator in ("：", ":"):
+            if separator not in remainder:
+                continue
+            target, content = (part.strip() for part in remainder.split(separator, 1))
+            identifiers = target.split()
+            if len(identifiers) != 2 or not content:
+                raise ValueError(f"请使用：{prefix} <机会编号> <要求编号>：<内容>")
+            return identifiers[0][:200], identifiers[1][:200], content[:2000]
+        raise ValueError(f"请使用：{prefix} <机会编号> <要求编号>：<内容>")
     return None
 
 

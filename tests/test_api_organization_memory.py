@@ -130,6 +130,7 @@ class OrganizationMemoryApiTests(unittest.TestCase):
         self.assertEqual(FakeFeishuClient.sent[0]["receive_id"], "oc_api_team")
         self.assertEqual(FakeFeishuClient.sent[0]["receive_id_type"], "chat_id")
         self.assertIn("记录组织记忆", str(FakeFeishuClient.sent[0]["text"]))
+        self.assertIn("项目意见 机会编号", str(FakeFeishuClient.sent[0]["text"]))
 
     def test_group_creation_survives_welcome_message_failure(self) -> None:
         from fastapi.testclient import TestClient
