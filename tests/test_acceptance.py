@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -102,6 +103,34 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(report.status, "fail")
         self.assertEqual(checks["submission_package"].status, "fail")
         self.assertIn("could not be scanned", checks["submission_package"].detail)
+
+    def test_acceptance_does_not_report_expired_qianlima_session_as_healthy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_required_files(root)
+            settings = Settings.load(root)
+            init_db(settings)
+            state_path = settings.secrets_dir / "qianlima_storage_state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(
+                '{"cookies":[{"domain":".qianlima.com"}],"origins":[]}',
+                encoding="utf-8",
+            )
+            old_timestamp = datetime(2020, 1, 1).timestamp()
+            os.utime(state_path, (old_timestamp, old_timestamp))
+            with connection(settings) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO source_observations(source_site, status, notice_count, error)
+                    VALUES ('qianlima', 'failed', 0, 'qianlima member APIs rejected saved session')
+                    """
+                )
+
+            report = run_acceptance(settings, strict_runtime=False)
+
+        checks = {check.name: check for check in report.checks}
+        self.assertEqual(checks["source:qianlima"].status, "warn")
+        self.assertIn("requires renewal", checks["source:qianlima"].detail)
 
 
 def _write_required_files(root: Path) -> None:

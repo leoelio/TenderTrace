@@ -11,6 +11,7 @@ from docx import Document
 from tendertrace.config import Settings
 from tendertrace.db import SCHEMA_VERSION, connection, database_health
 from tendertrace.llm.gateway import model_status
+from tendertrace.source_map import qianlima_login_ready, source_health
 from tendertrace.submission import forbidden_package_entries, package_secret_findings
 from tendertrace.vault.qianlima import QianlimaSessionVault
 
@@ -267,12 +268,22 @@ def _check_model(settings: Settings) -> list[AcceptanceCheck]:
 def _check_sources(settings: Settings) -> list[AcceptanceCheck]:
     vault = QianlimaSessionVault(settings)
     qianlima_status = vault.status()
+    qianlima_health = source_health(settings).get("qianlima", {})
     checks = [
         AcceptanceCheck("source:ccgp", "pass", "public HTTP source configured"),
         AcceptanceCheck("source:ggzy", "pass", "public HTTP source configured"),
     ]
-    if qianlima_status.ready:
-        checks.append(AcceptanceCheck("source:qianlima", "pass", "login storage_state ready"))
+    if qianlima_login_ready(qianlima_status, qianlima_health):
+        checks.append(AcceptanceCheck("source:qianlima", "pass", "member login session healthy"))
+    elif qianlima_status.ready:
+        detail = str(qianlima_health.get("last_error") or "member login validation failed")
+        checks.append(
+            AcceptanceCheck(
+                "source:qianlima",
+                "warn",
+                f"storage_state exists but session requires renewal: {detail}",
+            )
+        )
     else:
         checks.append(AcceptanceCheck("source:qianlima", "warn", qianlima_status.validation))
     return checks
