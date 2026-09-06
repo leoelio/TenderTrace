@@ -5,6 +5,7 @@ import unittest
 import warnings
 from unittest.mock import patch
 
+from tendertrace.organization_memory import OrganizationWorkspace
 from tendertrace.runner import RunOnceResult
 
 
@@ -41,6 +42,17 @@ class RunsApiTests(unittest.TestCase):
             os.environ["TENDERTRACE_SECRETS_DIR"] = str(root / "secrets")
             os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
             try:
+                workspace = OrganizationWorkspace(
+                    id="workspace-1",
+                    name="服务器项目群",
+                    feishu_chat_id="oc_workspace_1",
+                    status="active",
+                    member_count=3,
+                    memory_count=0,
+                    created_by="admin",
+                    created_at="2026-09-06 10:00:00",
+                    updated_at="2026-09-06 10:00:00",
+                )
                 with patch.object(
                     api_module,
                     "run_once",
@@ -52,7 +64,11 @@ class RunsApiTests(unittest.TestCase):
                         outbox_path=str(root / "outbox" / "report.docx"),
                         trace_events=10,
                     ),
-                ) as mocked:
+                ) as mocked, patch.object(
+                    api_module,
+                    "get_organization_workspace",
+                    return_value=workspace,
+                ):
                     client = TestClient(api_module.create_app())
                     response = client.post(
                         "/api/runs",
@@ -62,6 +78,8 @@ class RunsApiTests(unittest.TestCase):
                             "max_pages": 2,
                             "max_results": 5,
                             "model_strategy": "cloud",
+                            "delivery_channels": ["web", "outbox", "feishu"],
+                            "feishu_workspace_id": workspace.id,
                         },
                     )
             finally:
@@ -77,6 +95,8 @@ class RunsApiTests(unittest.TestCase):
         self.assertEqual(mocked.call_args.kwargs["max_pages"], 2)
         self.assertEqual(mocked.call_args.kwargs["max_results"], 5)
         self.assertEqual(mocked.call_args.kwargs["model_strategy"], "cloud")
+        self.assertEqual(mocked.call_args.kwargs["feishu_receive_id"], "oc_workspace_1")
+        self.assertEqual(mocked.call_args.kwargs["feishu_receive_id_type"], "chat_id")
 
     def test_create_run_requires_query(self) -> None:
         warnings.filterwarnings(
@@ -180,6 +200,17 @@ class RunsApiTests(unittest.TestCase):
             os.environ["TENDERTRACE_SECRETS_DIR"] = str(root / "secrets")
             os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
             try:
+                workspace = OrganizationWorkspace(
+                    id="workspace-2",
+                    name="充电桩项目群",
+                    feishu_chat_id="oc_workspace_2",
+                    status="active",
+                    member_count=4,
+                    memory_count=2,
+                    created_by="admin",
+                    created_at="2026-09-06 10:00:00",
+                    updated_at="2026-09-06 10:00:00",
+                )
                 with patch.object(
                     api_module,
                     "run_once",
@@ -191,7 +222,11 @@ class RunsApiTests(unittest.TestCase):
                         outbox_path=None,
                         trace_events=0,
                     ),
-                ) as mocked:
+                ) as mocked, patch.object(
+                    api_module,
+                    "get_organization_workspace",
+                    return_value=workspace,
+                ):
                     client = TestClient(api_module.create_app())
                     response = client.post(
                         "/api/runs/start",
@@ -200,6 +235,8 @@ class RunsApiTests(unittest.TestCase):
                             "max_pages": 3,
                             "max_results": 8,
                             "model_strategy": "rules",
+                            "delivery_channels": ["web", "outbox", "feishu"],
+                            "feishu_workspace_id": workspace.id,
                         },
                     )
             finally:
@@ -215,6 +252,44 @@ class RunsApiTests(unittest.TestCase):
         self.assertTrue(payload["run_id"])
         self.assertEqual(mocked.call_args.kwargs["run_id"], payload["run_id"])
         self.assertEqual(mocked.call_args.kwargs["model_strategy"], "rules")
+        self.assertEqual(mocked.call_args.kwargs["feishu_receive_id"], "oc_workspace_2")
+        self.assertEqual(mocked.call_args.kwargs["feishu_receive_id_type"], "chat_id")
+
+    def test_run_rejects_unknown_feishu_workspace(self) -> None:
+        warnings.filterwarnings(
+            "ignore",
+            message="Using `httpx` with `starlette.testclient` is deprecated.*",
+        )
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app.api import create_app
+
+        old_env = {key: os.environ.get(key) for key in ENV_KEYS}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            os.environ["TENDERTRACE_DB_PATH"] = str(root / "data" / "db.sqlite3")
+            os.environ["TENDERTRACE_OUTPUTS_DIR"] = str(root / "outputs")
+            os.environ["TENDERTRACE_OUTBOX_DIR"] = str(root / "outbox")
+            os.environ["TENDERTRACE_SNAPSHOTS_DIR"] = str(root / "snapshots")
+            os.environ["TENDERTRACE_TRACES_DIR"] = str(root / "traces")
+            os.environ["TENDERTRACE_SECRETS_DIR"] = str(root / "secrets")
+            os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
+            try:
+                response = TestClient(create_app()).post(
+                    "/api/runs",
+                    json={
+                        "query": "最近1个月上海服务器招标信息",
+                        "feishu_workspace_id": "missing-workspace",
+                    },
+                )
+            finally:
+                for key, value in old_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(response.status_code, 404)
 
     def test_run_status_returns_compact_progress(self) -> None:
         warnings.filterwarnings(

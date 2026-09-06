@@ -13,6 +13,7 @@ const state = {
   organizationWorkspaces: [],
   organizationMemories: [],
   organizationWorkspaceId: "",
+  feishuDeliveryWorkspaceId: "",
   organizationGroupMode: "create",
   organizationConvertMemoryId: "",
   feishu: null,
@@ -83,6 +84,8 @@ const el = {
   searchDepthSelect: document.querySelector("#searchDepthSelect"),
   modelStrategySelect: document.querySelector("#modelStrategySelect"),
   feishuDeliveryInput: document.querySelector("#feishuDeliveryInput"),
+  feishuDeliveryWorkspaceField: document.querySelector("#feishuDeliveryWorkspaceField"),
+  feishuDeliveryWorkspace: document.querySelector("#feishuDeliveryWorkspace"),
   scheduleFrequency: document.querySelector("#scheduleFrequency"),
   scheduleTime: document.querySelector("#scheduleTime"),
   subscriptionControls: document.querySelector("#subscriptionControls"),
@@ -3603,6 +3606,7 @@ async function refreshOrganizationWorkspaces() {
     ? current
     : state.organizationWorkspaces[0]?.id || "";
   renderOrganizationWorkspaceOptions();
+  renderFeishuDeliveryWorkspaceOptions();
   renderOrganizationSummary();
   await refreshOrganizationMemories();
 }
@@ -3621,6 +3625,28 @@ function renderOrganizationWorkspaceOptions() {
         `<option value="${escapeHtml(item.id)}" ${item.id === state.organizationWorkspaceId ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
     )
     .join("");
+}
+
+function renderFeishuDeliveryWorkspaceOptions() {
+  if (!el.feishuDeliveryWorkspace) return;
+  const workspaces = state.organizationWorkspaces.filter((item) => item.status === "active");
+  if (!workspaces.some((item) => item.id === state.feishuDeliveryWorkspaceId)) {
+    state.feishuDeliveryWorkspaceId = "";
+  }
+  el.feishuDeliveryWorkspace.innerHTML = [
+    '<option value="">默认飞书接收者</option>',
+    ...workspaces.map(
+      (item) => `<option value="${escapeHtml(item.id)}">项目群 · ${escapeHtml(item.name)}</option>`,
+    ),
+  ].join("");
+  el.feishuDeliveryWorkspace.value = state.feishuDeliveryWorkspaceId;
+  syncFeishuDeliveryTarget();
+}
+
+function syncFeishuDeliveryTarget() {
+  const enabled = Boolean(el.feishuDeliveryInput?.checked);
+  if (el.feishuDeliveryWorkspaceField) el.feishuDeliveryWorkspaceField.hidden = !enabled;
+  if (el.feishuDeliveryWorkspace) el.feishuDeliveryWorkspace.disabled = !enabled;
 }
 
 function renderOrganizationSummary() {
@@ -4687,14 +4713,18 @@ async function refreshIntentPreview() {
 }
 
 function payloadFromComposer() {
+  const sendToFeishu = Boolean(el.feishuDeliveryInput?.checked);
   return {
     query: el.queryInput?.value.trim() || "",
     max_pages: Number(el.maxPagesInput?.value || 1),
     max_results: Number(el.maxResultsInput?.value || 10),
     model_strategy: el.modelStrategySelect?.value || "config",
-    delivery_channels: el.feishuDeliveryInput?.checked
+    delivery_channels: sendToFeishu
       ? ["web", "outbox", "feishu"]
       : ["web", "outbox"],
+    feishu_workspace_id: sendToFeishu && state.feishuDeliveryWorkspaceId
+      ? state.feishuDeliveryWorkspaceId
+      : undefined,
   };
 }
 
@@ -5158,6 +5188,7 @@ async function refreshAll() {
     refreshOpportunities(),
     refreshMemoryWeekly(),
     refreshFeishu(),
+    refreshOrganizationWorkspaces(),
   ]);
   const failed = results.filter((item) => item.status === "rejected");
   if (failed.length) showToast(`${failed.length} 个面板刷新失败，请查看网络或服务状态`);
@@ -5562,6 +5593,10 @@ function bindEvents() {
     });
   });
   el.modelStrategySelect?.addEventListener("change", renderSmartStart);
+  el.feishuDeliveryInput?.addEventListener("change", syncFeishuDeliveryTarget);
+  el.feishuDeliveryWorkspace?.addEventListener("change", () => {
+    state.feishuDeliveryWorkspaceId = el.feishuDeliveryWorkspace.value;
+  });
   document.querySelectorAll("[data-example-query]").forEach((button) => {
     button.addEventListener("click", () => applyExampleQuery(button.dataset.exampleQuery || ""));
   });

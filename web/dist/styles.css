@@ -5345,6 +5345,7 @@ button.smart-card:hover {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
+  white-space: nowrap;
 }
 
 .delivery-option {
@@ -5358,6 +5359,25 @@ button.smart-card:hover {
   white-space: nowrap;
 }
 
+.delivery-workspace {
+  display: grid;
+  grid-template-columns: auto minmax(170px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: min(300px, 100%);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.delivery-workspace select {
+  min-width: 0;
+  height: 32px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+}
+
 .delivery-option input {
   width: 16px;
   height: 16px;
@@ -5368,6 +5388,7 @@ button.smart-card:hover {
   color: #27364b;
   font-size: 13px;
   font-weight: 650;
+  white-space: nowrap;
 }
 
 .advanced-settings {
@@ -5657,6 +5678,10 @@ body.theme-dark .delivery-options {
 
   .delivery-options {
     flex-wrap: wrap;
+  }
+
+  .delivery-workspace {
+    flex: 1 1 100%;
   }
 
   .integration-row {

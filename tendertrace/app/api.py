@@ -1882,6 +1882,10 @@ def create_app():
         now_raw = request.get("now")
         now = datetime.fromisoformat(str(now_raw)) if now_raw else None
         max_pages, max_results = _parse_limits(request)
+        feishu_receive_id, feishu_receive_id_type = _feishu_delivery_target_from_request(
+            settings,
+            request,
+        )
         result = run_once(
             settings=settings,
             query=query,
@@ -1890,6 +1894,8 @@ def create_app():
             max_results=max_results,
             model_strategy=_model_strategy_from_request(request),
             delivery_channels=_delivery_channels_from_request(request),
+            feishu_receive_id=feishu_receive_id,
+            feishu_receive_id_type=feishu_receive_id_type,
         ).to_dict()
         record_activity(
             settings,
@@ -1910,6 +1916,10 @@ def create_app():
         now_raw = request.get("now")
         now = datetime.fromisoformat(str(now_raw)) if now_raw else None
         max_pages, max_results = _parse_limits(request)
+        feishu_receive_id, feishu_receive_id_type = _feishu_delivery_target_from_request(
+            settings,
+            request,
+        )
         run_id = str(uuid4())
         thread = Thread(
             target=run_once,
@@ -1921,6 +1931,8 @@ def create_app():
                 "max_results": max_results,
                 "model_strategy": _model_strategy_from_request(request),
                 "delivery_channels": _delivery_channels_from_request(request),
+                "feishu_receive_id": feishu_receive_id,
+                "feishu_receive_id_type": feishu_receive_id_type,
                 "run_id": run_id,
             },
             daemon=True,
@@ -1943,6 +1955,10 @@ def create_app():
         now_raw = request.get("now")
         now = datetime.fromisoformat(str(now_raw)) if now_raw else None
         max_pages, max_results = _parse_limits(request)
+        feishu_receive_id, feishu_receive_id_type = _feishu_delivery_target_from_request(
+            settings,
+            request,
+        )
         try:
             subscription = create_subscription(
                 settings,
@@ -1953,6 +1969,8 @@ def create_app():
                 schedule_override=_schedule_override_from_request(request),
                 model_strategy=_model_strategy_from_request(request),
                 delivery_channels=_delivery_channels_from_request(request),
+                feishu_receive_id=feishu_receive_id,
+                feishu_receive_id_type=feishu_receive_id_type,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2549,6 +2567,25 @@ def _delivery_channels_from_request(request: dict[str, object]) -> tuple[str, ..
             raise HTTPException(status_code=400, detail=f"unsupported delivery channel: {channel}")
         selected.add(channel)
     return tuple(channel for channel in ("web", "outbox", "feishu") if channel in selected)
+
+
+def _feishu_delivery_target_from_request(
+    settings: Settings,
+    request: dict[str, object],
+) -> tuple[str | None, str | None]:
+    workspace_id = _optional_string(request.get("feishu_workspace_id"))
+    if workspace_id is None:
+        return None, None
+    workspace = get_organization_workspace(settings, workspace_id)
+    if workspace is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="organization workspace not found")
+    if workspace.status != "active" or not workspace.feishu_chat_id:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="organization workspace is not available")
+    return workspace.feishu_chat_id, "chat_id"
 
 
 def _optional_string(value: object) -> str | None:

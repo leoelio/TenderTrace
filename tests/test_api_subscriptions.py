@@ -6,6 +6,7 @@ import unittest
 import warnings
 from unittest.mock import patch
 
+from tendertrace.organization_memory import OrganizationWorkspace
 from tendertrace.runner import RunOnceResult
 from tendertrace.scheduling.subscriptions import Subscription
 
@@ -46,21 +47,41 @@ class SubscriptionApiTests(unittest.TestCase):
     def test_create_subscription_accepts_ui_schedule_and_model_strategy(self) -> None:
         client, cleanup = _client()
         try:
-            response = client.post(
-                "/api/subscriptions",
-                json={
-                    "query": "最近36个月杭州市的空调或者服务器投标信息都有哪些",
-                    "now": "2026-07-06T10:00:00+08:00",
-                    "max_pages": 3,
-                    "max_results": 8,
-                    "model_strategy": "hybrid",
-                    "schedule": {
-                        "kind": "recurring",
-                        "frequency": "daily",
-                        "time": "08:45",
-                    },
-                },
+            from tendertrace.app import api as api_module
+
+            workspace = OrganizationWorkspace(
+                id="workspace-subscription",
+                name="空调项目群",
+                feishu_chat_id="oc_workspace_subscription",
+                status="active",
+                member_count=2,
+                memory_count=1,
+                created_by="admin",
+                created_at="2026-09-06 10:00:00",
+                updated_at="2026-09-06 10:00:00",
             )
+            with patch.object(
+                api_module,
+                "get_organization_workspace",
+                return_value=workspace,
+            ):
+                response = client.post(
+                    "/api/subscriptions",
+                    json={
+                        "query": "最近36个月杭州市的空调或者服务器投标信息都有哪些",
+                        "now": "2026-07-06T10:00:00+08:00",
+                        "max_pages": 3,
+                        "max_results": 8,
+                        "model_strategy": "hybrid",
+                        "delivery_channels": ["web", "outbox", "feishu"],
+                        "feishu_workspace_id": workspace.id,
+                        "schedule": {
+                            "kind": "recurring",
+                            "frequency": "daily",
+                            "time": "08:45",
+                        },
+                    },
+                )
         finally:
             cleanup()
 
@@ -70,6 +91,11 @@ class SubscriptionApiTests(unittest.TestCase):
         self.assertEqual(payload["cron"], "45 8 * * *")
         self.assertEqual(payload["bidql"]["schedule"]["origin"], "ui_override")
         self.assertEqual(payload["bidql"]["_runtime"]["model_strategy"], "hybrid")
+        self.assertEqual(
+            payload["bidql"]["_runtime"]["feishu_receive_id"],
+            "oc_workspace_subscription",
+        )
+        self.assertEqual(payload["bidql"]["_runtime"]["feishu_receive_id_type"], "chat_id")
 
     def test_create_subscription_rejects_immediate_query(self) -> None:
         client, cleanup = _client()

@@ -171,8 +171,9 @@
                   name="query"
                   rows="3"
                   spellcheck="false"
+                  placeholder="例如：最近 3 个月上海充电桩招标信息，每天 09:00 发送到项目群"
                   required
-                >最近36个月杭州市的空调或者服务器投标信息都有哪些</textarea>
+                ></textarea>
 
                 <div id="intentPreview" class="intent-preview empty-state">等待解析</div>
 
@@ -210,6 +211,12 @@
                     <label class="delivery-option">
                       <input id="feishuDeliveryInput" type="checkbox" />
                       <span>同时发送飞书</span>
+                    </label>
+                    <label id="feishuDeliveryWorkspaceField" class="delivery-workspace" hidden>
+                      <span>发送至</span>
+                      <select id="feishuDeliveryWorkspace" aria-label="飞书交付目标">
+                        <option value="">默认飞书接收者</option>
+                      </select>
                     </label>
                   </div>
 
