@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import warnings
+from unittest.mock import MagicMock, patch
 
 
 ENV_KEYS = (
@@ -20,6 +21,54 @@ ENV_KEYS = (
 
 
 class SourcesApiTests(unittest.TestCase):
+    def test_qianlima_verify_returns_sanitized_live_probe(self) -> None:
+        warnings.filterwarnings(
+            "ignore",
+            message="Using `httpx` with `starlette.testclient` is deprecated.*",
+        )
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app import api as api_module
+
+        old_env = {key: os.environ.get(key) for key in ENV_KEYS}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            os.environ["TENDERTRACE_DB_PATH"] = str(root / "data" / "db.sqlite3")
+            os.environ["TENDERTRACE_OUTPUTS_DIR"] = str(root / "outputs")
+            os.environ["TENDERTRACE_OUTBOX_DIR"] = str(root / "outbox")
+            os.environ["TENDERTRACE_SNAPSHOTS_DIR"] = str(root / "snapshots")
+            os.environ["TENDERTRACE_TRACES_DIR"] = str(root / "traces")
+            os.environ["TENDERTRACE_SECRETS_DIR"] = str(root / "secrets")
+            os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
+            os.environ["TENDERTRACE_MODEL_MODE"] = "local"
+            os.environ["TENDERTRACE_MODEL_ENHANCEMENT_ENABLED"] = "false"
+            vault = MagicMock()
+            vault.status.return_value.to_dict.return_value = {
+                "site": "qianlima",
+                "validation": "ready",
+                "cookie_count": 4,
+            }
+            vault.live_probe.return_value = {
+                "status": "pass",
+                "detail": "loaded qianlima search page and parsed 2 candidate links",
+            }
+            try:
+                with patch.object(api_module, "QianlimaSessionVault", return_value=vault):
+                    response = TestClient(api_module.create_app()).post(
+                        "/api/sources/qianlima/verify"
+                    )
+            finally:
+                for key, value in old_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["site"], "qianlima")
+        self.assertEqual(response.json()["live_probe"]["status"], "pass")
+        self.assertNotIn("cookies", str(response.json()).lower())
+
     def test_sources_reports_public_sources_and_qianlima_login_state(self) -> None:
         warnings.filterwarnings(
             "ignore",

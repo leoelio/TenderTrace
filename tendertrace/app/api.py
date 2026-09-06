@@ -138,6 +138,7 @@ from tendertrace.organization_memory import (
     record_conversion as record_organization_memory_conversion,
     search_memories as search_organization_memories,
 )
+from tendertrace.vault.qianlima import QianlimaSessionVault
 from tendertrace.opportunity_relationship_actions import (
     create_relationship_action,
     relationship_action as get_relationship_action,
@@ -290,6 +291,24 @@ def create_app():
     @app.get("/api/source-map")
     def source_map() -> dict[str, object]:
         return build_source_map(settings)
+
+    @app.post("/api/sources/qianlima/verify")
+    def verify_qianlima_login() -> dict[str, object]:
+        vault = QianlimaSessionVault(settings)
+        storage_state = vault.status().to_dict()
+        probe = vault.live_probe()
+        record_activity(
+            settings,
+            event_type="source_login_verify",
+            target="qianlima",
+            label=str(probe.get("status") or "unknown"),
+            metadata={"status": probe.get("status"), "validation": storage_state.get("validation")},
+        )
+        return {
+            "site": "qianlima",
+            "storage_state": storage_state,
+            "live_probe": probe,
+        }
 
     @app.get("/api/sources/alerts")
     def source_alerts() -> dict[str, object]:

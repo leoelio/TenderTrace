@@ -1129,6 +1129,19 @@ function renderSourceList(target, items) {
       const hitRate = health.hit_rate === null || health.hit_rate === undefined ? "-" : percent(health.hit_rate);
       const reliability = health.runs ? percent(health.reliability_score || 0) : "-";
       const healthStatus = escapeHtml(health.health_status || "unknown");
+      const failureSummary = sourceFailureSummary(health);
+      const recovery = item.site === "qianlima" && access.badge === "warn"
+        ? `
+          <div class="source-recovery">
+            <strong>登录恢复</strong>
+            <span>在本机终端重新保存登录态后，可直接校验当前会员会话。</span>
+            <div>
+              <code>python -m tendertrace login-qianlima</code>
+              <button class="ghost-button" type="button" data-verify-qianlima>验证登录态</button>
+            </div>
+          </div>
+        `
+        : "";
       return `
         <div class="source-row source-health-card">
           <div class="source-row-head">
@@ -1152,11 +1165,38 @@ function renderSourceList(target, items) {
           ${validation}
           ${counts}
           ${detail}
-          ${health.last_error ? `<span class="source-error-line">最近错误：${escapeHtml(health.last_error)}${health.last_failure_at ? ` · ${escapeHtml(compactDateTimeText(health.last_failure_at))}` : ""}</span>` : ""}
+          ${failureSummary}
+          ${recovery}
         </div>
       `;
     })
     .join("");
+  target.querySelectorAll("[data-verify-qianlima]").forEach((button) => {
+    button.addEventListener("click", () => verifyQianlimaLogin(button));
+  });
+}
+
+function sourceFailureSummary(health) {
+  if (!health?.last_error) return "";
+  const lastFailure = String(health.last_failure_at || "");
+  const lastSuccess = String(health.last_success_at || "");
+  const recovered = Boolean(lastSuccess && (!lastFailure || lastSuccess >= lastFailure));
+  const label = recovered ? "已恢复异常" : "当前异常";
+  const statusClass = recovered ? "source-recovered-line" : "source-error-line";
+  const timestamp = lastFailure ? ` · ${escapeHtml(compactDateTimeText(lastFailure))}` : "";
+  return `<span class="${statusClass}">${label}：${escapeHtml(health.last_error)}${timestamp}</span>`;
+}
+
+async function verifyQianlimaLogin(button) {
+  button.disabled = true;
+  try {
+    const result = await api("/api/sources/qianlima/verify", { method: "POST" });
+    const probe = result.live_probe || {};
+    showToast(probe.detail || `千里马登录态：${statusLabel(probe.status)}`);
+    await refreshSourcesPanel();
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderRuns(items) {

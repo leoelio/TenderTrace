@@ -1114,6 +1114,53 @@ body.theme-dark .intent-preview .clarify-chip {
   color: var(--danger);
 }
 
+.source-recovered-line {
+  color: #50705f;
+}
+
+.source-recovery {
+  display: grid;
+  gap: 6px;
+  margin-top: 3px;
+  padding: 10px;
+  border: 1px solid #f0d69c;
+  border-radius: 7px;
+  background: #fffaf0;
+}
+
+.source-recovery strong {
+  color: #7a4d05;
+  font-size: 12px;
+}
+
+.source-recovery > span {
+  color: #795c2b;
+  font-size: 12px;
+}
+
+.source-recovery > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.source-recovery code {
+  min-width: 0;
+  overflow: hidden;
+  color: #59441f;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-recovery .ghost-button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
 .source-row:last-child,
 .timeline-row:last-child,
 .checkpoint-row:last-child {
