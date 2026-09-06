@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 import importlib.util
 import json
+from threading import Event, Thread
 from typing import Any, Callable
 from urllib.parse import quote
 
@@ -35,6 +36,11 @@ from tendertrace.scheduling.scheduler import (
     start_subscription_scheduler,
 )
 from tendertrace.scheduling.subscriptions import Subscription, create_subscription
+
+
+LISTENER_NAME = "feishu_bot_listener"
+LISTENER_HEARTBEAT_SECONDS = 30
+LISTENER_STALE_SECONDS = 90
 
 
 @dataclass(frozen=True)
@@ -357,6 +363,91 @@ def feishu_long_connection_available() -> bool:
     return importlib.util.find_spec("lark_oapi") is not None
 
 
+def feishu_listener_status(settings: Settings) -> dict[str, object]:
+    with connection(settings) as conn:
+        row = conn.execute(
+            """
+            SELECT status, detail, started_at, heartbeat_at, stopped_at,
+                   MAX(0, CAST(strftime('%s', 'now') AS INTEGER) -
+                          CAST(strftime('%s', heartbeat_at) AS INTEGER)) AS age_seconds
+            FROM integration_runtime_heartbeats
+            WHERE integration_name = ?
+            """,
+            (LISTENER_NAME,),
+        ).fetchone()
+    if row is None:
+        return {
+            "status": "not_started",
+            "running": False,
+            "detail": "长连接监听器尚未启动",
+            "started_at": "",
+            "heartbeat_at": "",
+            "stopped_at": "",
+            "age_seconds": None,
+        }
+    age_seconds = int(row["age_seconds"] or 0)
+    status = str(row["status"] or "unknown")
+    running = status == "running" and age_seconds <= LISTENER_STALE_SECONDS
+    return {
+        "status": "running" if running else "stale" if status == "running" else status,
+        "running": running,
+        "detail": str(row["detail"] or ""),
+        "started_at": str(row["started_at"] or ""),
+        "heartbeat_at": str(row["heartbeat_at"] or ""),
+        "stopped_at": str(row["stopped_at"] or ""),
+        "age_seconds": age_seconds,
+    }
+
+
+def _record_listener_state(
+    settings: Settings,
+    *,
+    status: str,
+    detail: str,
+    started: bool = False,
+) -> None:
+    with connection(settings) as conn:
+        if started:
+            conn.execute(
+                """
+                INSERT INTO integration_runtime_heartbeats(
+                    integration_name, status, detail, started_at, heartbeat_at, stopped_at
+                ) VALUES (?, ?, ?, datetime('now'), datetime('now'), NULL)
+                ON CONFLICT(integration_name) DO UPDATE SET
+                    status = excluded.status,
+                    detail = excluded.detail,
+                    started_at = excluded.started_at,
+                    heartbeat_at = excluded.heartbeat_at,
+                    stopped_at = NULL
+                """,
+                (LISTENER_NAME, status, detail),
+            )
+            return
+        conn.execute(
+            """
+            INSERT INTO integration_runtime_heartbeats(
+                integration_name, status, detail, started_at, heartbeat_at, stopped_at
+            ) VALUES (?, ?, ?, datetime('now'), datetime('now'),
+                      CASE WHEN ? = 'running' THEN NULL ELSE datetime('now') END)
+            ON CONFLICT(integration_name) DO UPDATE SET
+                status = excluded.status,
+                detail = excluded.detail,
+                heartbeat_at = excluded.heartbeat_at,
+                stopped_at = CASE WHEN excluded.status = 'running' THEN NULL ELSE datetime('now') END
+            """,
+            (LISTENER_NAME, status, detail, status),
+        )
+
+
+def _heartbeat_listener(settings: Settings, stop_event: Event) -> None:
+    while not stop_event.wait(LISTENER_HEARTBEAT_SECONDS):
+        _record_listener_state(
+            settings,
+            status="running",
+            detail="飞书官方长连接监听中",
+        )
+
+
 def start_feishu_bot_listener(settings: Settings) -> None:
     if not feishu_status(settings).configured:
         raise FeishuError("Feishu bot listener requires enabled message-app credentials")
@@ -368,6 +459,20 @@ def start_feishu_bot_listener(settings: Settings) -> None:
         ) from exc
 
     init_db(settings)
+    _record_listener_state(
+        settings,
+        status="running",
+        detail="飞书官方长连接监听中",
+        started=True,
+    )
+    heartbeat_stop = Event()
+    heartbeat = Thread(
+        target=_heartbeat_listener,
+        args=(settings, heartbeat_stop),
+        name="feishu-bot-heartbeat",
+        daemon=True,
+    )
+    heartbeat.start()
     owned_scheduler = start_subscription_scheduler(settings) if settings.scheduler_enabled else None
 
     def schedule_ingest_callback(subscription) -> None:
@@ -459,9 +564,22 @@ def start_feishu_bot_listener(settings: Settings) -> None:
         domain=settings.feishu_base_url,
         log_level=lark.LogLevel.INFO,
     )
+    terminal_status = "stopped"
+    terminal_detail = "飞书长连接监听已停止"
     try:
         client.start()
+    except Exception as exc:
+        terminal_status = "failed"
+        terminal_detail = f"飞书长连接监听异常：{type(exc).__name__}"
+        raise
     finally:
+        heartbeat_stop.set()
+        heartbeat.join(timeout=1)
+        _record_listener_state(
+            settings,
+            status=terminal_status,
+            detail=terminal_detail,
+        )
         executor.shutdown(wait=False, cancel_futures=True)
         if owned_scheduler is not None:
             owned_scheduler.shutdown(wait=False)

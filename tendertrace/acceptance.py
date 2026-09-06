@@ -87,6 +87,7 @@ REQUIRED_TABLES = {
     "memory_advice_feedback",
     "opportunity_fact_overrides",
     "feishu_lead_import_runs",
+    "integration_runtime_heartbeats",
 }
 
 SECRET_SCAN_PATHS = (

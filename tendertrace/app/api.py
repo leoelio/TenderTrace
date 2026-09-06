@@ -77,6 +77,7 @@ from tendertrace.integrations.feishu_review_board import send_requirement_review
 from tendertrace.integrations.feishu_bot import (
     accept_feishu_message_event,
     feishu_long_connection_available,
+    feishu_listener_status,
     list_feishu_message_events,
     pending_feishu_message_event_ids,
     process_feishu_message_event,
@@ -419,6 +420,7 @@ def create_app():
         message_events = list_feishu_message_events(settings, limit=1)
         latest_message_event = message_events[0].to_dict() if message_events else None
         long_connection_available = feishu_long_connection_available()
+        listener = feishu_listener_status(settings)
         webhook_ready = bool(
             message["configured"] and settings.feishu_callback_verification_token_present
         )
@@ -484,16 +486,17 @@ def create_app():
                 "conversation_commands": {
                     "ready": bool(
                         message["configured"]
-                        and (long_connection_available or webhook_ready)
+                        and (bool(listener["running"]) or webhook_ready)
                     ),
                     "long_connection_available": long_connection_available,
+                    "listener": listener,
                     "webhook_ready": webhook_ready,
                     "last_event": latest_message_event,
                 },
                 "organization_collaboration": {
                     "ready": bool(
                         message["configured"]
-                        and (long_connection_available or webhook_ready)
+                        and (bool(listener["running"]) or webhook_ready)
                     ),
                     "workspace_count": len(organization_spaces),
                     "memory_count": sum(item.memory_count for item in organization_spaces),

@@ -241,6 +241,7 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("health.last_failure_at", js)
         self.assertIn("会话自然语言指令", js)
         self.assertIn("conversation_commands", js)
+        self.assertIn("listener.running", js)
         self.assertIn("applyExampleQuery", js)
         self.assertIn("normalizeWorkbenchLayout", js)
         self.assertIn("source-health-grid", js)

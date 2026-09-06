@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 429 automated tests pass</sub>
+  <sub>Current stage: P53 · 16 sources · multi-agent review, executable Feishu war room & fact-gated LLM summary · 430 automated tests pass</sub>
 </p>
 
 ---

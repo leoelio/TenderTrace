@@ -10,7 +10,9 @@ from unittest.mock import patch
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db
 from tendertrace.integrations.feishu_bot import (
+    _record_listener_state,
     accept_feishu_message_event,
+    feishu_listener_status,
     list_feishu_message_events,
     pending_feishu_message_event_ids,
     process_feishu_message_event,
@@ -30,6 +32,36 @@ class FakeFeishuClient:
 
 
 class FeishuBotTests(unittest.TestCase):
+    def test_listener_heartbeat_distinguishes_running_stale_and_stopped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            self.assertEqual(feishu_listener_status(settings)["status"], "not_started")
+
+            _record_listener_state(
+                settings,
+                status="running",
+                detail="飞书官方长连接监听中",
+                started=True,
+            )
+            self.assertTrue(feishu_listener_status(settings)["running"])
+            with connection(settings) as conn:
+                conn.execute(
+                    """
+                    UPDATE integration_runtime_heartbeats
+                    SET heartbeat_at = datetime('now', '-2 minutes')
+                    WHERE integration_name = 'feishu_bot_listener'
+                    """
+                )
+            self.assertEqual(feishu_listener_status(settings)["status"], "stale")
+
+            _record_listener_state(
+                settings,
+                status="stopped",
+                detail="飞书长连接监听已停止",
+            )
+            self.assertEqual(feishu_listener_status(settings)["status"], "stopped")
+
     def test_http_card_claim_starts_assigned_collaboration_task(self) -> None:
         from fastapi.testclient import TestClient
 

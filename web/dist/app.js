@@ -3241,10 +3241,20 @@ function renderFeishuOverview(payload) {
     ? `${partnerLeadImport.automation_enabled ? `自动 ${partnerLeadImport.cron}` : "手动"} · 最近${statusLabel(partnerLeadLastRun.status)} · 导入 ${partnerLeadLastRun.imported_count || 0} 条 · 核验 ${partnerLeadLastRun.verified_count || 0} 条 · 失败 ${partnerLeadLastRun.verification_failed_count || 0} 条`
     : `${partnerLeadImport.automation_enabled ? `自动 ${partnerLeadImport.cron}` : "手动触发"} · 暂无同步记录`;
   const conversationCommands = features.conversation_commands || {};
+  const listener = conversationCommands.listener || {};
   const latestCommand = conversationCommands.last_event;
+  const listenerState = listener.running
+    ? `长连接运行中${listener.heartbeat_at ? ` · 心跳 ${compactDateTimeText(listener.heartbeat_at)}` : ""}`
+    : listener.status === "stale"
+      ? "长连接心跳超时，需要重启监听器"
+      : listener.status === "failed"
+        ? "长连接异常，需要重启监听器"
+        : conversationCommands.long_connection_available
+          ? "长连接待启动"
+          : "长连接不可用";
   const conversationDetail = latestCommand
     ? `${latestCommand.command_kind === "subscription" ? "订阅" : "即时查询"} · ${statusLabel(latestCommand.status)} · ${compactDateTimeText(latestCommand.updated_at)}`
-    : `长连接${conversationCommands.long_connection_available ? "可启动" : "不可用"} · HTTP 回调${conversationCommands.webhook_ready ? "已就绪" : "待配置"}`;
+    : `${listenerState} · HTTP 回调${conversationCommands.webhook_ready ? "已就绪" : "待配置"}`;
   const rows = [
     ["报告与周报", features.report_delivery, "Word 文件和使用周报"],
     ["多维表格", features.bitable_sync, features.bitable_sync?.detail || "公告明细同步"],

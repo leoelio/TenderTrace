@@ -9,7 +9,7 @@ from typing import Iterator
 from tendertrace.config import Settings
 
 
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 
 
 DDL = (
@@ -631,6 +631,16 @@ DDL = (
         error TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS integration_runtime_heartbeats (
+        integration_name TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        heartbeat_at TEXT NOT NULL DEFAULT (datetime('now')),
+        stopped_at TEXT
     )
     """,
     """
