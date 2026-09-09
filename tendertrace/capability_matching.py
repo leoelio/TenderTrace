@@ -330,11 +330,24 @@ def _persist_match(
                 id, notice_id, requirement_id, capability_id, verdict, confidence, rationale, status
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'proposed')
             ON CONFLICT(requirement_id, capability_id) DO UPDATE SET
-                verdict = excluded.verdict,
-                confidence = excluded.confidence,
-                rationale = excluded.rationale,
+                verdict = CASE
+                    WHEN requirement_capability_matches.status = 'confirmed'
+                    THEN requirement_capability_matches.verdict
+                    ELSE excluded.verdict
+                END,
+                confidence = CASE
+                    WHEN requirement_capability_matches.status = 'confirmed'
+                    THEN requirement_capability_matches.confidence
+                    ELSE excluded.confidence
+                END,
+                rationale = CASE
+                    WHEN requirement_capability_matches.status = 'confirmed'
+                    THEN requirement_capability_matches.rationale
+                    ELSE excluded.rationale
+                END,
                 status = CASE
-                    WHEN requirement_capability_matches.status = 'confirmed' THEN 'confirmed'
+                    WHEN requirement_capability_matches.status IN ('confirmed', 'recheck')
+                    THEN requirement_capability_matches.status
                     ELSE 'proposed'
                 END,
                 updated_at = datetime('now')

@@ -173,6 +173,42 @@ class CapabilityMatchingTests(unittest.TestCase):
         self.assertEqual(result["capability_recheck_count"], 1)
         self.assertEqual(refreshed.status, "recheck")
 
+    def test_rerunning_ai_does_not_overwrite_human_confirmed_conclusion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _model_settings(Path(tmp))
+            _insert_notice_and_requirement(settings)
+            capability = _verified_capability(settings)
+            analyze_capability_matches(
+                settings,
+                "notice-1",
+                gateway=_FakeGateway(
+                    {"matches": [{"capability_id": capability.id, "verdict": "supported", "confidence": 84, "rationale": "首次建议。"}]}
+                ),
+            )
+            first = list_requirement_capability_matches(settings, "notice-1")[0]
+            decide_capability_match(
+                settings,
+                "notice-1",
+                first.id,
+                verdict="gap",
+                actor="技术负责人",
+                note="人工发现型号不一致。",
+                accept=True,
+            )
+            analyze_capability_matches(
+                settings,
+                "notice-1",
+                gateway=_FakeGateway(
+                    {"matches": [{"capability_id": capability.id, "verdict": "supported", "confidence": 99, "rationale": "后续模型建议。"}]}
+                ),
+            )
+            refreshed = list_requirement_capability_matches(settings, "notice-1")[0]
+
+        self.assertEqual(refreshed.status, "confirmed")
+        self.assertEqual(refreshed.verdict, "gap")
+        self.assertEqual(refreshed.rationale, "首次建议。")
+        self.assertEqual(refreshed.decision_note, "人工发现型号不一致。")
+
     def test_api_exposes_evidence_and_decision_workflow(self) -> None:
         from unittest.mock import patch
 
