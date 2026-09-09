@@ -6,7 +6,7 @@ import unittest
 from docx import Document
 
 from tendertrace.adapters.ccgp import Attachment, Notice
-from tendertrace.report.docx_writer import write_report
+from tendertrace.report.docx_writer import _model_summary_text, write_report
 from tendertrace.report.naming import safe_report_filename
 
 
@@ -20,6 +20,26 @@ class ReportWriterTests(unittest.TestCase):
         self.assertEqual(
             filename, "最近1个月的上海区域内的服务器招标信息都有哪些_202607061424.docx"
         )
+
+    def test_rejected_model_summary_is_not_presented_as_fact_checked_ai_output(self) -> None:
+        notice = Notice(
+            id="rejected-summary",
+            source_site="ccgp",
+            title="服务器采购公告",
+            publish_time="2026-07-06",
+            region="上海",
+            purchaser="某单位",
+            source_url="https://example.com/rejected-summary",
+            fields={
+                "model_summary": {
+                    "summary": "未经支持的摘要。",
+                    "source": "extractive",
+                    "fact_check_passed": False,
+                }
+            },
+        )
+
+        self.assertEqual(_model_summary_text(notice), "")
 
     def test_write_report_contains_required_notice_fields(self) -> None:
         bidql = {
@@ -62,7 +82,14 @@ class ReportWriterTests(unittest.TestCase):
                             "error": "",
                         }
                     ],
-                }
+                },
+                "model_summary": {
+                    "summary": "上海某单位服务器采购项目预算120万元。",
+                    "source": "model",
+                    "fact_check_passed": True,
+                    "factual_spans": [{"kind": "amount", "value": "120万元"}],
+                    "semantic_grounding_score": 1.0,
+                },
             },
         )
 
@@ -131,6 +158,7 @@ class ReportWriterTests(unittest.TestCase):
         self.assertIn(
             "核心内容：项目概况：上海某单位服务器采购公开招标项目。预算金额：120万元。", text
         )
+        self.assertIn("AI 摘要（事实回查通过）：上海某单位服务器采购项目预算120万元。", text)
         self.assertIn("事实校验：passed（score: 1.0）", text)
         self.assertIn(
             "证据摘录：项目概况：上海某单位服务器采购公开招标项目。预算金额：120万元。", text

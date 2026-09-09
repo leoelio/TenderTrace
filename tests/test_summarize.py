@@ -63,6 +63,22 @@ class SummarizeTests(unittest.TestCase):
         self.assertIn("200", result.missing_digits)
         self.assertIn("100", result.summary)
 
+    def test_model_summary_falls_back_when_a_non_numeric_claim_is_unsupported(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            result = summarize_notice_with_model(
+                settings,
+                title=self.title,
+                content_text=self.content,
+                core_content=self.core,
+                gateway=_FakeGateway("本项目由虚构医院负责建设和验收。"),
+            )
+
+        self.assertEqual(result.source, "extractive")
+        self.assertFalse(result.fact_check_passed)
+        self.assertEqual(result.rejection_reason, "unsupported_claim")
+        self.assertLess(result.semantic_grounding_score, 0.78)
+
     def test_empty_model_summary_falls_back_to_extractive(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))

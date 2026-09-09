@@ -34,6 +34,12 @@ class PipelineEvidenceTests(unittest.TestCase):
         self.assertIn("项目编号：SH-2026-001", evidence["excerpt"])
         self.assertEqual(enriched.fields["attachment_types"], ["pdf"])
         self.assertEqual(len(enriched.attachments), 1)
+        spans = evidence["factual_spans"]
+        self.assertEqual(
+            {(item["kind"], item["value"]) for item in spans},
+            {("amount", "120万元"), ("date", "2026-07-06"), ("project_number", "SH-2026-001")},
+        )
+        self.assertTrue(all("项目编号" in item["quote"] or item["kind"] != "project_number" for item in spans))
 
     def test_attach_evidence_warns_when_detail_text_is_missing(self) -> None:
         notice = Notice(

@@ -10,6 +10,12 @@ from tendertrace.pipeline.dedup import canonicalize_url, clean_text
 
 
 ATTACHMENT_EXTENSIONS = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")
+_DATE_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}[年./-]\s?\d{1,2}[月./-]\s?\d{1,2}日?")
+_AMOUNT_RE = re.compile(r"(?<![\w.])(?:人民币\s*)?[\d,]+(?:\.\d+)?\s*(?:亿元|万元|元)(?![\w])")
+_PROJECT_NO_RE = re.compile(
+    r"(?:项目(?:编号|编码)|采购编号|招标编号|招标文件编号)\s*[：:]\s*([A-Za-z0-9][A-Za-z0-9._\-/]{2,})",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -37,6 +43,7 @@ def _with_evidence(notice: Notice) -> Notice:
     excerpt = _excerpt(notice, evidence_text)
     snapshot_sha256 = _sha256(evidence_text)
     fact_checks = _fact_checks(notice, evidence_text)
+    factual_spans = extract_factual_spans(evidence_text)
     quality_score = _quality_score(fact_checks)
     status = "passed" if all(item["status"] == "passed" for item in fact_checks) else "warning"
     evidence = {
@@ -47,6 +54,7 @@ def _with_evidence(notice: Notice) -> Notice:
         "attachments": _attachment_dicts(notice, attachments),
         "related_sources": _related_sources(notice),
         "fact_checks": fact_checks,
+        "factual_spans": factual_spans,
         "quality_score": quality_score,
         "status": status,
     }
@@ -116,6 +124,36 @@ def _fact_checks(notice: Notice, evidence_text: str) -> list[dict[str, Any]]:
         }
     )
     return checks
+
+
+def extract_factual_spans(evidence_text: str) -> list[dict[str, object]]:
+    """Return exact, source-relative anchors safe for a generated summary to cite."""
+    spans: list[dict[str, object]] = []
+    for kind, pattern, group in (
+        ("date", _DATE_RE, 0),
+        ("amount", _AMOUNT_RE, 0),
+        ("project_number", _PROJECT_NO_RE, 1),
+    ):
+        for match in pattern.finditer(evidence_text or ""):
+            start, end = match.span(group)
+            value = match.group(group).strip()
+            if not value:
+                continue
+            spans.append(
+                {
+                    "kind": kind,
+                    "value": value,
+                    "start": start,
+                    "end": end,
+                    "quote": evidence_text[max(0, start - 48) : min(len(evidence_text), end + 80)],
+                }
+            )
+    seen: set[tuple[str, str]] = set()
+    return [
+        span
+        for span in spans
+        if not ((key := (str(span["kind"]), str(span["value"]))) in seen or seen.add(key))
+    ]
 
 
 def _grounding_score(summary: str, evidence_text: str) -> float:

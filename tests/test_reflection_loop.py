@@ -56,6 +56,46 @@ class _EmptyAdapter:
         return []
 
 
+class _LowEvidenceThenVerifiedAdapter:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def collect(
+        self,
+        bidql: dict[str, object],
+        *,
+        max_pages: int = 1,
+        max_results: int = 10,
+    ) -> list[Notice]:
+        self.calls += 1
+        if self.calls == 1:
+            return [
+                Notice(
+                    id="warning-1",
+                    source_site="ccgp",
+                    title="上海服务器采购公告",
+                    publish_time="2026-07-06",
+                    region="上海",
+                    purchaser="上海某单位",
+                    source_url="unverified-source",
+                    core_content="服务器采购项目。",
+                )
+            ]
+        return [
+            Notice(
+                id="verified-1",
+                source_site="ccgp",
+                title="上海服务器采购公开招标公告",
+                publish_time="2026-07-06",
+                region="上海",
+                purchaser="上海某单位",
+                source_url="https://www.ccgp.gov.cn/verified-1.html",
+                content_text="项目概况：上海某单位服务器采购。预算金额：120万元。",
+                core_content="项目概况：上海某单位服务器采购。预算金额：120万元。",
+            )
+        ]
+
+
 class ReflectionLoopTests(TestCase):
     def test_repair_round_recovers_when_second_collect_finds_notices(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -88,6 +128,22 @@ class ReflectionLoopTests(TestCase):
         self.assertEqual(adapter.calls, 2)
         self.assertEqual(result.notice_count, 0)
         self.assertEqual(result.stats["repair_rounds"], 1)
+
+    def test_repair_round_retries_when_first_batch_has_no_verified_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            adapter = _LowEvidenceThenVerifiedAdapter()
+
+            result = run_once(
+                settings=settings,
+                query="最近1个月上海服务器招标信息都有哪些",
+                now=datetime(2026, 7, 6, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+                adapter=adapter,
+            )
+
+        self.assertEqual(adapter.calls, 2)
+        self.assertEqual(result.stats["repair_rounds"], 1)
+        self.assertGreaterEqual(result.stats["evidence_passed"], 1)
 
 
 if __name__ == "__main__":

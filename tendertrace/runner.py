@@ -268,11 +268,29 @@ def run_once(
             if subscription_id and incremental
             else 0
         )
-        needs_repair = len(notices) == 0 and state.repair_rounds < _MAX_REPAIR_ROUNDS
+        verified_count = int(evidence_result.stats.get("evidence_passed") or 0)
+        evidence_scores = [
+            float(notice.fields.get("evidence_score") or 0)
+            for notice in notices
+        ]
+        no_verified_notice = (
+            bool(notices)
+            and verified_count == 0
+            and max(evidence_scores, default=0) < 0.8
+        )
+        needs_repair = (
+            (len(notices) == 0 or no_verified_notice)
+            and state.repair_rounds < _MAX_REPAIR_ROUNDS
+        )
         if needs_repair:
             context.emit_tool_call(
                 "pipeline.repair_requested",
-                {"round": state.repair_rounds + 1, "reason": "no notices after evidence"},
+                {
+                    "round": state.repair_rounds + 1,
+                    "reason": "no verified notices after evidence"
+                    if no_verified_notice
+                    else "no notices after evidence",
+                },
             )
         return state.with_updates(
             repair_rounds=state.repair_rounds + (1 if needs_repair else 0),
@@ -617,6 +635,12 @@ def _attach_model_summaries(
     for notice in notices:
         if not isinstance(notice, dict):
             continue
+        fields = notice.get("fields")
+        if not isinstance(fields, dict):
+            fields = {}
+            notice["fields"] = fields
+        evidence = fields.get("evidence")
+        factual_spans = evidence.get("factual_spans") if isinstance(evidence, dict) else None
         summary = summarize_notice_with_model(
             settings,
             title=str(notice.get("title") or ""),
@@ -624,11 +648,8 @@ def _attach_model_summaries(
             core_content=str(notice.get("core_content") or ""),
             gateway=model_gateway,
             run_id=run_id,
+            factual_spans=factual_spans if isinstance(factual_spans, list) else None,
         )
-        fields = notice.get("fields")
-        if not isinstance(fields, dict):
-            fields = {}
-            notice["fields"] = fields
         fields["model_summary"] = summary.to_dict()
 
 
