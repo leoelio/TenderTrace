@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
+from tendertrace.business_measurements import business_measurement_summary
 from tendertrace.db import connection, init_db
 from tendertrace.gold import build_gold_coverage, evaluate_gold_recall
 from tendertrace.intent import compile_intent
@@ -22,6 +23,7 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
     gold = evaluate_gold_recall(settings)
     gold_coverage = build_gold_coverage(settings)
     vector = vector_coverage(settings)
+    business = business_measurement_summary(settings)
     recall = _recall_metrics(stats, gold.to_dict(), vector)
     recall_score = (
         recall["strict_recall_at_10"]
@@ -58,6 +60,7 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
         "agent": agent,
         "harness": harness,
         "recall": recall,
+        "business": business,
         "gold": gold.to_dict(),
         "gold_coverage": gold_coverage.to_dict(),
         "notes": [
@@ -65,6 +68,7 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
             "recall_proxy 只用于运行观测，不参与替代严格召回验收。",
             "harness 字段准确率来自固定自然语言样例的 BidQL 编译检查。",
             "RAG 指标来自 evidence_validate、附件抽取和报告必要字段检查。",
+            "业务效率仅汇总质量复核通过的实测任务；无实测数据时不生成节省时间估算。",
         ],
     }
 

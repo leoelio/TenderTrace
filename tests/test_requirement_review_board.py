@@ -68,6 +68,52 @@ class RequirementReviewBoardTests(unittest.TestCase):
         self.assertIn("requirement_review_created", actions)
         self.assertIn("requirement_review_resolved", actions)
 
+    def test_second_notice_revision_creates_a_new_evidence_review_round(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            upsert_requirement(
+                settings,
+                notice_id="notice-1",
+                requirement_key="QUAL-01",
+                requirement_type="qualification",
+                title="资质要求",
+                evidence_text="投标人须提供有效资质。",
+                source_url="https://example.com/notice-1",
+                source_locator="公告第 1 页",
+                confidence=90,
+                status="confirmed",
+            )
+            first_revision = _revision(settings, ["attachments"])
+            first = sync_requirement_review_cases(settings, "notice-1")
+            first_case = next(
+                item
+                for item in list_requirement_review_cases(settings, "notice-1")
+                if item.reason == f"notice_change_impact:{first_revision}"
+            )
+            resolve_requirement_review_case(
+                settings,
+                "notice-1",
+                first_case.id,
+                decision="accepted",
+                actor="证据审计",
+                note="已依据第一版附件复核。",
+            )
+            second_revision = _revision(settings, ["attachments"])
+            second = sync_requirement_review_cases(settings, "notice-1")
+            cases = list_requirement_review_cases(settings, "notice-1")
+            second_case = next(
+                item
+                for item in cases
+                if item.reason == f"notice_change_impact:{second_revision}"
+            )
+
+        self.assertGreater(first["created_count"], 0)
+        self.assertEqual(second["created_count"], 1)
+        self.assertNotEqual(first_case.id, second_case.id)
+        self.assertEqual(second_case.status, "pending")
+        self.assertEqual(second_case.reason_label, "公告证据发生变化，需重新核验。")
+
     def test_review_board_api_syncs_then_resolves_a_case(self) -> None:
         from fastapi.testclient import TestClient
 
@@ -155,15 +201,17 @@ def _insert_notice(settings: Settings) -> None:
         )
 
 
-def _revision(settings: Settings, changed_fields: list[str]) -> None:
+def _revision(settings: Settings, changed_fields: list[str]) -> str:
+    revision_id = str(uuid4())
     with connection(settings) as conn:
         conn.execute(
             """
             INSERT INTO notice_revisions(id, notice_id, change_hash, changed_fields_json, before_json, after_json)
             VALUES (?, 'notice-1', ?, ?, '{}', '{}')
             """,
-            (str(uuid4()), str(uuid4()), json_dumps(changed_fields)),
+            (revision_id, str(uuid4()), json_dumps(changed_fields)),
         )
+    return revision_id
 
 
 if __name__ == "__main__":

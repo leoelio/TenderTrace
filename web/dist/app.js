@@ -220,6 +220,9 @@ const el = {
   evaluationCases: document.querySelector("#evaluationCases"),
   evaluationHarnessCases: document.querySelector("#evaluationHarnessCases"),
   evaluationNotes: document.querySelector("#evaluationNotes"),
+  businessMeasurementMetrics: document.querySelector("#businessMeasurementMetrics"),
+  businessMeasurementList: document.querySelector("#businessMeasurementList"),
+  businessMeasurementForm: document.querySelector("#businessMeasurementForm"),
   refreshMemoryButton: document.querySelector("#refreshMemoryButton"),
   saveMemoryButton: document.querySelector("#saveMemoryButton"),
   sendMemoryFeishuButton: document.querySelector("#sendMemoryFeishuButton"),
@@ -1439,6 +1442,7 @@ function renderEvaluation(report) {
     ["索引公告", `${report.recall?.fts_indexed_notices ?? 0} / ${report.recall?.indexed_notices ?? 0}`],
     ["金标用例", `${report.recall?.annotated_gold_case_count ?? 0} / ${report.recall?.gold_case_count ?? 0}`],
   ]);
+  renderBusinessMeasurements(report.business || {});
   if (el.evaluationCases) {
     const cases = report.gold?.cases || [];
     el.evaluationCases.className = cases.length ? "case-list" : "case-list empty-state";
@@ -1475,6 +1479,63 @@ function renderEvaluation(report) {
     el.evaluationNotes.innerHTML = notes.length
       ? notes.map((note) => `<div class="note-row">${escapeHtml(note)}</div>`).join("")
       : "暂无说明";
+  }
+}
+
+function renderBusinessMeasurements(summary) {
+  if (el.businessMeasurementMetrics) {
+    const measured = summary.status === "measured";
+    el.businessMeasurementMetrics.className = "business-measurement-metrics";
+    el.businessMeasurementMetrics.innerHTML = [
+      summaryTile("质量通过样本", summary.quality_passed_count ?? 0),
+      summaryTile("人工基线", measured ? `${summary.baseline_minutes ?? 0} 分钟` : "待实测"),
+      summaryTile("系统辅助", measured ? `${summary.assisted_minutes ?? 0} 分钟` : "待实测"),
+      summaryTile("实测节省", measured ? `${summary.saved_minutes ?? 0} 分钟` : "不估算"),
+      summaryTile("节省率", measured ? percent(summary.time_saving_rate) : "待复核"),
+    ].join("");
+  }
+  if (el.businessMeasurementList) {
+    const items = Array.isArray(summary.items) ? summary.items : [];
+    el.businessMeasurementList.className = items.length ? "case-list" : "case-list empty-state";
+    el.businessMeasurementList.innerHTML = items.length
+      ? items.slice(0, 8).map((item) => `
+          <div class="case-row business-measurement-row quality-${escapeHtml(item.quality_status || "not_reviewed")}">
+            <strong>${escapeHtml(item.task_type_label || item.task_type || "任务")} · ${escapeHtml(item.quality_status_label || "待复核")}</strong>
+            <span>${escapeHtml(item.sample_ref || "未命名样本")} · 人工 ${escapeHtml(item.baseline_minutes || 0)} 分钟 / 辅助 ${escapeHtml(item.assisted_minutes || 0)} 分钟</span>
+            <span>${escapeHtml(item.reviewer || "复核人待填")} · ${escapeHtml(item.note || "未填写复核说明")}</span>
+          </div>
+        `).join("")
+      : escapeHtml(summary.note || "暂无记录");
+  }
+}
+
+async function saveBusinessMeasurement(form) {
+  const values = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    const result = await api("/api/evaluations/business-measurements", {
+      method: "POST",
+      body: JSON.stringify({
+        task_type: values.get("task_type") || "",
+        sample_ref: values.get("sample_ref") || "",
+        baseline_minutes: Number(values.get("baseline_minutes") || 0),
+        assisted_minutes: Number(values.get("assisted_minutes") || 0),
+        quality_status: values.get("quality_status") || "not_reviewed",
+        reviewer: values.get("reviewer") || "",
+        recorded_by: values.get("recorded_by") || "",
+        note: values.get("note") || "",
+      }),
+    });
+    form.reset();
+    if (form.elements.recorded_by) form.elements.recorded_by.value = "admin";
+    if (state.evaluation) {
+      state.evaluation.business = result.summary || {};
+      renderBusinessMeasurements(state.evaluation.business);
+    }
+    showToast("实测任务已记录；只有质量通过样本会计入节省时间");
+  } finally {
+    if (submit) submit.disabled = false;
   }
 }
 
@@ -2533,7 +2594,7 @@ function requirementReviewCase(item, humanOpinions) {
   return `
     <article class="requirement-review-case status-${escapeHtml(item.status || "pending")}">
       <div><strong>${escapeHtml(item.requirement_key || "未命名要求")}</strong><span>${escapeHtml(item.reviewer_role_label || item.reviewer_role || "会审")}</span></div>
-      <small>${escapeHtml(item.reason || "待人工判断")}</small>
+      <small>${escapeHtml(item.reason_label || item.reason || "待人工判断")}</small>
       ${resolved ? `<p>裁决：${escapeHtml(item.decision_label || item.decision || "已完成")} · ${escapeHtml(item.decided_by || "")}${item.decision_note ? ` · ${escapeHtml(item.decision_note)}` : ""}</p>` : `
         <form class="requirement-review-form" data-requirement-review-form="${escapeHtml(item.notice_id)}" data-review-id="${escapeHtml(item.id)}">
           <select name="decision"><option value="accepted">采纳</option><option value="returned">退回修订</option><option value="escalated">升级会审</option></select>
@@ -5401,6 +5462,12 @@ function normalizeWorkbenchLayout() {
 
 function bindEvents() {
   document.addEventListener("submit", (event) => {
+    const businessMeasurementForm = event.target.closest("#businessMeasurementForm");
+    if (businessMeasurementForm) {
+      event.preventDefault();
+      saveBusinessMeasurement(businessMeasurementForm).catch(toastError("实测任务保存失败"));
+      return;
+    }
     const capabilityDecisionForm = event.target.closest("[data-capability-match-decision]");
     if (capabilityDecisionForm) {
       event.preventDefault();

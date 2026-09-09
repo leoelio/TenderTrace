@@ -578,6 +578,21 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS business_measurements (
+        id TEXT PRIMARY KEY,
+        task_type TEXT NOT NULL,
+        sample_ref TEXT NOT NULL,
+        baseline_minutes REAL NOT NULL,
+        assisted_minutes REAL NOT NULL,
+        quality_status TEXT NOT NULL DEFAULT 'not_reviewed',
+        reviewer TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        recorded_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (task_type, sample_ref)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS requirement_review_cases (
         id TEXT PRIMARY KEY,
         notice_id TEXT NOT NULL,
@@ -836,6 +851,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_enterprise_capabilities_status ON enterprise_capabilities(verification_status, capability_type)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_capability_matches_notice ON requirement_capability_matches(notice_id, requirement_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_capability_matches_capability ON requirement_capability_matches(capability_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_business_measurements_task_quality ON business_measurements(task_type, quality_status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_cases_notice ON requirement_review_cases(notice_id, status, reviewer_role)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_review ON requirement_review_opinions(review_id, agent_role)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_notice ON requirement_review_opinions(notice_id, agent_role)",

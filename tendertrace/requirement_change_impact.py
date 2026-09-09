@@ -22,6 +22,8 @@ def requirement_change_impact(settings: Settings, notice_id: str) -> dict[str, o
     requirements = list_requirements(settings, notice_id)
     affected = _affected_requirements(requirements, changed_fields)
     return {
+        "revision_id": str(summary.get("revision_id") or ""),
+        "change_hash": str(summary.get("change_hash") or ""),
         "changed_fields": changed_fields,
         "review_required": bool(affected),
         "affected_count": len(affected),

@@ -51,10 +51,10 @@ flowchart LR
 | 报告与订阅 | Word 报告包含标题、发布时间、来源链接、核心内容、附件链接和来源健康信息。APScheduler 分离“后台采集订阅”和“用户报告订阅”，后者依靠 `sent_history` 保证增量不重复，并记录新增数、跳过历史数、下次执行和交付结果；工作台勾选飞书交付后可选择默认接收者或已登记项目群，选中的群会同时接收 Word 附件和由同次真实运行统计生成的检索简报卡，附件成功与简报失败分开审计，避免误报交付状态。 |
 | 机会经营 | 根据时效、完整度、可信度、多源佐证和需求覆盖计算机会等级；维护唯一负责人、阶段化团队、合作伙伴和客户关键人。采购主体、预算、项目编号、截止时间等字段可附证据人工核验，核验后重算销售准入。 |
 | 能力证据与匹配 | 将产品方案、资质合规、交付服务和项目案例以原文、链接、定位、核验状态入库。AI 只能引用已核验的企业证据生成“可支撑/有缺口/需补证据”建议；模型引用不存在的证据会被丢弃，人工确认才形成经营结论。公告原文变化会将已确认的匹配标记为待复核，避免旧结论继续驱动投标动作。 |
-| 决策与执行 | 统一动作契约控制认领、事实复核、Go/Hold/No-Go、投标准备、结果和归档。团队覆盖、客户关系、证据完整度、机会评分和投标窗口共同构成可解释门禁；重大公告变更会使旧决策失效并进入复核与 SLA 升级。会审队列、Agent 建议、网页与群内人工意见以及人工裁决均保留原文证据，不覆盖要求账本。 |
+| 决策与执行 | 统一动作契约控制认领、事实复核、Go/Hold/No-Go、投标准备、结果和归档。团队覆盖、客户关系、证据完整度、机会评分和投标窗口共同构成可解释门禁；重大公告变更会使旧决策失效并进入复核与 SLA 升级。会审 case 的幂等键包含公告修订版本：同版重复同步不重复建项，新版变化会开启新的复核轮次。Agent 建议、网页与群内人工意见以及人工裁决均保留原文证据，不覆盖要求账本。 |
 | 市场与复盘 | 从本地公告形成品类预算基准、采购主体集中度、采购阶段分布和成交供应商画像。赢标或失标结果记录原因、经验、后续行动与证据，并回流胜率、败因、竞品和成交价格基准。样本不足时明确降级，不生成伪精确结论。 |
 | 个人与组织记忆 | 个人记忆记录查询、点击、下载、订阅和运行，形成周报、偏好与可执行建议。组织记忆按飞书项目群隔离，群成员可显式记录和查询共享事实，并将其审计式转换为机会事实或客户行动；两类记忆分表存储，不互相污染。 |
-| 模型与评测 | 支持纯规则、本地 Ollama 和 OpenAI 兼容云端增强，运行时可切换。评测覆盖意图 Harness、RAG 证据、Agent checkpoint/trace、来源可靠性、Recall Proxy 和人工金标 Recall@K；代理指标不冒充严格召回率。 |
+| 模型与评测 | 支持纯规则、本地 Ollama 和 OpenAI 兼容云端增强，运行时可切换。评测覆盖意图 Harness、RAG 证据、Agent checkpoint/trace、来源可靠性、Recall Proxy 和人工金标 Recall@K；代理指标不冒充严格召回率。业务价值面板只汇总质量复核通过的同类任务基线/辅助耗时，无实测数据时不估算节省。 |
 
 ## 信息来源
 
@@ -281,10 +281,10 @@ The architecture is local-first. Background ingestion grows the SQLite notice li
 | Reports and schedules | Word reports include title, publish time, source URL, core facts, attachment links, and source health. APScheduler separates ingestion plans from user delivery subscriptions; `sent_history` makes scheduled output incremental and auditable. A Feishu project group receives both the Word attachment and a digest card built from the same run's real evidence and coverage; file and digest outcomes are audited independently. |
 | Opportunity operations | Scores freshness, completeness, credibility, corroboration, and requirement coverage. Maintains one accountable owner, a stage-aware pursuit team, partners, stakeholders, evidence-backed fact overrides, and qualification gates. The dossier's live execution journey derives the next action from notice changes, requirement coverage, review cases, and collaboration gates, then links directly to that work area. |
 | Capability evidence and matching | Stores product, qualification, delivery, and project-case evidence with original text, URL, locator, verification status, and owner. AI may only cite verified capability IDs when proposing supported, gap, or evidence-needed matches; unsupported citations are discarded and a human confirmation is required before a conclusion is used. A material tender change sends confirmed matches back to recheck. |
-| Decision and execution | A shared action contract governs claiming, review, Go/Hold/No-Go, bid preparation, outcome, and archive actions. Material notice changes invalidate stale decisions and enter an SLA-bound review workflow. |
+| Decision and execution | A shared action contract governs claiming, review, Go/Hold/No-Go, bid preparation, outcome, and archive actions. Material notice changes invalidate stale decisions and enter an SLA-bound review workflow. Review-case idempotency includes the notice revision: duplicate delivery of one revision creates no duplicate case, while a later material revision starts a new review round. |
 | Market and outcomes | Builds category budget benchmarks, buyer concentration, procurement-stage distributions, award suppliers, competitors, win rates, and loss reasons from local evidence. Insufficient samples are labeled instead of extrapolated. |
 | Personal and organization memory | Personal activity produces weekly profiles and executable advice. Feishu project groups have isolated organization memory that can be converted, with audit provenance, into opportunity facts or relationship actions. |
-| Models and evaluation | Supports rule-only, local Ollama, and OpenAI-compatible cloud modes. Evaluation covers intent harnesses, RAG evidence, Agent traces/checkpoints, source reliability, recall proxy, and manually annotated Recall@K. |
+| Models and evaluation | Supports rule-only, local Ollama, and OpenAI-compatible cloud modes. Evaluation covers intent harnesses, RAG evidence, Agent traces/checkpoints, source reliability, recall proxy, and manually annotated Recall@K. Business-value metrics only aggregate quality-reviewed task timings; they do not infer savings from clicks or unreviewed samples. |
 
 ## Source Coverage
 

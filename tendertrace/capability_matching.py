@@ -68,6 +68,9 @@ class RequirementCapabilityMatch:
     capability_id: str
     capability_title: str
     capability_type: str
+    capability_evidence_text: str
+    capability_source_url: str
+    capability_source_locator: str
     verdict: str
     verdict_label: str
     confidence: int
@@ -170,7 +173,10 @@ def list_requirement_capability_matches(
         rows = conn.execute(
             """
             SELECT matched.*, requirement.requirement_key, requirement.title AS requirement_title,
-                   capability.title AS capability_title, capability.capability_type
+                   capability.title AS capability_title, capability.capability_type,
+                   capability.evidence_text AS capability_evidence_text,
+                   capability.source_url AS capability_source_url,
+                   capability.source_locator AS capability_source_locator
             FROM requirement_capability_matches matched
             JOIN opportunity_requirements requirement ON requirement.id = matched.requirement_id
             LEFT JOIN enterprise_capabilities capability ON capability.id = matched.capability_id
@@ -465,6 +471,9 @@ def _match_from_row(row: Any) -> RequirementCapabilityMatch:
         capability_id=str(row["capability_id"] or ""),
         capability_title=str(row["capability_title"] or "未关联企业证据"),
         capability_type=str(row["capability_type"] or ""),
+        capability_evidence_text=str(row["capability_evidence_text"] or ""),
+        capability_source_url=str(row["capability_source_url"] or ""),
+        capability_source_locator=str(row["capability_source_locator"] or ""),
         verdict=verdict,
         verdict_label=MATCH_VERDICT_LABELS.get(verdict, verdict),
         confidence=int(row["confidence"] or 0),

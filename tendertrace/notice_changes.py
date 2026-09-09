@@ -208,6 +208,8 @@ def notice_change_summaries(
         ).fetchall()
     return {
         str(row["notice_id"]): {
+            "revision_id": str(row["id"] or ""),
+            "change_hash": str(row["change_hash"] or ""),
             "count": int(row["change_count"] or 0),
             "latest_at": str(row["created_at"] or ""),
             "changed_fields": _string_list(row["changed_fields_json"]),

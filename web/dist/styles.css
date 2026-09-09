@@ -1578,6 +1578,89 @@ td.file-cell {
   padding: 16px;
 }
 
+.business-measurement-panel {
+  display: grid;
+  gap: 14px;
+  margin: 0 18px 18px;
+  border-left: 3px solid #0b8b63;
+  background: linear-gradient(90deg, rgba(240, 250, 246, 0.82), rgba(255, 255, 255, 0.92));
+}
+
+.business-measurement-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.business-measurement-heading h2 { margin: 0; }
+
+.business-measurement-heading span,
+.business-measurement-row span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.business-measurement-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.business-measurement-metrics .summary-tile {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.business-measurement-metrics .summary-tile strong { font-size: 17px; }
+
+.business-measurement-row.quality-passed { border-left: 3px solid #0b8b63; }
+.business-measurement-row.quality-failed { border-left: 3px solid #c16a34; }
+.business-measurement-row.quality-not_reviewed { border-left: 3px solid #c48516; }
+
+.business-measurement-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(11, 139, 99, 0.18);
+}
+
+.business-measurement-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.business-measurement-form input,
+.business-measurement-form select { min-width: 0; }
+
+.business-measurement-form .business-measurement-note {
+  grid-column: span 3;
+}
+
+.business-measurement-form button { align-self: end; }
+
+@media (max-width: 760px) {
+  .business-measurement-panel {
+    margin-right: 10px;
+    margin-left: 10px;
+  }
+
+  .business-measurement-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .business-measurement-metrics,
+  .business-measurement-form {
+    grid-template-columns: 1fr;
+  }
+
+  .business-measurement-form .business-measurement-note { grid-column: auto; }
+}
+
 .eval-card h2 {
   margin-bottom: 12px;
 }

@@ -847,6 +847,27 @@
                 <div id="evaluationNotes" class="case-list empty-state">暂无说明</div>
               </div>
             </div>
+            <section id="businessMeasurementPanel" class="eval-card business-measurement-panel">
+              <div class="business-measurement-heading">
+                <div>
+                  <h2>业务价值实测</h2>
+                  <span>仅统计质量复核通过的同类任务对照，不用点击量推算节省时间。</span>
+                </div>
+              </div>
+              <div id="businessMeasurementMetrics" class="business-measurement-metrics empty-state">暂无实测任务</div>
+              <div id="businessMeasurementList" class="case-list empty-state">暂无记录</div>
+              <form id="businessMeasurementForm" class="business-measurement-form">
+                <label><span>任务类型</span><select name="task_type"><option value="opportunity_verification">机会核验</option><option value="capability_matching">能力匹配</option><option value="change_review">公告变更复核</option><option value="group_handoff">群内协作交接</option></select></label>
+                <label><span>样本编号</span><input name="sample_ref" required maxlength="160" placeholder="机会或试验样本编号" /></label>
+                <label><span>人工基线（分钟）</span><input name="baseline_minutes" required min="0.01" max="1440" step="0.01" type="number" /></label>
+                <label><span>系统辅助（分钟）</span><input name="assisted_minutes" required min="0.01" max="1440" step="0.01" type="number" /></label>
+                <label><span>质量结果</span><select name="quality_status"><option value="not_reviewed">待质量复核</option><option value="passed">质量复核通过</option><option value="failed">质量复核未通过</option></select></label>
+                <label><span>复核人</span><input name="reviewer" maxlength="80" placeholder="通过或未通过时必填" /></label>
+                <label><span>记录人</span><input name="recorded_by" required maxlength="80" value="admin" /></label>
+                <label class="business-measurement-note"><span>复核说明</span><input name="note" maxlength="1000" placeholder="同一任务范围、质量检查依据或差异说明" /></label>
+                <button class="primary-lite-button" type="submit">记录实测任务</button>
+              </form>
+            </section>
           </section>
         </section>
 

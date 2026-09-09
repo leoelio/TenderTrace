@@ -7,6 +7,10 @@ import json
 from typing import Any
 
 from tendertrace.config import Settings
+from tendertrace.capability_matching import (
+    RequirementCapabilityMatch,
+    list_requirement_capability_matches,
+)
 from tendertrace.db import connection, init_db
 from tendertrace.llm.audit import record_model_audit
 from tendertrace.llm.gateway import ModelCallResult, ModelGateway, model_status
@@ -107,6 +111,9 @@ def run_review_agents(
     sync_requirement_review_cases(settings, notice_id)
     cases = list_requirement_review_cases(settings, notice_id)
     requirements = {item.id: item for item in list_requirements(settings, notice_id)}
+    matches_by_requirement: dict[str, list[RequirementCapabilityMatch]] = {}
+    for match in list_requirement_capability_matches(settings, notice_id):
+        matches_by_requirement.setdefault(match.requirement_id, []).append(match)
     pending = [case for case in cases if case.status == "pending"][: max(1, min(int(limit), 200))]
 
     model_gateway = gateway or ModelGateway(settings)
@@ -130,6 +137,7 @@ def run_review_agents(
                 model_gateway,
                 case,
                 requirement,
+                matches_by_requirement.get(requirement.id, []),
                 agent_role,
                 persona,
                 run_id=run_id,
@@ -211,12 +219,13 @@ def _run_agent(
     gateway: ModelGateway,
     case: RequirementReviewCase,
     requirement: OpportunityRequirement,
+    capability_matches: list[RequirementCapabilityMatch],
     agent_role: str,
     persona: dict[str, str],
     *,
     run_id: str | None,
 ) -> tuple[dict[str, Any] | None, ModelCallResult]:
-    prompt = _prompt_for_case(case, requirement, agent_role, persona)
+    prompt = _prompt_for_case(case, requirement, capability_matches, agent_role, persona)
     result = gateway.generate_json(system=_system_prompt(agent_role, persona), user=prompt)
     if run_id:
         record_model_audit(settings, run_id=run_id, result=result, prompt_text=prompt)
@@ -314,7 +323,8 @@ def _system_prompt(agent_role: str, persona: dict[str, str]) -> str:
         "- decision accept means the requirement is valid and clear enough to act on.\n"
         "- decision reject means the requirement is ambiguous, contradictory or unsupported.\n"
         "- decision escalate means the evidence is insufficient for a confident call.\n"
-        "- Base every conclusion on the provided evidence text and locator, never on guesswork.\n"
+        "- Base every conclusion on the provided tender evidence and enterprise capability evidence, never on guesswork.\n"
+        "- A proposed capability match is not proof. Treat it as an advisory signal unless its evidence and human status support the conclusion.\n"
         "- Do not include URLs, markdown or explanations outside the JSON.\n"
         f"- Your review angle: {persona['label']}（{agent_role}）。{persona['focus']}\n"
     )
@@ -323,6 +333,7 @@ def _system_prompt(agent_role: str, persona: dict[str, str]) -> str:
 def _prompt_for_case(
     case: RequirementReviewCase,
     requirement: OpportunityRequirement,
+    capability_matches: list[RequirementCapabilityMatch],
     agent_role: str,
     persona: dict[str, str],
 ) -> str:
@@ -342,6 +353,21 @@ def _prompt_for_case(
             "confidence": requirement.confidence,
             "status": requirement.status,
         },
+        "enterprise_capability_matches": [
+            {
+                "capability_id": item.capability_id,
+                "capability_title": item.capability_title,
+                "capability_type": item.capability_type,
+                "evidence_text": item.capability_evidence_text,
+                "source_url": item.capability_source_url,
+                "source_locator": item.capability_source_locator,
+                "match_verdict": item.verdict,
+                "match_status": item.status,
+                "match_rationale": item.rationale,
+                "human_decision_note": item.decision_note,
+            }
+            for item in capability_matches
+        ],
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 

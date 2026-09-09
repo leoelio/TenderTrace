@@ -37,6 +37,7 @@ class RequirementReviewCase:
     reviewer_role: str
     reviewer_role_label: str
     reason: str
+    reason_label: str
     status: str
     decision: str
     decision_label: str
@@ -53,16 +54,22 @@ class RequirementReviewCase:
 def sync_requirement_review_cases(settings: Settings, notice_id: str) -> dict[str, object]:
     init_db(settings)
     requirements = list_requirements(settings, notice_id)
+    impact_result = requirement_change_impact(settings, notice_id)
     impacts = {
         str(item.get("id") or ""): item
-        for item in requirement_change_impact(settings, notice_id).get("items", [])
+        for item in impact_result.get("items", [])
         if isinstance(item, dict)
     }
+    impact_revision_id = str(impact_result.get("revision_id") or "")
     recheck_count = mark_capability_matches_for_recheck(settings, notice_id, set(impacts))
     candidates = [
         candidate
         for requirement in requirements
-        for candidate in _review_candidates(requirement, impacted=requirement.id in impacts)
+        for candidate in _review_candidates(
+            requirement,
+            impacted=requirement.id in impacts,
+            impact_revision_id=impact_revision_id,
+        )
     ]
     created_count = 0
     with connection(settings) as conn:
@@ -211,6 +218,7 @@ def _review_candidates(
     requirement: OpportunityRequirement,
     *,
     impacted: bool,
+    impact_revision_id: str,
 ) -> list[tuple[OpportunityRequirement, str, str]]:
     role = _reviewer_role(requirement)
     candidates: list[tuple[OpportunityRequirement, str, str]] = []
@@ -221,7 +229,8 @@ def _review_candidates(
     if requirement.mandatory and requirement.status in {"pending", "review"}:
         candidates.append((requirement, role, "mandatory_pending"))
     if impacted:
-        candidates.append((requirement, "evidence_audit", "notice_change_impact"))
+        revision_suffix = f":{impact_revision_id}" if impact_revision_id else ""
+        candidates.append((requirement, "evidence_audit", f"notice_change_impact{revision_suffix}"))
     return candidates
 
 
@@ -255,6 +264,7 @@ def _from_row(row: Any) -> RequirementReviewCase:
         reviewer_role=role,
         reviewer_role_label=REVIEW_ROLE_LABELS.get(role, role),
         reason=str(row["reason"]),
+        reason_label=_reason_label(str(row["reason"])),
         status=str(row["status"]),
         decision=decision,
         decision_label=DECISION_LABELS.get(decision, decision),
@@ -264,3 +274,13 @@ def _from_row(row: Any) -> RequirementReviewCase:
         created_at=str(row["created_at"] or ""),
         updated_at=str(row["updated_at"] or ""),
     )
+
+
+def _reason_label(reason: str) -> str:
+    if reason.startswith("notice_change_impact"):
+        return "公告证据发生变化，需重新核验。"
+    return {
+        "requirement_marked_for_review": "要求已标记为待复核。",
+        "low_confidence": "要求抽取置信度较低，需人工确认。",
+        "mandatory_pending": "强制要求尚未处理。",
+    }.get(reason, reason)

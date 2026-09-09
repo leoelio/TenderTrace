@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from tendertrace.config import ModelMode, Settings
+from tendertrace.capability_matching import analyze_capability_matches, upsert_capability
 from tendertrace.db import connection, init_db
 from tendertrace.llm.gateway import ModelCallResult
 from tendertrace.opportunity_requirements import list_requirements, upsert_requirement
@@ -31,10 +32,13 @@ class _FakeGateway:
     def __init__(self, decision_map: dict[str, str]) -> None:
         self.decision_map = decision_map
         self.calls = 0
+        self.payloads: list[dict[str, object]] = []
 
     def generate_json(self, *, system: str, user: str) -> ModelCallResult:
         self.calls += 1
-        agent_role = json.loads(user)["agent_role"]
+        payload = json.loads(user)
+        self.payloads.append(payload)
+        agent_role = payload["agent_role"]
         decision = self.decision_map.get(agent_role, "accept")
         return ModelCallResult(
             mode="local",
@@ -46,6 +50,29 @@ class _FakeGateway:
                 "confidence": 80,
                 "rationale": f"{agent_role} opinion",
                 "concerns": [],
+            },
+        )
+
+
+class _MatchingGateway:
+    def __init__(self, capability_id: str) -> None:
+        self.capability_id = capability_id
+
+    def generate_json(self, *, system: str, user: str) -> ModelCallResult:
+        return ModelCallResult(
+            mode="local",
+            provider="ollama",
+            model="test-model",
+            status="ok",
+            parsed={
+                "matches": [
+                    {
+                        "capability_id": self.capability_id,
+                        "verdict": "supported",
+                        "confidence": 82,
+                        "rationale": "规格书中的配置与要求可对照。",
+                    }
+                ]
             },
         )
 
@@ -190,6 +217,37 @@ class RequirementReviewAgentsTests(unittest.TestCase):
         self.assertEqual(len({opinion.id for opinion in opinions}), 5)
         self.assertEqual(refreshed.status, requirement.status)
         self.assertEqual(refreshed.title, requirement.title)
+
+    def test_agents_receive_evidence_linked_capability_match_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _review_settings(Path(tmp))
+            _insert_notice(settings)
+            _requirement(settings)
+            capability = upsert_capability(
+                settings,
+                capability_key="CAP-SERVER-01",
+                title="服务器规格书",
+                capability_type="product",
+                evidence_text="规格书列明服务器配置与性能参数。",
+                source_url="https://example.com/cap-server",
+                source_locator="规格书第 2 页",
+                verification_status="verified",
+                actor="证据管理员",
+            )
+            analyze_capability_matches(
+                settings,
+                "notice-1",
+                gateway=_MatchingGateway(capability.id),
+            )
+            gateway = _FakeGateway({role: "accept" for role in ("project_control", "compliance", "technical", "commercial", "evidence_audit")})
+            run_review_agents(settings, "notice-1", gateway=gateway)
+
+        self.assertEqual(len(gateway.payloads), 5)
+        matches = gateway.payloads[0]["enterprise_capability_matches"]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]["capability_id"], capability.id)
+        self.assertEqual(matches[0]["source_locator"], "规格书第 2 页")
+        self.assertEqual(matches[0]["match_verdict"], "supported")
 
     def test_disabled_model_degrades_to_rule_only_with_no_opinions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

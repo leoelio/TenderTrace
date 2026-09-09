@@ -28,6 +28,10 @@ from tendertrace.delivery.preferences import (
     save_feishu_receiver,
 )
 from tendertrace.evaluation import build_agent_evaluation_report
+from tendertrace.business_measurements import (
+    business_measurement_summary,
+    upsert_business_measurement,
+)
 from tendertrace.integrations.feishu import (
     FeishuClient,
     FeishuError,
@@ -2378,6 +2382,24 @@ def create_app():
     @app.get("/api/evaluations/agent")
     def agent_evaluation() -> dict[str, object]:
         return build_agent_evaluation_report(settings)
+
+    @app.post("/api/evaluations/business-measurements")
+    def save_business_measurement(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        try:
+            item = upsert_business_measurement(
+                settings,
+                task_type=str(request.get("task_type") or ""),
+                sample_ref=str(request.get("sample_ref") or ""),
+                baseline_minutes=float(request.get("baseline_minutes") or 0),
+                assisted_minutes=float(request.get("assisted_minutes") or 0),
+                quality_status=str(request.get("quality_status") or "not_reviewed"),
+                reviewer=str(request.get("reviewer") or ""),
+                note=str(request.get("note") or ""),
+                recorded_by=str(request.get("recorded_by") or ""),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "saved", "item": item.to_dict(), "summary": business_measurement_summary(settings)}
 
     @app.post("/api/memory/events")
     def memory_event(request: dict[str, object] = Body(...)) -> dict[str, object]:
