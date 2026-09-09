@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date
 import hashlib
 import json
 from typing import Any
@@ -156,7 +157,12 @@ def upsert_capability(
 
 def list_capabilities(settings: Settings, *, verified_only: bool = False) -> list[EnterpriseCapability]:
     init_db(settings)
-    where = "WHERE verification_status = 'verified'" if verified_only else ""
+    where = (
+        "WHERE verification_status = 'verified' "
+        "AND (COALESCE(valid_until, '') = '' OR date(valid_until) >= date('now'))"
+        if verified_only
+        else ""
+    )
     with connection(settings) as conn:
         rows = conn.execute(
             f"SELECT * FROM enterprise_capabilities {where} ORDER BY verification_status, capability_type, title, rowid"
@@ -448,11 +454,19 @@ def _validate_capability(values: dict[str, str]) -> None:
         raise ValueError(f"unsupported capability_type: {values['capability_type']}")
     if values["verification_status"] not in VERIFICATION_STATUS_LABELS:
         raise ValueError(f"unsupported verification_status: {values['verification_status']}")
+    if values["valid_until"]:
+        try:
+            date.fromisoformat(values["valid_until"])
+        except ValueError as exc:
+            raise ValueError("valid_until must use YYYY-MM-DD") from exc
 
 
 def _capability_from_row(row: Any) -> EnterpriseCapability:
     capability_type = str(row["capability_type"] or "")
     verification_status = str(row["verification_status"] or "draft")
+    valid_until = str(row["valid_until"] or "")
+    if verification_status == "verified" and _is_expired(valid_until):
+        verification_status = "expired"
     return EnterpriseCapability(
         id=str(row["id"]),
         capability_key=str(row["capability_key"]),
@@ -465,7 +479,7 @@ def _capability_from_row(row: Any) -> EnterpriseCapability:
         verification_status=verification_status,
         verification_status_label=VERIFICATION_STATUS_LABELS.get(verification_status, verification_status),
         owner=str(row["owner"] or ""),
-        valid_until=str(row["valid_until"] or ""),
+        valid_until=valid_until,
         created_by=str(row["created_by"] or ""),
         created_at=str(row["created_at"] or ""),
         updated_at=str(row["updated_at"] or ""),
@@ -514,6 +528,15 @@ def _confidence(value: object) -> int:
         return max(0, min(100, int(round(float(value)))))
     except (TypeError, ValueError):
         return 0
+
+
+def _is_expired(value: str) -> bool:
+    if not value:
+        return False
+    try:
+        return date.fromisoformat(value) < date.today()
+    except ValueError:
+        return True
 
 
 def _record_event(conn, *, notice_id: str, action: str, payload: dict[str, object], actor: str) -> None:

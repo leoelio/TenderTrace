@@ -2824,6 +2824,7 @@ function capabilityEvidenceForm(noticeId) {
         <label><span>原文定位</span><input name="source_locator" required maxlength="300" placeholder="文件名第 2 页，第 3.1 条" /></label>
         <label><span>核验状态</span><select name="verification_status"><option value="draft">待核验</option><option value="verified">已核验</option><option value="expired">已失效</option></select></label>
         <label><span>资料负责人</span><input name="owner" maxlength="80" placeholder="可选" /></label>
+        <label><span>有效截止</span><input name="valid_until" type="date" /></label>
       </div>
       <div class="capability-evidence-form-actions"><button class="primary-lite-button" type="submit">保存企业证据</button></div>
     </form>
@@ -2846,6 +2847,7 @@ async function saveCapabilityEvidence(form) {
         source_locator: values.get("source_locator") || "",
         verification_status: values.get("verification_status") || "draft",
         owner: values.get("owner") || "",
+        valid_until: values.get("valid_until") || "",
         actor: "web:admin",
       }),
     });

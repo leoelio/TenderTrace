@@ -57,6 +57,29 @@ class CapabilityMatchingTests(unittest.TestCase):
         self.assertEqual(matches[0].verdict, "needs_evidence")
         self.assertEqual(matches[0].capability_id, "")
 
+    def test_expired_verified_evidence_is_excluded_from_ai_matching(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice_and_requirement(settings)
+            expired = upsert_capability(
+                settings,
+                capability_key="CAP-EXPIRED",
+                title="已到期资质证明",
+                capability_type="qualification",
+                evidence_text="资质曾经有效。",
+                source_url="https://example.com/cap-expired",
+                source_locator="证书第 1 页",
+                verification_status="verified",
+                valid_until="2000-01-01",
+            )
+            result = analyze_capability_matches(settings, "notice-1")
+            matches = list_requirement_capability_matches(settings, "notice-1")
+
+        self.assertEqual(expired.verification_status, "expired")
+        self.assertEqual(result["verified_capability_count"], 0)
+        self.assertEqual(matches[0].verdict, "needs_evidence")
+        self.assertEqual(matches[0].capability_id, "")
+
     def test_model_can_only_reference_verified_capability_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = _model_settings(Path(tmp))
