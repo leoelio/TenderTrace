@@ -541,6 +541,43 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS enterprise_capabilities (
+        id TEXT PRIMARY KEY,
+        capability_key TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        capability_type TEXT NOT NULL,
+        evidence_text TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        source_locator TEXT NOT NULL,
+        verification_status TEXT NOT NULL DEFAULT 'draft',
+        owner TEXT NOT NULL DEFAULT '',
+        valid_until TEXT,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS requirement_capability_matches (
+        id TEXT PRIMARY KEY,
+        notice_id TEXT NOT NULL,
+        requirement_id TEXT NOT NULL,
+        capability_id TEXT NOT NULL DEFAULT '',
+        verdict TEXT NOT NULL,
+        confidence INTEGER NOT NULL DEFAULT 0,
+        rationale TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'proposed',
+        decided_by TEXT,
+        decision_note TEXT,
+        decided_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (requirement_id, capability_id),
+        FOREIGN KEY (notice_id) REFERENCES notices(id),
+        FOREIGN KEY (requirement_id) REFERENCES opportunity_requirements(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS requirement_review_cases (
         id TEXT PRIMARY KEY,
         notice_id TEXT NOT NULL,
@@ -796,6 +833,9 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_opportunity_fact_overrides_notice ON opportunity_fact_overrides(notice_id, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_notice ON opportunity_requirements(notice_id, status, requirement_type)",
     "CREATE INDEX IF NOT EXISTS idx_opportunity_requirements_assignee ON opportunity_requirements(assignee_member_id, status, due_at)",
+    "CREATE INDEX IF NOT EXISTS idx_enterprise_capabilities_status ON enterprise_capabilities(verification_status, capability_type)",
+    "CREATE INDEX IF NOT EXISTS idx_requirement_capability_matches_notice ON requirement_capability_matches(notice_id, requirement_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_requirement_capability_matches_capability ON requirement_capability_matches(capability_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_cases_notice ON requirement_review_cases(notice_id, status, reviewer_role)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_review ON requirement_review_opinions(review_id, agent_role)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_notice ON requirement_review_opinions(notice_id, agent_role)",

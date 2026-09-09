@@ -1837,6 +1837,18 @@ function openOpportunityDetail(noticeId) {
         <div class="opportunity-revision-loading">正在加载要求账本</div>
       </div>
     </section>
+    <section id="opportunityCapabilitySection" class="opportunity-detail-section capability-matching-section">
+      <div class="opportunity-detail-section-title">
+        <div>
+          <h3>企业能力证据矩阵</h3>
+          <small>AI 仅可基于已核验、可定位的企业证据提出建议；最终结论由负责人确认。</small>
+        </div>
+        <button class="ghost-button" type="button" data-analyze-capability-matches="${escapeHtml(item.notice_id)}">生成匹配建议</button>
+      </div>
+      <div class="capability-matching-ledger" data-capability-matches="${escapeHtml(item.notice_id)}">
+        <div class="opportunity-revision-loading">正在加载能力证据矩阵</div>
+      </div>
+    </section>
     <section id="opportunityReviewSection" class="opportunity-detail-section review-board-section">
       <div class="opportunity-detail-section-title">
         <div>
@@ -1965,6 +1977,10 @@ function openOpportunityDetail(noticeId) {
   loadOpportunityRequirements(noticeId).catch((error) => {
     const container = currentOpportunityRequirementContainer(noticeId);
     if (container) container.innerHTML = `<div class="opportunity-revision-empty">要求账本加载失败：${escapeHtml(error.message || error)}</div>`;
+  });
+  loadOpportunityCapabilityMatches(noticeId).catch((error) => {
+    const container = currentOpportunityCapabilityMatchContainer(noticeId);
+    if (container) container.innerHTML = `<div class="opportunity-requirement-empty">能力证据矩阵加载失败：${escapeHtml(error.message || "请稍后重试")}</div>`;
   });
   loadOpportunityReviewBoard(noticeId).catch((error) => {
     const container = currentOpportunityReviewBoardContainer(noticeId);
@@ -2676,6 +2692,142 @@ async function saveOpportunityCollaborationNote(form) {
   });
   await loadOpportunityCollaborationNotes(noticeId);
   showToast("协作意见已写入机会审计链");
+}
+
+async function loadOpportunityCapabilityMatches(noticeId) {
+  const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/capability-matches`);
+  const container = currentOpportunityCapabilityMatchContainer(noticeId);
+  if (!container) return;
+  container.innerHTML = renderCapabilityMatches(payload, noticeId);
+}
+
+function currentOpportunityCapabilityMatchContainer(noticeId) {
+  const container = el.opportunityDetailContent?.querySelector("[data-capability-matches]");
+  return container?.dataset.capabilityMatches === noticeId ? container : null;
+}
+
+function renderCapabilityMatches(payload, noticeId) {
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const summary = payload.summary || {};
+  return `
+    <div class="capability-match-summary">
+      <span>人工已确认 <strong>${escapeHtml(summary.confirmed_count || 0)}</strong></span>
+      <span class="is-supported">证据可支撑 <strong>${escapeHtml(summary.supported_count || 0)}</strong></span>
+      <span class="is-warning">待补证据 <strong>${escapeHtml(summary.needs_evidence_count || 0)}</strong></span>
+      ${Number(summary.recheck_count) ? `<span class="is-warning">公告变化待复核 <strong>${escapeHtml(summary.recheck_count)}</strong></span>` : ""}
+    </div>
+    <div class="capability-match-list">
+      ${items.length ? items.map(capabilityMatchRow).join("") : '<div class="opportunity-requirement-empty">暂无匹配结论。先录入并核验企业能力证据，再生成建议。</div>'}
+    </div>
+    ${capabilityEvidenceForm(noticeId)}
+  `;
+}
+
+function capabilityMatchRow(item) {
+  const decisionReady = item.status === "proposed" || item.status === "recheck";
+  return `
+    <article class="capability-match-row verdict-${escapeHtml(item.verdict || "needs_evidence")} status-${escapeHtml(item.status || "proposed")}">
+      <div class="capability-match-heading">
+        <strong>${escapeHtml(item.requirement_key || "要求待确认")}</strong>
+        <span>${escapeHtml(item.verdict_label || item.verdict || "待判断")}</span>
+        <em>${escapeHtml(item.status_label || item.status || "待确认")}</em>
+      </div>
+      <div class="capability-match-pair">
+        <div><small>招标要求</small><strong>${escapeHtml(item.requirement_title || "未命名要求")}</strong></div>
+        <i>对照</i>
+        <div><small>企业证据</small><strong>${escapeHtml(item.capability_title || "未关联企业证据")}</strong></div>
+      </div>
+      <p>${escapeHtml(item.rationale || "尚未形成可审计的判断依据。")}</p>
+      <small>建议置信度 ${escapeHtml(item.confidence || 0)}%${item.decided_by ? ` · ${escapeHtml(item.decided_by)}：${escapeHtml(item.decision_note || "已记录")}` : ""}</small>
+      ${decisionReady ? `<form class="capability-match-decision-form" data-capability-match-decision="${escapeHtml(item.notice_id)}" data-match-id="${escapeHtml(item.id)}">
+        <select name="verdict"><option value="supported">证据可支撑</option><option value="gap">存在缺口</option><option value="needs_evidence">需补充证据</option></select>
+        <input name="actor" required maxlength="80" placeholder="确认人" />
+        <input name="note" required maxlength="500" placeholder="确认依据（保留在审计链）" />
+        <button class="link-button" name="accept" value="true" type="submit">确认结论</button>
+        <button class="link-button" name="accept" value="false" type="submit">不采纳</button>
+      </form>` : ""}
+    </article>
+  `;
+}
+
+function capabilityEvidenceForm(noticeId) {
+  return `
+    <form class="capability-evidence-form" data-capability-evidence-form="${escapeHtml(noticeId)}">
+      <div class="capability-evidence-form-heading"><strong>录入企业能力证据</strong><small>只有“已核验”的资料可进入 AI 对照范围。</small></div>
+      <div class="capability-evidence-form-grid">
+        <label><span>证据编号</span><input name="capability_key" required maxlength="80" placeholder="例如 CAP-SERVER-01" /></label>
+        <label><span>类别</span><select name="capability_type"><option value="product">产品与方案</option><option value="qualification">资质与合规</option><option value="delivery">交付与服务</option><option value="case">项目案例</option></select></label>
+        <label class="capability-wide"><span>能力或资料名称</span><input name="title" required maxlength="300" placeholder="例如：服务器产品规格与交付说明" /></label>
+        <label class="capability-wide"><span>证据摘录</span><textarea name="evidence_text" required rows="2" maxlength="2000" placeholder="保留规格、资质、案例或交付能力的原文内容"></textarea></label>
+        <label><span>证据链接</span><input name="source_url" type="url" required placeholder="https://..." /></label>
+        <label><span>原文定位</span><input name="source_locator" required maxlength="300" placeholder="文件名第 2 页，第 3.1 条" /></label>
+        <label><span>核验状态</span><select name="verification_status"><option value="draft">待核验</option><option value="verified">已核验</option><option value="expired">已失效</option></select></label>
+        <label><span>资料负责人</span><input name="owner" maxlength="80" placeholder="可选" /></label>
+      </div>
+      <div class="capability-evidence-form-actions"><button class="primary-lite-button" type="submit">保存企业证据</button></div>
+    </form>
+  `;
+}
+
+async function saveCapabilityEvidence(form) {
+  const values = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    await api("/api/capabilities", {
+      method: "POST",
+      body: JSON.stringify({
+        capability_key: values.get("capability_key") || "",
+        title: values.get("title") || "",
+        capability_type: values.get("capability_type") || "product",
+        evidence_text: values.get("evidence_text") || "",
+        source_url: values.get("source_url") || "",
+        source_locator: values.get("source_locator") || "",
+        verification_status: values.get("verification_status") || "draft",
+        owner: values.get("owner") || "",
+        actor: "web:admin",
+      }),
+    });
+    form.reset();
+    showToast("企业能力证据已保存；核验后可用于 AI 对照");
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+}
+
+async function analyzeOpportunityCapabilityMatches(noticeId) {
+  const button = el.opportunityDetailContent?.querySelector(`[data-analyze-capability-matches="${CSS.escape(noticeId)}"]`);
+  if (button) button.disabled = true;
+  try {
+    const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/capability-matches/analyze`, { method: "POST" });
+    await loadOpportunityCapabilityMatches(noticeId);
+    showToast(`匹配建议已生成：${result.proposal_count || 0} 条（${result.mode === "ai_assisted" ? "AI 辅助" : "证据优先"}）`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function decideCapabilityMatch(form, submitter) {
+  const noticeId = form.dataset.capabilityMatchDecision || "";
+  const matchId = form.dataset.matchId || "";
+  const values = new FormData(form);
+  const submit = submitter || form.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    await api(`/api/opportunities/${encodeURIComponent(noticeId)}/capability-matches/${encodeURIComponent(matchId)}/decision`, {
+      method: "POST",
+      body: JSON.stringify({
+        verdict: values.get("verdict") || "needs_evidence",
+        actor: values.get("actor") || "",
+        note: values.get("note") || "",
+        accept: submitter?.value !== "false",
+      }),
+    });
+    await loadOpportunityCapabilityMatches(noticeId);
+    showToast("能力匹配结论已写入审计链");
+  } finally {
+    if (submit) submit.disabled = false;
+  }
 }
 
 function renderOpportunityRequirements(payload, item) {
@@ -5249,6 +5401,18 @@ function normalizeWorkbenchLayout() {
 
 function bindEvents() {
   document.addEventListener("submit", (event) => {
+    const capabilityDecisionForm = event.target.closest("[data-capability-match-decision]");
+    if (capabilityDecisionForm) {
+      event.preventDefault();
+      decideCapabilityMatch(capabilityDecisionForm, event.submitter).catch(toastError("匹配结论保存失败"));
+      return;
+    }
+    const capabilityEvidenceForm = event.target.closest("[data-capability-evidence-form]");
+    if (capabilityEvidenceForm) {
+      event.preventDefault();
+      saveCapabilityEvidence(capabilityEvidenceForm).catch(toastError("企业能力证据保存失败"));
+      return;
+    }
     const humanReviewOpinionForm = event.target.closest("[data-human-review-opinion-form]");
     if (humanReviewOpinionForm) {
       event.preventDefault();
@@ -5397,6 +5561,13 @@ function bindEvents() {
         editRequirementTarget.dataset.opportunityId || "",
         editRequirementTarget.dataset.editOpportunityRequirement || "",
       );
+      return;
+    }
+    const analyzeCapabilityMatchesTarget = event.target.closest("[data-analyze-capability-matches]");
+    if (analyzeCapabilityMatchesTarget) {
+      analyzeOpportunityCapabilityMatches(
+        analyzeCapabilityMatchesTarget.dataset.analyzeCapabilityMatches || "",
+      ).catch(toastError("能力匹配分析失败"));
       return;
     }
     const resetRequirementTarget = event.target.closest("[data-reset-opportunity-requirement]");

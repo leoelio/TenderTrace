@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from tendertrace.config import Settings
+from tendertrace.capability_matching import mark_capability_matches_for_recheck
 from tendertrace.db import connection, init_db
 from tendertrace.opportunity_requirements import OpportunityRequirement, list_requirements
 from tendertrace.requirement_change_impact import requirement_change_impact
@@ -57,6 +58,7 @@ def sync_requirement_review_cases(settings: Settings, notice_id: str) -> dict[st
         for item in requirement_change_impact(settings, notice_id).get("items", [])
         if isinstance(item, dict)
     }
+    recheck_count = mark_capability_matches_for_recheck(settings, notice_id, set(impacts))
     candidates = [
         candidate
         for requirement in requirements
@@ -100,6 +102,7 @@ def sync_requirement_review_cases(settings: Settings, notice_id: str) -> dict[st
             )
     return {
         "created_count": created_count,
+        "capability_recheck_count": recheck_count,
         "items": [item.to_dict() for item in list_requirement_review_cases(settings, notice_id)],
         "summary": requirement_review_summary(settings, notice_id),
     }

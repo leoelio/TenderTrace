@@ -6216,6 +6216,160 @@ tbody tr:hover {
   border-left: 3px solid rgba(18, 101, 214, 0.64);
 }
 
+.capability-matching-section {
+  border-left: 3px solid rgba(20, 122, 92, 0.68);
+  background: linear-gradient(90deg, rgba(239, 250, 246, 0.54), rgba(255, 255, 255, 0));
+}
+
+.capability-matching-ledger,
+.capability-match-list,
+.capability-evidence-form {
+  display: grid;
+  gap: 10px;
+}
+
+.capability-match-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 2px 0 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.capability-match-summary strong { color: var(--text); }
+.capability-match-summary .is-supported { color: #087b54; }
+.capability-match-summary .is-warning { color: #9a6507; }
+
+.capability-match-row {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(20, 122, 92, 0.2);
+  border-left: 3px solid #0b8b63;
+  border-radius: 7px;
+  background: rgba(249, 255, 252, 0.62);
+}
+
+.capability-match-row.verdict-gap {
+  border-color: rgba(190, 92, 44, 0.28);
+  border-left-color: #c16a34;
+  background: rgba(255, 250, 246, 0.62);
+}
+
+.capability-match-row.verdict-needs_evidence,
+.capability-match-row.status-recheck {
+  border-color: rgba(196, 133, 22, 0.3);
+  border-left-color: #c48516;
+  background: rgba(255, 252, 244, 0.64);
+}
+
+.capability-match-heading,
+.capability-match-pair,
+.capability-match-decision-form,
+.capability-evidence-form-heading,
+.capability-evidence-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.capability-match-heading span,
+.capability-match-heading em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.capability-match-heading em {
+  margin-left: auto;
+  color: #087b54;
+}
+
+.capability-match-row.status-recheck .capability-match-heading em { color: #9a6507; }
+
+.capability-match-pair {
+  align-items: stretch;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(20, 122, 92, 0.12);
+  border-bottom: 1px solid rgba(20, 122, 92, 0.12);
+}
+
+.capability-match-pair > div {
+  display: grid;
+  flex: 1 1 0;
+  gap: 3px;
+  min-width: 0;
+}
+
+.capability-match-pair small,
+.capability-match-row > small,
+.capability-evidence-form-heading small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.capability-match-pair strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.capability-match-pair i {
+  align-self: center;
+  color: #0b8b63;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.capability-match-row p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.capability-match-decision-form {
+  align-items: stretch;
+  margin-top: 2px;
+}
+
+.capability-match-decision-form select,
+.capability-match-decision-form input {
+  min-width: 0;
+}
+
+.capability-match-decision-form input:nth-of-type(2) { flex: 1 1 220px; }
+
+.capability-evidence-form {
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid rgba(20, 122, 92, 0.2);
+  border-radius: 7px;
+  background: rgba(245, 252, 249, 0.72);
+}
+
+.capability-evidence-form-heading { justify-content: space-between; }
+.capability-evidence-form-heading strong { font-size: 12px; }
+
+.capability-evidence-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 12px;
+}
+
+.capability-evidence-form-grid label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.capability-evidence-form-grid input,
+.capability-evidence-form-grid select,
+.capability-evidence-form-grid textarea { min-width: 0; }
+.capability-evidence-form-grid .capability-wide { grid-column: 1 / -1; }
+
 .opportunity-requirement-ledger,
 .opportunity-requirement-list,
 .opportunity-requirement-form {
@@ -6821,6 +6975,23 @@ tbody tr:hover {
   .opportunity-requirement-form-grid {
     grid-template-columns: 1fr;
   }
+
+  .capability-evidence-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .capability-match-decision-form,
+  .capability-evidence-form-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .capability-match-pair {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .capability-match-pair i { align-self: flex-start; }
 
   .change-impact-grid {
     grid-template-columns: 1fr;

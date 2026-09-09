@@ -110,6 +110,14 @@ from tendertrace.opportunity_requirements import (
     requirement_summary,
     upsert_requirement,
 )
+from tendertrace.capability_matching import (
+    analyze_capability_matches,
+    capability_match_summary,
+    decide_capability_match,
+    list_capabilities,
+    list_requirement_capability_matches,
+    upsert_capability,
+)
 from tendertrace.requirement_extraction import extract_and_save_requirements
 from tendertrace.requirement_change_impact import requirement_change_impact
 from tendertrace.requirement_review_board import (
@@ -1206,6 +1214,74 @@ def create_app():
             "items": [item.to_dict() for item in list_requirements(settings, notice_id)],
             "summary": requirement_summary(settings, notice_id),
             "impact": requirement_change_impact(settings, notice_id),
+        }
+
+    @app.get("/api/capabilities")
+    def enterprise_capabilities() -> dict[str, object]:
+        return {"items": [item.to_dict() for item in list_capabilities(settings)]}
+
+    @app.post("/api/capabilities")
+    def save_enterprise_capability(request: dict[str, object] = Body(...)) -> dict[str, object]:
+        try:
+            capability = upsert_capability(
+                settings,
+                capability_key=str(request.get("capability_key") or ""),
+                title=str(request.get("title") or ""),
+                capability_type=str(request.get("capability_type") or ""),
+                evidence_text=str(request.get("evidence_text") or ""),
+                source_url=str(request.get("source_url") or ""),
+                source_locator=str(request.get("source_locator") or ""),
+                verification_status=str(request.get("verification_status") or "draft"),
+                owner=str(request.get("owner") or ""),
+                valid_until=str(request.get("valid_until") or ""),
+                actor=str(request.get("actor") or "admin"),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "saved", "capability": capability.to_dict()}
+
+    @app.get("/api/opportunities/{notice_id}/capability-matches")
+    def opportunity_capability_matches(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return {
+            "items": [item.to_dict() for item in list_requirement_capability_matches(settings, notice_id)],
+            "summary": capability_match_summary(settings, notice_id),
+        }
+
+    @app.post("/api/opportunities/{notice_id}/capability-matches/analyze")
+    def analyze_opportunity_capability_matches(notice_id: str) -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        try:
+            return analyze_capability_matches(settings, notice_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/capability-matches/{match_id}/decision")
+    def decide_opportunity_capability_match(
+        notice_id: str,
+        match_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            item = decide_capability_match(
+                settings,
+                notice_id,
+                match_id,
+                verdict=str(request.get("verdict") or ""),
+                actor=str(request.get("actor") or "admin"),
+                note=str(request.get("note") or ""),
+                accept=bool(request.get("accept")),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "status": "saved",
+            "item": item.to_dict(),
+            "summary": capability_match_summary(settings, notice_id),
         }
 
     @app.post("/api/opportunities/{notice_id}/requirements/extract")
