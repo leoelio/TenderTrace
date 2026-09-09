@@ -648,6 +648,27 @@ DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS requirement_review_actions (
+        id TEXT PRIMARY KEY,
+        opinion_id TEXT NOT NULL UNIQUE,
+        notice_id TEXT NOT NULL,
+        requirement_id TEXT NOT NULL,
+        assignee_member_id TEXT,
+        due_at TEXT,
+        action_note TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        completed_by TEXT,
+        completion_note TEXT,
+        completed_at TEXT,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (opinion_id) REFERENCES requirement_review_human_opinions(id),
+        FOREIGN KEY (requirement_id) REFERENCES opportunity_requirements(id),
+        FOREIGN KEY (assignee_member_id) REFERENCES opportunity_team_members(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS feishu_lead_import_runs (
         id TEXT PRIMARY KEY,
         mode TEXT NOT NULL,
@@ -856,6 +877,7 @@ INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_review ON requirement_review_opinions(review_id, agent_role)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_opinions_notice ON requirement_review_opinions(notice_id, agent_role)",
     "CREATE INDEX IF NOT EXISTS idx_requirement_review_human_opinions_notice ON requirement_review_human_opinions(notice_id, requirement_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_requirement_review_actions_notice ON requirement_review_actions(notice_id, status, due_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_lead_import_runs_time ON feishu_lead_import_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_feishu_message_events_status ON feishu_message_events(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_organization_workspaces_status ON organization_workspaces(status, updated_at)",

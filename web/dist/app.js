@@ -2532,7 +2532,9 @@ function currentOpportunityWarRoomPlanContainer(noticeId) {
 async function loadOpportunityReviewBoard(noticeId) {
   const payload = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board`);
   const container = currentOpportunityReviewBoardContainer(noticeId);
-  if (container) container.innerHTML = renderOpportunityReviewBoard(payload);
+  const opportunity = state.opportunities.find((item) => item.notice_id === noticeId) || {};
+  const members = Array.isArray(opportunity.team?.members) ? opportunity.team.members : [];
+  if (container) container.innerHTML = renderOpportunityReviewBoard(payload, members);
   refreshOpportunityJourney(noticeId, payload.summary || {});
 }
 
@@ -2541,14 +2543,17 @@ function currentOpportunityReviewBoardContainer(noticeId) {
   return container?.dataset.requirementReviewBoard === noticeId ? container : null;
 }
 
-function renderOpportunityReviewBoard(payload) {
+function renderOpportunityReviewBoard(payload, members = []) {
   const items = Array.isArray(payload.items) ? payload.items : [];
   const summary = payload.summary || {};
   const opinions = Array.isArray(payload.opinions) ? payload.opinions : [];
   const humanOpinions = Array.isArray(payload.human_opinions) ? payload.human_opinions : [];
+  const actions = Array.isArray(payload.actions) ? payload.actions : [];
+  const actionSummary = payload.action_summary || {};
   const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
   const opinionsByReview = new Map();
   const humanOpinionsByRequirement = new Map();
+  const actionsByOpinion = new Map(actions.map((action) => [action.opinion_id, action]));
   opinions.forEach((opinion) => {
     const current = opinionsByReview.get(opinion.review_id) || [];
     current.push(opinion);
@@ -2563,9 +2568,12 @@ function renderOpportunityReviewBoard(payload) {
     <div class="requirement-review-summary">
       <span>待会审 <strong>${escapeHtml(summary.pending_count || 0)}</strong> 项</span>
       <span>已裁决 <strong>${escapeHtml(summary.resolved_count || 0)}</strong> 项</span>
+      ${Number(actionSummary.open_count) ? `<span>待行动 <strong>${escapeHtml(actionSummary.open_count)}</strong> 项</span>` : ""}
+      ${Number(actionSummary.unassigned_count) ? `<span class="is-warning">未指定负责人 <strong>${escapeHtml(actionSummary.unassigned_count)}</strong></span>` : ""}
+      ${Number(actionSummary.undated_count) ? `<span class="is-warning">未设期限 <strong>${escapeHtml(actionSummary.undated_count)}</strong></span>` : ""}
     </div>
     <div class="requirement-review-list">
-      ${items.length ? items.map((item) => requirementReviewCase(item, humanOpinionsByRequirement.get(item.requirement_id) || [])).join("") : '<div class="opportunity-requirement-empty">尚无会审项。生成后不会自动改变要求账本结论。</div>'}
+      ${items.length ? items.map((item) => requirementReviewCase(item, humanOpinionsByRequirement.get(item.requirement_id) || [], actionsByOpinion, members)).join("") : '<div class="opportunity-requirement-empty">尚无会审项。生成后不会自动改变要求账本结论。</div>'}
     </div>
     ${suggestions.length ? `<section class="review-agent-panel" aria-label="AI 会审建议">
       <div><strong>AI 会审建议</strong><small>建议只辅助人工裁决，不会改写要求账本。</small></div>
@@ -2589,7 +2597,7 @@ function reviewAgentSuggestion(suggestion, opinions) {
   `;
 }
 
-function requirementReviewCase(item, humanOpinions) {
+function requirementReviewCase(item, humanOpinions, actionsByOpinion, members) {
   const resolved = item.status === "resolved";
   return `
     <article class="requirement-review-case status-${escapeHtml(item.status || "pending")}">
@@ -2604,7 +2612,7 @@ function requirementReviewCase(item, humanOpinions) {
         </form>
       `}
       <div class="human-review-opinion-list">
-        ${humanOpinions.length ? humanOpinions.map((opinion) => `<p><strong>${escapeHtml(opinion.actor || "协作成员")}</strong><span>${escapeHtml(opinion.channel === "feishu_group" ? "飞书群" : "网页")} · ${escapeHtml(compactDateTimeText(opinion.created_at || ""))}</span><small>${escapeHtml(opinion.content || "")}</small></p>`).join("") : '<small>暂无协作意见</small>'}
+        ${humanOpinions.length ? humanOpinions.map((opinion) => reviewOpinionActionRow(item, opinion, actionsByOpinion.get(opinion.id), members)).join("") : '<small>暂无协作意见</small>'}
       </div>
       <form class="human-review-opinion-form" data-human-review-opinion-form="${escapeHtml(item.notice_id)}" data-requirement-id="${escapeHtml(item.requirement_id)}">
         <input name="actor" required maxlength="80" placeholder="署名" />
@@ -2613,6 +2621,17 @@ function requirementReviewCase(item, humanOpinions) {
       </form>
     </article>
   `;
+}
+
+function reviewOpinionActionRow(item, opinion, action, members) {
+  const memberOptions = [
+    '<option value="">暂不指定负责人</option>',
+    ...members.map((member) => `<option value="${escapeHtml(member.id || "")}">${escapeHtml(member.member_name || "未命名成员")}</option>`),
+  ].join("");
+  const actionState = action
+    ? `<div class="review-opinion-action status-${escapeHtml(action.status || "open")}"><strong>${escapeHtml(action.status_label || action.status || "待处理")}</strong><span>${escapeHtml(action.action_note || "")}</span><small>${escapeHtml(action.assignee_name || "未指定负责人")}${action.due_at ? ` · ${escapeHtml(action.due_at)}` : " · 未设期限"}${action.feishu_task_guid ? ` · 飞书${escapeHtml(action.feishu_task_status === "completed" ? "已完成" : "已同步")}` : ""}</small>${action.status === "open" ? `<div class="review-opinion-action-controls">${!action.feishu_task_guid && action.assignee_member_id && action.due_at ? `<button class="link-button" type="button" data-sync-review-opinion-action="${escapeHtml(action.notice_id)}" data-action-id="${escapeHtml(action.id)}">同步飞书任务</button>` : ""}<form class="review-opinion-complete-form" data-review-opinion-complete="${escapeHtml(action.notice_id)}" data-action-id="${escapeHtml(action.id)}"><input name="actor" required maxlength="80" placeholder="完成人" /><input name="completion_note" required maxlength="1000" placeholder="完成依据" /><button class="link-button" type="submit">完成行动</button></form></div>` : `<small>${escapeHtml(action.completed_by || "")} · ${escapeHtml(action.completion_note || "")}</small>`}</div>`
+    : `<form class="review-opinion-action-form" data-review-opinion-action="${escapeHtml(item.notice_id)}" data-opinion-id="${escapeHtml(opinion.id)}"><select name="assignee_member_id">${memberOptions}</select><input name="due_at" type="datetime-local" /><input name="action_note" required maxlength="1000" placeholder="明确下一步待处理事项" /><input name="actor" required maxlength="80" placeholder="确认人" /><button class="link-button" type="submit">转为行动</button></form>`;
+  return `<div class="review-opinion-row"><p><strong>${escapeHtml(opinion.actor || "协作成员")}</strong><span>${escapeHtml(opinion.channel === "feishu_group" ? "飞书群" : "网页")} · ${escapeHtml(compactDateTimeText(opinion.created_at || ""))}</span><small>${escapeHtml(opinion.content || "")}</small></p>${actionState}</div>`;
 }
 
 async function syncOpportunityReviewBoard(noticeId) {
@@ -2753,6 +2772,44 @@ async function saveOpportunityCollaborationNote(form) {
   });
   await loadOpportunityCollaborationNotes(noticeId);
   showToast("协作意见已写入机会审计链");
+}
+
+async function createReviewOpinionAction(form) {
+  const noticeId = form.dataset.reviewOpinionAction || "";
+  const opinionId = form.dataset.opinionId || "";
+  const values = new FormData(form);
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/opinions/${encodeURIComponent(opinionId)}/actions`, {
+    method: "POST",
+    body: JSON.stringify({
+      assignee_member_id: values.get("assignee_member_id") || "",
+      due_at: values.get("due_at") || "",
+      action_note: values.get("action_note") || "",
+      actor: values.get("actor") || "",
+    }),
+  });
+  await loadOpportunityReviewBoard(noticeId);
+  showToast("会审意见已转为待处理行动");
+}
+
+async function completeReviewOpinionAction(form) {
+  const noticeId = form.dataset.reviewOpinionComplete || "";
+  const actionId = form.dataset.actionId || "";
+  const values = new FormData(form);
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/actions/${encodeURIComponent(actionId)}/complete`, {
+    method: "POST",
+    body: JSON.stringify({
+      actor: values.get("actor") || "",
+      completion_note: values.get("completion_note") || "",
+    }),
+  });
+  await loadOpportunityReviewBoard(noticeId);
+  showToast("会审行动已完成并保留处理依据");
+}
+
+async function syncReviewOpinionAction(noticeId, actionId) {
+  await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/actions/${encodeURIComponent(actionId)}/sync-feishu`, { method: "POST" });
+  await loadOpportunityReviewBoard(noticeId);
+  showToast("会审行动已同步至飞书要求任务");
 }
 
 async function loadOpportunityCapabilityMatches(noticeId) {
@@ -5464,6 +5521,18 @@ function normalizeWorkbenchLayout() {
 
 function bindEvents() {
   document.addEventListener("submit", (event) => {
+    const reviewOpinionCompleteForm = event.target.closest("[data-review-opinion-complete]");
+    if (reviewOpinionCompleteForm) {
+      event.preventDefault();
+      completeReviewOpinionAction(reviewOpinionCompleteForm).catch(toastError("会审行动完成失败"));
+      return;
+    }
+    const reviewOpinionActionForm = event.target.closest("[data-review-opinion-action]");
+    if (reviewOpinionActionForm) {
+      event.preventDefault();
+      createReviewOpinionAction(reviewOpinionActionForm).catch(toastError("会审行动创建失败"));
+      return;
+    }
     const businessMeasurementForm = event.target.closest("#businessMeasurementForm");
     if (businessMeasurementForm) {
       event.preventDefault();
@@ -5637,6 +5706,14 @@ function bindEvents() {
       analyzeOpportunityCapabilityMatches(
         analyzeCapabilityMatchesTarget.dataset.analyzeCapabilityMatches || "",
       ).catch(toastError("能力匹配分析失败"));
+      return;
+    }
+    const syncReviewOpinionActionTarget = event.target.closest("[data-sync-review-opinion-action]");
+    if (syncReviewOpinionActionTarget) {
+      syncReviewOpinionAction(
+        syncReviewOpinionActionTarget.dataset.syncReviewOpinionAction || "",
+        syncReviewOpinionActionTarget.dataset.actionId || "",
+      ).catch(toastError("会审行动同步飞书失败"));
       return;
     }
     const resetRequirementTarget = event.target.closest("[data-reset-opportunity-requirement]");

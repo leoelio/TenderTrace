@@ -6725,6 +6725,62 @@ tbody tr:hover {
   align-items: baseline;
 }
 
+.review-opinion-row {
+  display: grid;
+  gap: 6px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(18, 101, 214, 0.1);
+}
+
+.review-opinion-row:last-child { border-bottom: 0; }
+
+.review-opinion-action,
+.review-opinion-action-form,
+.review-opinion-complete-form {
+  display: grid;
+  gap: 6px;
+}
+
+.review-opinion-action-controls {
+  display: grid;
+  gap: 6px;
+}
+
+.review-opinion-action-controls > .link-button { justify-self: start; }
+
+.review-opinion-action {
+  padding: 7px 8px;
+  border: 1px solid rgba(18, 101, 214, 0.16);
+  border-left: 3px solid #0b8b63;
+  border-radius: 5px;
+  background: rgba(245, 252, 249, 0.56);
+}
+
+.review-opinion-action.status-completed {
+  border-left-color: #087b54;
+  background: rgba(241, 251, 245, 0.58);
+}
+
+.review-opinion-action span,
+.review-opinion-action small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.review-opinion-action-form,
+.review-opinion-complete-form {
+  grid-template-columns: minmax(110px, 0.8fr) minmax(120px, 0.9fr) minmax(0, 1.6fr) minmax(88px, 0.7fr) auto;
+  align-items: center;
+}
+
+.review-opinion-complete-form {
+  grid-template-columns: minmax(88px, 0.6fr) minmax(0, 1.6fr) auto;
+}
+
+.review-opinion-action-form select,
+.review-opinion-action-form input,
+.review-opinion-complete-form input { min-width: 0; }
+
 .human-review-opinion-list small {
   overflow-wrap: anywhere;
 }
@@ -7087,6 +7143,12 @@ tbody tr:hover {
   .requirement-review-form {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .review-opinion-action-form,
+  .review-opinion-complete-form {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .review-board-actions,

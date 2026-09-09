@@ -139,6 +139,13 @@ from tendertrace.requirement_review_human_opinions import (
     list_human_review_opinions,
     record_human_review_opinion,
 )
+from tendertrace.requirement_review_actions import (
+    bind_review_action_to_requirement,
+    complete_review_action,
+    create_review_action,
+    list_review_actions,
+    review_action_summary,
+)
 from tendertrace.organization_memory import (
     OrganizationWorkspace,
     add_members as add_organization_members,
@@ -1369,6 +1376,8 @@ def create_app():
             "human_opinions": [
                 item.to_dict() for item in list_human_review_opinions(settings, notice_id)
             ],
+            "actions": [item.to_dict() for item in list_review_actions(settings, notice_id)],
+            "action_summary": review_action_summary(settings, notice_id),
             "suggestions": review_agent_suggestions(settings, notice_id),
         }
 
@@ -1438,6 +1447,83 @@ def create_app():
             "human_opinions": [
                 item.to_dict() for item in list_human_review_opinions(settings, notice_id)
             ],
+        }
+
+    @app.post("/api/opportunities/{notice_id}/review-board/opinions/{opinion_id}/actions")
+    def create_opportunity_review_action(
+        notice_id: str,
+        opinion_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            action = create_review_action(
+                settings,
+                notice_id=notice_id,
+                opinion_id=opinion_id,
+                assignee_member_id=str(request.get("assignee_member_id") or ""),
+                due_at=str(request.get("due_at") or ""),
+                action_note=str(request.get("action_note") or ""),
+                actor=str(request.get("actor") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "status": "saved",
+            "action": action.to_dict(),
+            "summary": review_action_summary(settings, notice_id),
+        }
+
+    @app.post("/api/opportunities/{notice_id}/review-board/actions/{action_id}/complete")
+    def complete_opportunity_review_action(
+        notice_id: str,
+        action_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            action = complete_review_action(
+                settings,
+                notice_id=notice_id,
+                action_id=action_id,
+                actor=str(request.get("actor") or ""),
+                completion_note=str(request.get("completion_note") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "status": "completed",
+            "action": action.to_dict(),
+            "summary": review_action_summary(settings, notice_id),
+        }
+
+    @app.post("/api/opportunities/{notice_id}/review-board/actions/{action_id}/sync-feishu")
+    def sync_opportunity_review_action_to_feishu(
+        notice_id: str,
+        action_id: str,
+    ) -> dict[str, object]:
+        try:
+            action = bind_review_action_to_requirement(
+                settings,
+                notice_id=notice_id,
+                action_id=action_id,
+            )
+            result = sync_requirements_to_feishu(
+                settings,
+                notice_id,
+                requirement_ids={action.requirement_id},
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "status": result.status,
+            "action": action.to_dict(),
+            "sync": result.to_dict(),
+            "summary": review_action_summary(settings, notice_id),
         }
 
     @app.post("/api/opportunities/{notice_id}/review-board/{review_id}/resolve")

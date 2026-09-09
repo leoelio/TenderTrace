@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 import hashlib
 import json
-from typing import Any
+from typing import Any, Iterable
 from uuid import uuid4
 
 from tendertrace.config import Settings
@@ -35,6 +35,7 @@ def sync_requirements_to_feishu(
     *,
     client: FeishuClient | None = None,
     limit: int = 100,
+    requirement_ids: Iterable[str] | None = None,
 ) -> RequirementSyncResult:
     """Idempotently create one Feishu Task v2 per actionable requirement.
 
@@ -45,6 +46,9 @@ def sync_requirements_to_feishu(
     """
     init_db(settings)
     requirements = list_requirements(settings, notice_id)
+    requested_ids = {str(value).strip() for value in requirement_ids or () if str(value).strip()}
+    if requested_ids:
+        requirements = [item for item in requirements if item.id in requested_ids]
     feishu = client or FeishuClient(settings)
     created_count = 0
     skipped_count = 0
