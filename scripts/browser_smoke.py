@@ -43,6 +43,23 @@ def main(url: str) -> int:
             return 1
         print(f"OK  ambiguous-query clarification chip: {clarify.inner_text()!r}")
 
+        edit_button = page.locator("[data-edit-intent]")
+        if edit_button.count() != 1:
+            print("FAIL: inline clarification edit action not shown")
+            return 1
+        edit_button.click()
+        if page.evaluate("document.activeElement?.id") != "queryInput":
+            print("FAIL: clarification edit action did not return focus to query input")
+            return 1
+        print("OK  inline clarification actions are available and editable")
+
+        page.evaluate(
+            "document.querySelector('#runForm').addEventListener('submit', event => event.preventDefault(), {capture: true, once: true})"
+        )
+        page.locator("[data-confirm-intent]").click()
+        page.locator(".clarify-chip.is-confirmed").wait_for(timeout=5000)
+        print("OK  inline clarification confirmation is recorded before submission")
+
         browser.close()
     print("PASS: browser smoke test")
     return 0

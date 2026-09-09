@@ -221,6 +221,8 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("ensureIntentReady", js)
         self.assertIn("clarificationQuestions", js)
         self.assertIn("needs-clarification", js)
+        self.assertIn("data-confirm-intent", js)
+        self.assertIn("intent-clarification", css)
         self.assertIn("refreshAll", js)
         self.assertIn("renderNotifications", js)
         self.assertIn("trackActivity", js)

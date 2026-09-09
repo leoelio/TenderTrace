@@ -32,6 +32,7 @@ const state = {
   outboxFilters: { query: "", status: "all", sort: "created_desc", expanded: false },
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
+  intentConfirmation: { query: "", confirmed: false },
   theme: "light",
 };
 
@@ -3698,6 +3699,7 @@ function renderIntentPreview(bidql) {
     : bidql.time?.kind || "默认时间";
   const schedule = bidql.schedule?.kind === "immediate" ? "立即执行" : bidql.schedule?.time || bidql.schedule?.kind;
   const clarifications = clarificationQuestions(bidql);
+  const confirmed = state.intentConfirmation.confirmed && state.intentConfirmation.query === bidql.query;
   el.intentPreview.className = `intent-preview${clarifications.length ? " needs-clarification" : ""}`;
   el.intentPreview.innerHTML = `
     <span>区域：${escapeHtml(region)}</span>
@@ -3705,10 +3707,30 @@ function renderIntentPreview(bidql) {
     <span>时间：${escapeHtml(time)}</span>
     <span>计划：${escapeHtml(schedule)}</span>
     ${
-      clarifications.length
-        ? `<span class="clarify-chip">需确认：${escapeHtml(clarifications.map((item) => item.question).join("；"))}</span>`
+      clarifications.length && !confirmed
+        ? intentClarificationHtml(clarifications)
+        : clarifications.length
+          ? '<span class="clarify-chip is-confirmed">已按当前解析确认</span>'
         : ""
     }
+  `;
+}
+
+function intentClarificationHtml(clarifications) {
+  const candidateText = clarifications
+    .flatMap((item) => Array.isArray(item.candidates) ? item.candidates : [])
+    .map((candidate) => String(candidate).trim())
+    .filter(Boolean)
+    .join(" / ");
+  return `
+    <div class="intent-clarification" role="status">
+      <span class="clarify-chip">需确认：${escapeHtml(clarifications.map((item) => item.question).join("；"))}</span>
+      ${candidateText ? `<small>当前候选：${escapeHtml(candidateText)}</small>` : ""}
+      <div class="intent-clarification-actions">
+        <button class="link-button" type="button" data-confirm-intent>按当前范围继续</button>
+        <button class="ghost-button" type="button" data-edit-intent>补充需求</button>
+      </div>
+    </div>
   `;
 }
 
@@ -3742,17 +3764,11 @@ async function ensureIntentReady(query) {
   autoSelectActionMode(bidql);
   const clarifications = clarificationQuestions(bidql);
   if (!clarifications.length) return true;
-  const message = clarifications.map((item) => item.question).join("；");
-  appendMessage("assistant", `我需要先确认一下：${escapeHtml(message)}`);
-  const proceed = window.confirm(
-    `${message}\n\n是否按当前解析继续运行？\n选择"取消"可修改问题后再试。`
-  );
-  if (!proceed) {
-    showToast("已取消，请补充主题或地区后重试");
-    return false;
-  }
-  showToast("已确认，按当前解析继续");
-  return true;
+  if (state.intentConfirmation.confirmed && state.intentConfirmation.query === query) return true;
+  state.intentConfirmation = { query, confirmed: false };
+  renderIntentPreview(bidql);
+  showToast("请先确认当前解析范围，或补充主题和地区");
+  return false;
 }
 
 async function refreshHealth() {
@@ -5451,6 +5467,7 @@ function applyDepthProfile(value) {
 function applyExampleQuery(query) {
   if (!query || !el.queryInput) return;
   el.queryInput.value = query;
+  state.intentConfirmation = { query: "", confirmed: false };
   state.actionModeTouched = false;
   syncActionMode();
   refreshIntentPreview().catch(toastError("示例解析失败"));
@@ -5607,6 +5624,23 @@ function bindEvents() {
   });
   document.addEventListener("click", (event) => {
     trackClick(event);
+    const confirmIntentTarget = event.target.closest("[data-confirm-intent]");
+    if (confirmIntentTarget) {
+      const query = el.queryInput?.value.trim() || "";
+      if (query) {
+        state.intentConfirmation = { query, confirmed: true };
+        refreshIntentPreview()
+          .then(() => el.form?.requestSubmit())
+          .catch(toastError("意图确认失败"));
+      }
+      return;
+    }
+    const editIntentTarget = event.target.closest("[data-edit-intent]");
+    if (editIntentTarget) {
+      el.queryInput?.focus();
+      showToast("请补充明确的采购品类或地区");
+      return;
+    }
     const closeTarget = event.target.closest("[data-close-popover]");
     if (closeTarget) {
       closePopovers();
@@ -5938,6 +5972,7 @@ function bindEvents() {
   el.form?.addEventListener("submit", submitRun);
   el.subscribeButton?.addEventListener("click", createSubscriptionFromForm);
   el.queryInput?.addEventListener("input", () => {
+    state.intentConfirmation = { query: "", confirmed: false };
     syncActionMode();
     renderSmartStart();
   });

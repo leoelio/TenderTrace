@@ -517,6 +517,43 @@ select:focus {
   background: #fff7e6;
 }
 
+.intent-preview .clarify-chip.is-confirmed {
+  color: #087443;
+  border-color: #b9e7cf;
+  background: #effbf4;
+}
+
+.intent-clarification {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid #f3d28b;
+  border-radius: 6px;
+  background: rgba(255, 247, 230, 0.58);
+}
+
+.intent-preview .intent-clarification small {
+  color: #7c4a03;
+  font-size: 11px;
+}
+
+.intent-clarification-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.intent-clarification-actions .link-button,
+.intent-clarification-actions .ghost-button {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
 .composer-controls {
   display: grid;
   grid-template-columns: minmax(160px, 210px) minmax(280px, 1fr) minmax(180px, 210px) minmax(130px, 170px);
