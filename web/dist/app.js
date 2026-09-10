@@ -33,6 +33,7 @@ const state = {
   runFilters: { query: "", status: "all", sort: "started_desc", expanded: false },
   actionModeTouched: false,
   intentConfirmation: { query: "", confirmed: false },
+  goldAnnotationCaseId: "",
   theme: "light",
 };
 
@@ -221,6 +222,18 @@ const el = {
   evaluationCases: document.querySelector("#evaluationCases"),
   evaluationHarnessCases: document.querySelector("#evaluationHarnessCases"),
   evaluationNotes: document.querySelector("#evaluationNotes"),
+  goldAnnotationDialog: document.querySelector("#goldAnnotationDialog"),
+  goldAnnotationForm: document.querySelector("#goldAnnotationForm"),
+  goldAnnotationCase: document.querySelector("#goldAnnotationCase"),
+  goldAnnotationReviewer: document.querySelector("#goldAnnotationReviewer"),
+  goldAnnotationSourceSite: document.querySelector("#goldAnnotationSourceSite"),
+  goldAnnotationTitleInput: document.querySelector("#goldAnnotationTitleInput"),
+  goldAnnotationNoticeId: document.querySelector("#goldAnnotationNoticeId"),
+  goldAnnotationSourceUrl: document.querySelector("#goldAnnotationSourceUrl"),
+  goldAnnotationPublishTime: document.querySelector("#goldAnnotationPublishTime"),
+  goldAnnotationNote: document.querySelector("#goldAnnotationNote"),
+  closeGoldAnnotationButton: document.querySelector("#closeGoldAnnotationButton"),
+  cancelGoldAnnotationButton: document.querySelector("#cancelGoldAnnotationButton"),
   businessMeasurementMetrics: document.querySelector("#businessMeasurementMetrics"),
   businessMeasurementList: document.querySelector("#businessMeasurementList"),
   businessMeasurementForm: document.querySelector("#businessMeasurementForm"),
@@ -1452,7 +1465,10 @@ function renderEvaluation(report) {
           .map(
             (item) => `
               <div class="case-row">
-                <strong>${escapeHtml(item.id || "-")} · ${escapeHtml(statusLabel(item.status))}</strong>
+                <div class="case-row-heading">
+                  <strong>${escapeHtml(item.id || "-")} · ${escapeHtml(statusLabel(item.status))}</strong>
+                  <button class="ghost-button compact-button" type="button" data-annotate-gold-case="${escapeHtml(item.id || "")}">人工标注</button>
+                </div>
                 <span>${escapeHtml(item.query)}</span>
                 <span>金标 ${escapeHtml(item.expected_count || 0)} · 召回 ${escapeHtml(item.retrieved_count || 0)} · Recall@10 ${item.status === "evaluated" ? percent(item.recall_at?.["10"] || 0) : "待标注"}</span>
               </div>
@@ -3875,6 +3891,50 @@ async function refreshRuns() {
   renderNotifications();
 }
 
+function openGoldAnnotationDialog(caseId) {
+  const item = (state.evaluation?.gold?.cases || []).find((value) => value.id === caseId);
+  if (!item) throw new Error("金标用例不存在或已刷新");
+  state.goldAnnotationCaseId = caseId;
+  el.goldAnnotationForm?.reset();
+  if (el.goldAnnotationCase) {
+    el.goldAnnotationCase.textContent = `${item.id} · ${item.query}`;
+  }
+  if (el.goldAnnotationReviewer) {
+    el.goldAnnotationReviewer.value = el.userLabel?.textContent?.trim() || "admin";
+  }
+  el.goldAnnotationDialog?.showModal();
+}
+
+function closeGoldAnnotationDialog() {
+  el.goldAnnotationDialog?.close();
+  state.goldAnnotationCaseId = "";
+}
+
+async function submitGoldAnnotation(event) {
+  event.preventDefault();
+  const caseId = state.goldAnnotationCaseId;
+  if (!caseId) throw new Error("请先选择金标用例");
+  const body = {
+    reviewer: el.goldAnnotationReviewer?.value.trim() || "",
+    note: el.goldAnnotationNote?.value.trim() || "",
+    notice: {
+      source_site: el.goldAnnotationSourceSite?.value.trim() || "",
+      notice_id: el.goldAnnotationNoticeId?.value.trim() || "",
+      title: el.goldAnnotationTitleInput?.value.trim() || "",
+      publish_time: el.goldAnnotationPublishTime?.value.trim() || "",
+      source_url: el.goldAnnotationSourceUrl?.value.trim() || "",
+    },
+  };
+  const result = await api(
+    `/api/evaluations/gold/cases/${encodeURIComponent(caseId)}/notices`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+  state.evaluation = result.evaluation;
+  renderEvaluation(state.evaluation);
+  closeGoldAnnotationDialog();
+  showToast(result.annotation?.status === "unchanged" ? "该来源已在金标中" : "人工金标已记录，严格指标已重算");
+}
+
 async function refreshEvaluation() {
   state.evaluation = await api("/api/evaluations/agent");
   renderEvaluation(state.evaluation);
@@ -5641,6 +5701,15 @@ function bindEvents() {
       showToast("请补充明确的采购品类或地区");
       return;
     }
+    const annotateGoldTarget = event.target.closest("[data-annotate-gold-case]");
+    if (annotateGoldTarget) {
+      try {
+        openGoldAnnotationDialog(annotateGoldTarget.dataset.annotateGoldCase || "");
+      } catch (error) {
+        toastError("金标用例加载失败")(error);
+      }
+      return;
+    }
     const closeTarget = event.target.closest("[data-close-popover]");
     if (closeTarget) {
       closePopovers();
@@ -5893,6 +5962,14 @@ function bindEvents() {
   el.opportunityDetailDialog?.addEventListener("click", (event) => {
     if (event.target === el.opportunityDetailDialog) el.opportunityDetailDialog.close();
   });
+  el.goldAnnotationDialog?.addEventListener("click", (event) => {
+    if (event.target === el.goldAnnotationDialog) closeGoldAnnotationDialog();
+  });
+  el.goldAnnotationForm?.addEventListener("submit", (event) =>
+    submitGoldAnnotation(event).catch(toastError("人工金标保存失败")),
+  );
+  el.closeGoldAnnotationButton?.addEventListener("click", closeGoldAnnotationDialog);
+  el.cancelGoldAnnotationButton?.addEventListener("click", closeGoldAnnotationDialog);
   el.opportunityOwnerDialog?.addEventListener("click", (event) => {
     if (event.target === el.opportunityOwnerDialog) closeOpportunityOwnerDialog();
   });

@@ -869,6 +869,32 @@
               </form>
             </section>
           </section>
+          <dialog id="goldAnnotationDialog" class="owner-assignment-dialog gold-annotation-dialog" aria-labelledby="goldAnnotationTitle">
+            <form id="goldAnnotationForm" class="owner-assignment-form">
+              <div class="owner-assignment-heading">
+                <div>
+                  <span>人工金标核验</span>
+                  <h2 id="goldAnnotationTitle">记录已核验公告</h2>
+                  <small id="goldAnnotationCase">-</small>
+                </div>
+                <button id="closeGoldAnnotationButton" class="icon-close-button" type="button" aria-label="关闭金标核验">×</button>
+              </div>
+              <div class="owner-assignment-body gold-annotation-grid">
+                <p class="gold-annotation-notice">仅在已打开原始来源页面并人工确认该公告应被本用例召回后记录。系统不会自动采纳检索结果。</p>
+                <label><span>核验人</span><input id="goldAnnotationReviewer" required maxlength="80" value="admin" autocomplete="off" /></label>
+                <label><span>来源站点</span><input id="goldAnnotationSourceSite" maxlength="80" placeholder="例如 ccgp" autocomplete="off" /></label>
+                <label><span>公告标题</span><input id="goldAnnotationTitleInput" maxlength="500" autocomplete="off" /></label>
+                <label><span>公告 ID（可选）</span><input id="goldAnnotationNoticeId" maxlength="160" autocomplete="off" /></label>
+                <label class="gold-annotation-url"><span>已核验来源链接</span><input id="goldAnnotationSourceUrl" required type="url" maxlength="2000" placeholder="https://..." autocomplete="off" /></label>
+                <label><span>发布时间（可选）</span><input id="goldAnnotationPublishTime" maxlength="80" placeholder="2026-07-08" autocomplete="off" /></label>
+                <label class="gold-annotation-note"><span>核验说明（可选）</span><input id="goldAnnotationNote" maxlength="1000" placeholder="例如：已核验主题、地区、时间范围与公告类型" autocomplete="off" /></label>
+              </div>
+              <div class="owner-assignment-actions">
+                <button id="cancelGoldAnnotationButton" class="ghost-button" type="button">取消</button>
+                <button class="primary-button" type="submit">保存人工金标</button>
+              </div>
+            </form>
+          </dialog>
         </section>
 
         <section id="organizationView" class="view">

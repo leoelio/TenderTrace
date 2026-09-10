@@ -20,6 +20,8 @@ python -m tendertrace gold-candidates --case-id gold-001 --case-timeout 45 --res
 
 ## 2. 人工标注
 
+也可以在 Web 工作台的“Agent评测”页面打开某个 Gold 用例的“人工标注”。该入口要求填写核验人和原始 `http(s)` 来源链接，并把核验说明、操作时间和来源链接写入该用例的 `annotation_log`。它不会将本系统的检索结果自动写入金标。
+
 人工打开源站链接核验后，把确认“应召回”的公告填入对应 case 的 `gold_notices`：
 
 ```json

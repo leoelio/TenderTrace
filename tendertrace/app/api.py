@@ -28,6 +28,7 @@ from tendertrace.delivery.preferences import (
     save_feishu_receiver,
 )
 from tendertrace.evaluation import build_agent_evaluation_report
+from tendertrace.gold import append_gold_notice, build_gold_coverage
 from tendertrace.business_measurements import (
     business_measurement_summary,
     upsert_business_measurement,
@@ -2468,6 +2469,31 @@ def create_app():
     @app.get("/api/evaluations/agent")
     def agent_evaluation() -> dict[str, object]:
         return build_agent_evaluation_report(settings)
+
+    @app.get("/api/evaluations/gold/coverage")
+    def gold_coverage() -> dict[str, object]:
+        return build_gold_coverage(settings).to_dict()
+
+    @app.post("/api/evaluations/gold/cases/{case_id}/notices")
+    def record_gold_notice(case_id: str, request: dict[str, object] = Body(...)) -> dict[str, object]:
+        raw_notice = request.get("notice")
+        if not isinstance(raw_notice, dict):
+            raise HTTPException(status_code=400, detail="notice object is required")
+        try:
+            result = append_gold_notice(
+                settings,
+                case_id=case_id,
+                reviewer=str(request.get("reviewer") or ""),
+                notice=raw_notice,
+                note=str(request.get("note") or ""),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "annotation": result,
+            "coverage": build_gold_coverage(settings).to_dict(),
+            "evaluation": build_agent_evaluation_report(settings),
+        }
 
     @app.post("/api/evaluations/business-measurements")
     def save_business_measurement(request: dict[str, object] = Body(...)) -> dict[str, object]:

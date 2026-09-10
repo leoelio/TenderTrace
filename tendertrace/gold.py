@@ -92,6 +92,69 @@ def build_gold_coverage(
     )
 
 
+def append_gold_notice(
+    settings: Settings,
+    *,
+    case_id: str,
+    reviewer: str,
+    notice: dict[str, object],
+    note: str = "",
+    gold_path: Path | None = None,
+) -> dict[str, object]:
+    """Append one human-verified notice to a benchmark case.
+
+    This intentionally has no retrieval input: candidates may help a reviewer find
+    a page, but only an explicit source URL supplied by that reviewer becomes gold.
+    """
+    path = _resolve_gold_path(settings, gold_path)
+    reviewer = str(reviewer or "").strip()
+    if not reviewer:
+        raise ValueError("reviewer is required for a gold annotation")
+    normalized = _normalize_gold_notice(notice)
+    payload = _load_payload(path)
+    raw_cases = payload.get("cases")
+    cases = raw_cases if isinstance(raw_cases, list) else []
+    selected = next((item for item in cases if isinstance(item, dict) and item.get("id") == case_id), None)
+    if selected is None:
+        raise ValueError("gold case not found")
+
+    existing = selected.get("gold_notices")
+    notices = existing if isinstance(existing, list) else []
+    existing_urls = {
+        str(item.get("source_url") or item.get("url") or "").strip()
+        for item in notices
+        if isinstance(item, dict)
+    }
+    if normalized["source_url"] in existing_urls:
+        return {
+            "status": "unchanged",
+            "case_id": case_id,
+            "expected_count": len(notices),
+        }
+
+    notices.append(normalized)
+    selected["gold_notices"] = notices
+    audit_log = selected.setdefault("annotation_log", [])
+    if not isinstance(audit_log, list):
+        audit_log = []
+        selected["annotation_log"] = audit_log
+    audit_log.append(
+        {
+            "reviewer": reviewer[:80],
+            "annotated_at": datetime.now(ZoneInfo(settings.timezone)).replace(microsecond=0).isoformat(),
+            "note": str(note or "").strip()[:1000],
+            "source_url": normalized["source_url"],
+        }
+    )
+    _write_gold_payload(path, payload)
+    return {
+        "status": "recorded",
+        "case_id": case_id,
+        "expected_count": len(notices),
+        "notice": normalized,
+    }
+
+
 def evaluate_gold_recall(
     settings: Settings,
     *,
@@ -314,11 +377,41 @@ def _resolve_gold_path(settings: Settings, gold_path: Path | None) -> Path:
 
 
 def _load_cases(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = _load_payload(path)
     cases = payload.get("cases", []) if isinstance(payload, dict) else []
     return [case for case in cases if isinstance(case, dict) and case.get("query")]
+
+
+def _load_payload(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"version": "1.0", "cases": []}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("gold benchmark must be a JSON object")
+    return payload
+
+
+def _normalize_gold_notice(notice: dict[str, object]) -> dict[str, str]:
+    source_url = str(notice.get("source_url") or notice.get("url") or "").strip()
+    if not source_url.startswith(("https://", "http://")):
+        raise ValueError("a verified http(s) source_url is required")
+    return {
+        "source_site": str(notice.get("source_site") or "").strip()[:80],
+        "notice_id": str(notice.get("notice_id") or notice.get("id") or "").strip()[:160],
+        "title": str(notice.get("title") or "").strip()[:500],
+        "publish_time": str(notice.get("publish_time") or "").strip()[:80],
+        "source_url": source_url[:2000],
+    }
+
+
+def _write_gold_payload(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def _case_now(case: dict[str, Any]) -> datetime | None:

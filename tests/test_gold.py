@@ -8,7 +8,12 @@ from zoneinfo import ZoneInfo
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
 from tendertrace.adapters.ccgp import Notice
-from tendertrace.gold import build_gold_candidates, build_gold_coverage, evaluate_gold_recall
+from tendertrace.gold import (
+    append_gold_notice,
+    build_gold_candidates,
+    build_gold_coverage,
+    evaluate_gold_recall,
+)
 from tendertrace.retrieval import upsert_notice_fts
 
 
@@ -161,6 +166,57 @@ class GoldEvaluationTests(unittest.TestCase):
         self.assertEqual(result.expected_total, 1)
         self.assertEqual(result.annotation_completion, 0.5)
         self.assertEqual(result.cases[1]["status"], "needs_annotation")
+
+    def test_human_annotation_requires_reviewer_and_source_url(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = Settings.load(root)
+            gold_path = _write_candidate_gold(root)
+            with self.assertRaisesRegex(ValueError, "reviewer"):
+                append_gold_notice(
+                    settings,
+                    case_id="case-1",
+                    reviewer="",
+                    notice={"source_url": "https://example.com/a"},
+                    gold_path=gold_path,
+                )
+            with self.assertRaisesRegex(ValueError, "source_url"):
+                append_gold_notice(
+                    settings,
+                    case_id="case-1",
+                    reviewer="评审人",
+                    notice={"source_url": "not-a-url"},
+                    gold_path=gold_path,
+                )
+
+            recorded = append_gold_notice(
+                settings,
+                case_id="case-1",
+                reviewer="评审人",
+                note="已打开官方来源页面核验。",
+                notice={
+                    "source_site": "ccgp",
+                    "notice_id": "notice-1",
+                    "title": "上海服务器采购公告",
+                    "source_url": "https://example.com/notice-1",
+                },
+                gold_path=gold_path,
+            )
+            duplicate = append_gold_notice(
+                settings,
+                case_id="case-1",
+                reviewer="另一位评审人",
+                notice={"source_url": "https://example.com/notice-1"},
+                gold_path=gold_path,
+            )
+            payload = json.loads(gold_path.read_text(encoding="utf-8"))
+
+        case = payload["cases"][0]
+        self.assertEqual(recorded["status"], "recorded")
+        self.assertEqual(duplicate["status"], "unchanged")
+        self.assertEqual(len(case["gold_notices"]), 1)
+        self.assertEqual(case["annotation_log"][0]["reviewer"], "评审人")
+        self.assertEqual(case["annotation_log"][0]["note"], "已打开官方来源页面核验。")
 
 
 def _insert_notice(

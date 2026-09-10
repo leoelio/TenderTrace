@@ -1729,6 +1729,60 @@ td.file-cell {
   font-size: 15px;
 }
 
+.case-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compact-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.gold-annotation-dialog { width: min(680px, calc(100vw - 28px)); }
+
+.gold-annotation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gold-annotation-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.gold-annotation-grid input {
+  width: 100%;
+  min-width: 0;
+}
+
+.gold-annotation-notice,
+.gold-annotation-url,
+.gold-annotation-note { grid-column: 1 / -1; }
+
+.gold-annotation-notice {
+  margin: 0;
+  padding: 9px 10px;
+  border-left: 2px solid rgba(18, 101, 214, 0.55);
+  color: var(--muted);
+  background: rgba(241, 247, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 560px) {
+  .gold-annotation-grid { grid-template-columns: 1fr; }
+}
+
 .memory-insight-grid {
   grid-template-columns: 0.95fr 1.05fr;
 }

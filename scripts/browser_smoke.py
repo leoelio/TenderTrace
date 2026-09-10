@@ -60,6 +60,19 @@ def main(url: str) -> int:
         page.locator(".clarify-chip.is-confirmed").wait_for(timeout=5000)
         print("OK  inline clarification confirmation is recorded before submission")
 
+        page.locator('[data-view="evaluationView"]').click()
+        page.locator("#evaluationCases [data-annotate-gold-case]").first.wait_for(timeout=8000)
+        page.locator("#evaluationCases [data-annotate-gold-case]").first.click()
+        annotation_dialog = page.locator("#goldAnnotationDialog")
+        if not annotation_dialog.evaluate("element => element.open"):
+            print("FAIL: gold annotation dialog did not open")
+            return 1
+        if not page.locator("#goldAnnotationSourceUrl").evaluate("element => element.required"):
+            print("FAIL: gold annotation source URL is not required")
+            return 1
+        page.locator("#cancelGoldAnnotationButton").click()
+        print("OK  human gold annotation requires an explicit verified source URL")
+
         browser.close()
     print("PASS: browser smoke test")
     return 0
