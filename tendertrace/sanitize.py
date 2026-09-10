@@ -13,6 +13,7 @@ SENSITIVE_KEYS = {
     "password",
     "smtp_password",
     "storage_state",
+    "table_id",
     "tenant_access_token",
 }
 

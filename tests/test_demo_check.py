@@ -60,6 +60,7 @@ class DemoCheckTests(unittest.TestCase):
         self.assertNotIn("fixture-token", json.dumps(written_payload, ensure_ascii=False))
         latest_stats = written_payload["evidence"]["latest_finished_run"]["stats"]
         self.assertEqual(latest_stats["feishu_bitable_delivery"]["app_token"], "[redacted]")
+        self.assertEqual(latest_stats["feishu_bitable_delivery"]["table_id"], "[redacted]")
 
     def test_demo_check_fails_when_core_demo_evidence_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
