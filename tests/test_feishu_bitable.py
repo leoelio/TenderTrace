@@ -263,6 +263,10 @@ class FeishuBitableTests(unittest.TestCase):
         self.assertEqual(result.table_name, "招标机会")
         self.assertEqual(result.record_count, 1)
         self.assertEqual(result.missing_fields, ())
+        payload = result.to_dict()
+        self.assertTrue(payload["table_configured"])
+        self.assertNotIn("table_id", payload)
+        self.assertNotIn("tbl_test", str(payload))
 
     def test_check_lists_fields_across_pagination_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

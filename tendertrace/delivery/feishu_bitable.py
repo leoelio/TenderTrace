@@ -143,7 +143,10 @@ class FeishuBitableCheckResult:
     created_fields: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        data = asdict(self)
+        data.pop("table_id", None)
+        data["table_configured"] = bool(self.table_id)
+        return data
 
 
 def check_feishu_bitable(
