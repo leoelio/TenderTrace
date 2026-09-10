@@ -157,7 +157,7 @@ def cmd_acceptance_check(args: argparse.Namespace) -> int:
 
 def cmd_demo_check(args: argparse.Namespace) -> int:
     settings = _settings()
-    report = run_demo_check(settings)
+    report = run_demo_check(settings, check_live_integrations=args.live_integrations)
     payload = report.to_dict()
     if args.out:
         path = Path(args.out)
@@ -633,6 +633,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Audit current workspace evidence before recording the demo video.",
     )
     demo_check.add_argument("--out", help="Optional path for a JSON evidence package.")
+    demo_check.add_argument(
+        "--live-integrations",
+        action="store_true",
+        help="Run read-only live checks for configured integrations.",
+    )
     demo_check.set_defaults(func=cmd_demo_check)
     demo_video = sub.add_parser(
         "demo-video",

@@ -3,12 +3,14 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from docx import Document
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
 from tendertrace.demo_check import run_demo_check, write_demo_evidence
+from tendertrace.delivery.feishu_bitable import FeishuBitableCheckResult
 from tendertrace.runlog import finish_run, register_outbox_message, start_run
 from tendertrace.submission import create_submission_package
 
@@ -131,6 +133,27 @@ class DemoCheckTests(unittest.TestCase):
         self.assertEqual(checks["gold_recall"].status, "warn")
         self.assertIn("0/1", checks["gold_recall"].detail)
         self.assertFalse(report.evidence["gold_coverage"]["complete"])
+
+    def test_demo_check_can_include_read_only_live_bitable_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            result = FeishuBitableCheckResult(
+                status="pass",
+                message="Feishu bitable is ready",
+                table_id="tbl_test",
+                table_name="招标机会",
+                field_count=12,
+                record_count=4,
+            )
+            with patch("tendertrace.demo_check.check_feishu_bitable", return_value=result):
+                report = run_demo_check(settings, check_live_integrations=True)
+
+        checks = {check.name: check for check in report.checks}
+        self.assertEqual(checks["feishu_bitable"].status, "pass")
+        payload = report.evidence["feishu_bitable_check"]
+        self.assertTrue(payload["table_configured"])
+        self.assertNotIn("table_id", payload)
 
     def test_demo_check_resolves_migrated_output_by_filename(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

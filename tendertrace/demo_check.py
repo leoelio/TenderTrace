@@ -10,6 +10,7 @@ from docx import Document
 
 from tendertrace.config import Settings
 from tendertrace.db import connection
+from tendertrace.delivery.feishu_bitable import check_feishu_bitable
 from tendertrace.gold import build_gold_coverage
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.sanitize import sanitize_for_output
@@ -60,7 +61,11 @@ OPTIONAL_TRACE_TOOLS = {"llm.intent_enhancer", "pipeline.attachment_extract"}
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".mkv", ".avi", ".webm")
 
 
-def run_demo_check(settings: Settings) -> DemoEvidenceReport:
+def run_demo_check(
+    settings: Settings,
+    *,
+    check_live_integrations: bool = False,
+) -> DemoEvidenceReport:
     evidence = _collect_evidence(settings)
     checks = [
         _check_model(settings, evidence),
@@ -75,6 +80,8 @@ def run_demo_check(settings: Settings) -> DemoEvidenceReport:
         _check_ci_config(settings, evidence),
         _check_api_token(settings, evidence),
     ]
+    if check_live_integrations:
+        checks.append(_check_feishu_bitable(settings, evidence))
     status = "fail" if any(check.status == "fail" for check in checks) else "pass"
     return DemoEvidenceReport(
         status=status,
@@ -412,6 +419,16 @@ def _check_api_token(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
     else:
         detail = f"API token guard is disabled for {settings.app_env} mode"
     return DemoCheck("api_security", "pass", detail)
+
+
+def _check_feishu_bitable(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
+    result = check_feishu_bitable(settings)
+    evidence["feishu_bitable_check"] = result.to_dict()
+    if result.status == "pass":
+        return DemoCheck("feishu_bitable", "pass", result.message)
+    if result.status in {"skipped", "warn"}:
+        return DemoCheck("feishu_bitable", "warn", result.message)
+    return DemoCheck("feishu_bitable", "fail", result.message)
 
 
 def _latest_submission_package(root: Path) -> Path | None:
