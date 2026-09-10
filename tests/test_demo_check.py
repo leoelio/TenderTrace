@@ -104,6 +104,34 @@ class DemoCheckTests(unittest.TestCase):
         qianlima = report.evidence["sources"][2]
         self.assertEqual(qianlima["health_status"], "unhealthy")
 
+    def test_demo_check_marks_unannotated_gold_benchmark_as_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = Settings.load(root)
+            init_db(settings)
+            _write_text(
+                root / "docs" / "evaluation" / "gold_benchmark.json",
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "id": "gold-1",
+                                "query": "最近1个月上海服务器招标信息",
+                                "gold_notices": [],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            report = run_demo_check(settings)
+
+        checks = {check.name: check for check in report.checks}
+        self.assertEqual(checks["gold_recall"].status, "warn")
+        self.assertIn("0/1", checks["gold_recall"].detail)
+        self.assertFalse(report.evidence["gold_coverage"]["complete"])
+
     def test_demo_check_resolves_migrated_output_by_filename(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

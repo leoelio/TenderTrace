@@ -10,6 +10,7 @@ from docx import Document
 
 from tendertrace.config import Settings
 from tendertrace.db import connection
+from tendertrace.gold import build_gold_coverage
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.sanitize import sanitize_for_output
 from tendertrace.source_map import qianlima_login_ready, source_health
@@ -67,6 +68,7 @@ def run_demo_check(settings: Settings) -> DemoEvidenceReport:
         _check_finished_runs(evidence),
         _check_word_outbox(settings, evidence),
         _check_trace_flow(evidence),
+        _check_gold_coverage(settings, evidence),
         _check_subscription_incremental(evidence),
         _check_video_file(settings, evidence),
         _check_submission_package(settings, evidence),
@@ -304,6 +306,24 @@ def _check_trace_flow(evidence: dict[str, Any]) -> DemoCheck:
         "trace_flow",
         "pass",
         f"required trace tools present in run {trace_run.get('id', 'unknown')}; optional={optional_present}",
+    )
+
+
+def _check_gold_coverage(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
+    coverage = build_gold_coverage(settings)
+    evidence["gold_coverage"] = coverage.to_dict()
+    if coverage.complete:
+        return DemoCheck(
+            "gold_recall",
+            "pass",
+            f"all {coverage.case_count} Gold cases are human-annotated; Recall@K is reproducible",
+        )
+    if not coverage.case_count:
+        return DemoCheck("gold_recall", "warn", "Gold benchmark is missing or empty")
+    return DemoCheck(
+        "gold_recall",
+        "warn",
+        f"Gold Recall@K requires human annotation: {coverage.annotated_case_count}/{coverage.case_count} cases ready",
     )
 
 
