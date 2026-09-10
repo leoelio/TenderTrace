@@ -12,6 +12,7 @@ from tendertrace.config import Settings
 from tendertrace.db import connection
 from tendertrace.llm.doctor import model_doctor
 from tendertrace.sanitize import sanitize_for_output
+from tendertrace.source_map import qianlima_login_ready, source_health
 from tendertrace.submission import forbidden_package_entries, package_secret_findings
 from tendertrace.vault.qianlima import QianlimaSessionVault
 
@@ -229,13 +230,21 @@ def _check_model(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
 def _check_sources(settings: Settings, evidence: dict[str, Any]) -> DemoCheck:
     vault = QianlimaSessionVault(settings)
     qianlima_status = vault.status()
+    qianlima_health = source_health(settings).get("qianlima", {})
     evidence["sources"] = [
         {"site": "ccgp", "status": "configured"},
         {"site": "ggzy", "status": "configured"},
-        qianlima_status.to_dict() | {"site": "qianlima"},
+        qianlima_status.to_dict()
+        | {
+            "site": "qianlima",
+            "health_status": qianlima_health.get("health_status", "unknown"),
+        },
     ]
-    if qianlima_status.ready:
+    if qianlima_login_ready(qianlima_status, qianlima_health):
         return DemoCheck("sources", "pass", "ccgp, ggzy and qianlima login state are available")
+    if qianlima_status.ready:
+        detail = str(qianlima_health.get("last_error") or "member login validation failed")
+        return DemoCheck("sources", "warn", f"ccgp and ggzy are configured; qianlima requires renewal: {detail}")
     return DemoCheck("sources", "warn", f"ccgp and ggzy are configured; qianlima {qianlima_status.validation}")
 
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import tempfile
 import unittest
 
@@ -75,6 +76,33 @@ class DemoCheckTests(unittest.TestCase):
         self.assertIn("word_outbox", failed)
         self.assertIn("trace_flow", failed)
         self.assertIn("subscription_incremental", failed)
+
+    def test_demo_check_does_not_treat_rejected_qianlima_session_as_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            state_path = settings.secrets_dir / "qianlima_storage_state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(
+                '{"cookies":[{"domain":".qianlima.com"}],"origins":[]}',
+                encoding="utf-8",
+            )
+            os.utime(state_path, (1, 1))
+            with connection(settings) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO source_observations(source_site, status, notice_count, error)
+                    VALUES ('qianlima', 'failed', 0, 'qianlima member APIs rejected saved session')
+                    """
+                )
+
+            report = run_demo_check(settings)
+
+        checks = {check.name: check for check in report.checks}
+        self.assertEqual(checks["sources"].status, "warn")
+        self.assertIn("requires renewal", checks["sources"].detail)
+        qianlima = report.evidence["sources"][2]
+        self.assertEqual(qianlima["health_status"], "unhealthy")
 
     def test_demo_check_resolves_migrated_output_by_filename(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
