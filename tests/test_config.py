@@ -289,10 +289,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.feishu_timeout, 9)
         self.assertEqual(settings.public_base_url, "https://tt.example.com")
         self.assertTrue(summary["feishu_app_secret_configured"])
-        self.assertEqual(
-            summary["feishu_bitable_base_url"],
-            "https://tenant.feishu.cn/base/base_token",
-        )
+        self.assertTrue(summary["feishu_bitable_table_configured"])
+        self.assertTrue(summary["feishu_bitable_base_url_configured"])
+        self.assertNotIn("tbl_test", str(summary))
+        self.assertNotIn("https://tenant.feishu.cn/base/base_token", str(summary))
         self.assertNotIn("secret-feishu-value", str(summary))
 
     def test_bitable_reuses_message_app_credentials_when_not_overridden(self) -> None:
