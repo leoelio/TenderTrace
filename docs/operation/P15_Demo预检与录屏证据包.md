@@ -11,7 +11,7 @@ P15 面向最终 Demo 视频交付。视频本身仍需要人工录制，但录�
 - 模型状态和来源状态。
 - 录屏文件是否已放入 `docs/demo/`。
 
-因此本阶段新增 `demo-check` 命令，它只审计当前工作区，不联网、不重跑采集、不伪造演示结果。当前检查还会记录 CI 配置、最新交付包安全扫描和 API 鉴权状态。
+因此本阶段新增 `demo-check` 命令，它默认只审计当前工作区，不联网、不重跑采集、不伪造演示结果。当前检查还会记录 CI 配置、最新交付包安全扫描和 API 鉴权状态。答辩前可追加 `--live-integrations`，以只读方式核验已配置的飞书多维表格；该模式不会创建或更新飞书记录。
 
 ## 新增命令
 
@@ -30,6 +30,7 @@ python -m tendertrace demo-check
 
 ```powershell
 python -m tendertrace demo-check --out docs/demo/demo_evidence_latest.json
+python -m tendertrace demo-check --live-integrations --out docs/demo/demo_evidence_latest.json
 ```
 
 ## 当前工作区结果
@@ -58,6 +59,7 @@ fail=0
 6. 已存在的提交包含禁入文件或疑似密钥时 fail；尚未生成提交包时只 warn，提醒最终交付前运行 `package-submission`。
 5. 千里马未登录和视频未录制只作为 warning，不伪装成已完成。
 6. 证据包不包含 OpenAI key、账号密码或 `.env.local` 明文。
+7. 使用 `--live-integrations` 时，飞书多维表格只读核验通过，且证据包不含表格资源 ID。
 
 ## 验证命令
 
@@ -65,13 +67,14 @@ fail=0
 python -m unittest tests.test_demo_check -v
 python -m tendertrace demo-check
 python -m tendertrace demo-check --out docs/demo/demo_evidence_latest.json
+python -m tendertrace demo-check --live-integrations --out docs/demo/demo_evidence_latest.json
 python -m unittest discover -s tests -v
 python -m ruff check .
 ```
 
 ## 录屏前动作
 
-1. 运行 `python -m tendertrace demo-check --out docs/demo/demo_evidence_latest.json`。
+1. 运行 `python -m tendertrace demo-check --live-integrations --out docs/demo/demo_evidence_latest.json`。
 2. 确认没有 fail。
 3. 如需要展示登录站，先运行 `python -m tendertrace login-qianlima`。
 4. 按 `docs/demo/Demo演示脚本.md` 录制视频。
