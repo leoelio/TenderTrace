@@ -2605,11 +2605,12 @@ function reviewAgentSuggestion(suggestion, opinions) {
     single: "单一意见",
     split: "存在分歧",
   }[suggestion.consensus] || "待判断";
+  const hasGuardedEvidence = opinions.some((opinion) => opinion.model_status === "guarded");
   return `
-    <article class="review-agent-suggestion ${suggestion.disagreement ? "has-disagreement" : ""}">
+    <article class="review-agent-suggestion ${suggestion.disagreement ? "has-disagreement" : ""} ${hasGuardedEvidence ? "is-evidence-guarded" : ""}">
       <div><strong>${escapeHtml(suggestion.requirement_key || "未命名要求")}</strong><span>${escapeHtml(suggestion.suggestion_label || suggestion.suggestion || "待判断")} · ${escapeHtml(consensusLabel)}</span></div>
-      <small>${escapeHtml(suggestion.opinion_count || 0)} 位 Agent 已给出意见</small>
-      <div class="review-agent-opinion-list">${opinions.map((opinion) => `<p><strong>${escapeHtml(opinion.agent_label || opinion.agent_role || "Agent")}</strong><span>${escapeHtml(opinion.decision_label || opinion.decision || "待判断")} · ${escapeHtml(opinion.confidence || 0)}%</span><small>${escapeHtml(opinion.rationale || "未提供依据")}</small></p>`).join("")}</div>
+      <small>${hasGuardedEvidence ? "证据安全门禁已触发，未调用模型，等待人工核验" : `${escapeHtml(suggestion.opinion_count || 0)} 位 Agent 已给出意见`}</small>
+      <div class="review-agent-opinion-list">${opinions.map((opinion) => `<p><strong>${escapeHtml(opinion.agent_label || opinion.agent_role || "Agent")}</strong><span>${escapeHtml(opinion.model_status === "guarded" ? "安全门禁 · 人工核验" : `${opinion.decision_label || opinion.decision || "待判断"} · ${opinion.confidence || 0}%`)}</span><small>${escapeHtml(opinion.rationale || "未提供依据")}</small></p>`).join("")}</div>
     </article>
   `;
 }
@@ -2660,7 +2661,9 @@ async function syncOpportunityReviewBoard(noticeId) {
 async function runOpportunityReviewAgents(noticeId) {
   const result = await api(`/api/opportunities/${encodeURIComponent(noticeId)}/review-board/agents`, { method: "POST" });
   await loadOpportunityReviewBoard(noticeId);
-  if (result.mode === "multi_agent") {
+  if (Number(result.guarded_case_count || 0)) {
+    showToast(`证据安全门禁：${result.guarded_case_count} 项已升级人工核验，未调用模型`);
+  } else if (result.mode === "multi_agent") {
     showToast(`AI 会审完成：${result.opinion_count || 0} 条独立意见`);
   } else {
     showToast("当前模型未启用，已保留规则会审队列供人工裁决");

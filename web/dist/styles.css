@@ -6935,6 +6935,12 @@ tbody tr:hover {
   background: rgba(255, 251, 235, 0.62);
 }
 
+.review-agent-suggestion.is-evidence-guarded {
+  border-color: rgba(181, 71, 8, 0.3);
+  border-left-color: #b54708;
+  background: rgba(255, 247, 237, 0.72);
+}
+
 .review-agent-suggestion > div:first-child,
 .review-agent-opinion-list p {
   display: flex;
