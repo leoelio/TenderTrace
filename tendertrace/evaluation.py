@@ -24,20 +24,21 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
     gold_coverage = build_gold_coverage(settings)
     vector = vector_coverage(settings)
     business = business_measurement_summary(settings)
-    recall = _recall_metrics(stats, gold.to_dict(), vector)
-    recall_score = (
-        recall["strict_recall_at_10"]
-        if recall["strict_recall_available"]
-        else recall["recall_proxy"]
-    )
-    overall_score = round(
-        0.25 * harness["field_accuracy"]
-        + 0.25 * rag["grounding_pass_rate"]
-        + 0.25 * agent["checkpoint_completion_rate"]
-        + 0.25 * float(recall_score),
-        3,
-    )
     evaluation_ready = gold_coverage.complete
+    recall = _recall_metrics(
+        stats,
+        gold.to_dict(),
+        vector,
+        strict_recall_available=evaluation_ready,
+    )
+    verified_scores = [
+        harness["field_accuracy"],
+        rag["grounding_pass_rate"],
+        agent["checkpoint_completion_rate"],
+    ]
+    if evaluation_ready:
+        verified_scores.append(recall["strict_recall_at_10"])
+    overall_score = round(mean(float(score) for score in verified_scores), 3)
     return {
         "status": (
             "incomplete"
@@ -46,6 +47,8 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
         ),
         "evaluation_ready": evaluation_ready,
         "overall_score": overall_score,
+        "score_label": "正式总分" if evaluation_ready else "已验证能力得分",
+        "score_component_count": len(verified_scores),
         "generated_at": datetime.now(ZoneInfo("Asia/Shanghai")).replace(microsecond=0).isoformat(),
         "summary": {
             "runs": stats["run_count"],
@@ -65,7 +68,7 @@ def build_agent_evaluation_report(settings: Settings) -> dict[str, object]:
         "gold_coverage": gold_coverage.to_dict(),
         "notes": [
             "严格 Recall@K 仅使用人工核验金标；金标未完整时，评测状态固定为未就绪。",
-            "recall_proxy 只用于运行观测，不参与替代严格召回验收。",
+            "金标未完整时，已验证能力得分不纳入严格 Recall；recall_proxy 只用于运行观测，不替代严格召回验收。",
             "harness 字段准确率来自固定自然语言样例的 BidQL 编译检查。",
             "RAG 指标来自 evidence_validate、附件抽取和报告必要字段检查。",
             "业务效率仅汇总质量复核通过的实测任务；无实测数据时不生成节省时间估算。",
@@ -161,6 +164,8 @@ def _recall_metrics(
     stats: dict[str, Any],
     gold: dict[str, Any],
     vector: dict[str, Any],
+    *,
+    strict_recall_available: bool,
 ) -> dict[str, object]:
     runs = [run for run in stats["runs"] if run["stats"]]
     collected = sum(_int(run["stats"].get("collected")) for run in runs)
@@ -219,7 +224,8 @@ def _recall_metrics(
         "fts_indexed_notices": stats["fts_count"],
         "source_attempts": source_attempts,
         "source_hits": active_source_hits,
-        "strict_recall_available": bool(gold.get("available")),
+        "strict_recall_available": strict_recall_available,
+        "strict_recall_observed": bool(gold.get("available")),
         "strict_recall_at_5": float(recall_at.get("5") or 0),
         "strict_recall_at_10": float(recall_at.get("10") or 0),
         "strict_precision_at_10": float(precision_at.get("10") or 0),

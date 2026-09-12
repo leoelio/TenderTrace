@@ -1417,7 +1417,7 @@ function renderEvaluation(report) {
   if (el.evaluationSummary) {
     el.evaluationSummary.className = "eval-summary";
     el.evaluationSummary.innerHTML = [
-      summaryTile("总分", percent(report.overall_score)),
+      summaryTile(report.score_label || "总分", percent(report.overall_score)),
       summaryTile("状态", statusLabel(report.status)),
       summaryTile("运行数", report.summary?.runs ?? 0),
       summaryTile("完成运行", report.summary?.finished_runs ?? 0),
@@ -1444,8 +1444,8 @@ function renderEvaluation(report) {
     ["通过用例", `${report.harness?.passed_cases ?? 0} / ${report.harness?.case_count ?? 0}`],
   ]);
   renderMetricCard(el.recallMetrics, "召回覆盖", [
-    ["严格 Recall@10", report.recall?.strict_recall_available ? percent(report.recall?.strict_recall_at_10) : "待标注"],
-    ["严格 Precision@10", report.recall?.strict_recall_available ? percent(report.recall?.strict_precision_at_10) : "待标注"],
+    ["严格 Recall@10", strictMetricValue(report, "strict_recall_at_10")],
+    ["严格 Precision@10", strictMetricValue(report, "strict_precision_at_10")],
     ["召回代理分", percent(report.recall?.recall_proxy)],
     ["来源覆盖率", percent(report.recall?.source_coverage_rate)],
     ["FTS 覆盖率", percent(report.recall?.fts_coverage_rate)],
@@ -3532,6 +3532,15 @@ function summaryTile(label, value) {
       <strong>${escapeHtml(value)}</strong>
     </div>
   `;
+}
+
+function strictMetricValue(report, metric) {
+  const recall = report.recall || {};
+  if (recall.strict_recall_available) return percent(recall[metric]);
+  if (recall.strict_recall_observed) {
+    return `观察值 ${percent(recall[metric])}，待完成`;
+  }
+  return "待标注";
 }
 
 function renderSettingsSummary(payload) {

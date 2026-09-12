@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from tendertrace.config import Settings
 from tendertrace.db import connection, init_db, json_dumps
+from tendertrace.evaluation import build_agent_evaluation_report
 from tendertrace.adapters.ccgp import Notice
 from tendertrace.gold import (
     append_gold_notice,
@@ -18,6 +19,42 @@ from tendertrace.retrieval import upsert_notice_fts
 
 
 class GoldEvaluationTests(unittest.TestCase):
+    def test_partial_gold_does_not_produce_a_formal_recall_score(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = Settings.load(root)
+            init_db(settings)
+            gold_path = root / "docs" / "evaluation" / "gold_benchmark.json"
+            gold_path.parent.mkdir(parents=True)
+            gold_path.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "id": "case-1",
+                                "query": "最近1个月上海充电桩招标信息有哪些",
+                                "gold_notices": [{"source_url": "https://example.com/a.html"}],
+                            },
+                            {
+                                "id": "case-2",
+                                "query": "最近1个月上海服务器招标信息有哪些",
+                                "gold_notices": [],
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            report = build_agent_evaluation_report(settings)
+
+        self.assertFalse(report["evaluation_ready"])
+        self.assertEqual(report["score_label"], "已验证能力得分")
+        self.assertEqual(report["score_component_count"], 3)
+        self.assertFalse(report["recall"]["strict_recall_available"])
+        self.assertTrue(report["recall"]["strict_recall_observed"])
+
     def test_gold_recall_uses_annotated_notices_not_proxy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
