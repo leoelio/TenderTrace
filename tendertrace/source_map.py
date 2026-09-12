@@ -481,6 +481,8 @@ def source_health(settings: Settings, *, limit: int = 50) -> dict[str, dict[str,
         bucket["page_artifacts"] = count
     for bucket in health.values():
         requests = int(bucket["requests"])
+        if _is_newer(str(bucket["last_success_at"]), str(bucket["last_failure_at"])):
+            bucket["last_error"] = ""
         bucket["success_rate"] = (
             round(float(bucket["succeeded"]) / requests, 3) if requests else None
         )

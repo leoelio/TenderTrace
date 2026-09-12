@@ -285,6 +285,7 @@ class SourceObservabilityTests(unittest.TestCase):
         self.assertTrue(source_map["login_source_ready"])
         self.assertEqual(qianlima["health"]["last_failure_at"], "2026-08-15 08:00:00")
         self.assertEqual(qianlima["health"]["last_success_at"], "2026-08-16 08:00:00")
+        self.assertEqual(qianlima["health"]["last_error"], "")
 
     def test_newly_saved_storage_state_reenables_a_session_after_expiry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
