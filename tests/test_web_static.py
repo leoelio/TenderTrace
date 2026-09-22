@@ -3,6 +3,17 @@ import unittest
 
 
 class WebStaticTests(unittest.TestCase):
+    def test_workspace_presentation_layer_is_loaded_after_component_styles(self) -> None:
+        root = Path("web/dist")
+        html = (root / "index.html").read_text(encoding="utf-8")
+        css = (root / "workspace.css").read_text(encoding="utf-8")
+        self.assertLess(html.index('/styles.css'), html.index('/workspace.css'))
+        self.assertIn('id="queryTitle"', html)
+        self.assertIn('[hidden] { display: none !important; }', css)
+        self.assertIn(':focus-visible', css)
+        self.assertIn('prefers-reduced-motion', css)
+        self.assertIn('body.theme-dark', css)
+
     def test_static_workbench_references_real_api_contracts(self) -> None:
         root = Path("web/dist")
         html = (root / "index.html").read_text(encoding="utf-8")
