@@ -18,8 +18,16 @@ def main(url: str) -> int:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
         page.goto(url, wait_until="networkidle", timeout=30000)
+
+        primary_labels = page.locator("#topNavigation > .nav-tab").all_inner_texts()
+        if primary_labels != ["首页", "查招标", "投标项目", "团队协作"]:
+            print(f"FAIL: primary navigation is not the simplified workflow: {primary_labels!r}")
+            return 1
+        print("OK  primary navigation follows the core tender workflow")
+
+        page.locator('#topNavigation > [data-view="workbenchView"]').click()
 
         query_input = page.locator("#queryInput")
         if query_input.count() == 0:
@@ -60,7 +68,8 @@ def main(url: str) -> int:
         page.locator(".clarify-chip.is-confirmed").wait_for(timeout=5000)
         print("OK  inline clarification confirmation is recorded before submission")
 
-        page.locator('[data-view="evaluationView"]').click()
+        page.locator("#topNavigation .nav-more > summary").click()
+        page.locator('#topNavigation [data-view="evaluationView"]').click()
         page.locator("#evaluationCases [data-annotate-gold-case]").first.wait_for(timeout=8000)
         page.locator("#evaluationCases [data-annotate-gold-case]").first.click()
         annotation_dialog = page.locator("#goldAnnotationDialog")
@@ -72,6 +81,42 @@ def main(url: str) -> int:
             return 1
         page.locator("#cancelGoldAnnotationButton").click()
         print("OK  human gold annotation requires an explicit verified source URL")
+
+        page.locator("#topNavigation .nav-more > summary").click()
+        page.locator("#presentationModeButton").click()
+        exit_button = page.locator("#presentationExitButton")
+        if not exit_button.is_visible():
+            print("FAIL: presentation mode has no visible exit action")
+            return 1
+        exit_button.click()
+        if page.locator("body.presentation-mode").count():
+            print("FAIL: presentation exit action did not restore normal mode")
+            return 1
+        print("OK  presentation mode exposes and honors the fixed exit action")
+
+        page.locator('#topNavigation > [data-view="organizationView"]').click()
+        page.locator("#createOrganizationWorkspaceButton").click()
+        group_dialog = page.locator("#organizationGroupDialog")
+        group_dialog.wait_for(state="visible", timeout=8000)
+        member_choices = page.locator("#organizationMemberPicker .organization-member-choice")
+        if member_choices.count():
+            member_choices.first.locator('input[type="checkbox"]').check()
+            if "1" not in page.locator("#organizationMemberCount").inner_text():
+                print("FAIL: custom member picker did not update the selected count")
+                return 1
+        page.locator("#cancelOrganizationGroupButton").click()
+        workspace_id = page.locator("#organizationWorkspaceSelect").input_value()
+        if workspace_id:
+            page.locator("#inviteOrganizationMembersButton").click()
+            group_dialog.wait_for(state="visible", timeout=8000)
+            if "邀请协作成员" not in page.locator("#organizationGroupDialogTitle").inner_text():
+                print("FAIL: invite mode did not render the expected dialog title")
+                return 1
+            if not page.locator("#organizationGroupNameField").is_hidden():
+                print("FAIL: invite mode still exposes the create-group name field")
+                return 1
+            page.locator("#cancelOrganizationGroupButton").click()
+        print("OK  organization member picker opens in create and invite modes")
 
         browser.close()
     print("PASS: browser smoke test")

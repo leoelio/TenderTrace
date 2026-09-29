@@ -127,6 +127,7 @@ const el = {
   themeToggleButton: document.querySelector("#themeToggleButton"),
   motionToggleButton: document.querySelector("#motionToggleButton"),
   presentationModeButton: document.querySelector("#presentationModeButton"),
+  presentationExitButton: document.querySelector("#presentationExitButton"),
   helpButton: document.querySelector("#helpButton"),
   helpPanel: document.querySelector("#helpPanel"),
   helpPanelContent: document.querySelector("#helpPanelContent"),
@@ -475,6 +476,8 @@ const el = {
   organizationGroupNameField: document.querySelector("#organizationGroupNameField"),
   organizationGroupName: document.querySelector("#organizationGroupName"),
   organizationMemberSelect: document.querySelector("#organizationMemberSelect"),
+  organizationMemberPicker: document.querySelector("#organizationMemberPicker"),
+  organizationMemberCount: document.querySelector("#organizationMemberCount"),
   organizationGroupStatus: document.querySelector("#organizationGroupStatus"),
   submitOrganizationGroupButton: document.querySelector("#submitOrganizationGroupButton"),
   closeOrganizationGroupButton: document.querySelector("#closeOrganizationGroupButton"),
@@ -752,6 +755,7 @@ function applyPresentationMode(active, persist = true) {
   document.body.classList.toggle("presentation-mode", state.presentationMode);
   document.body.classList.toggle("radar-presentation", state.presentationMode);
   document.body.classList.toggle("battle-presentation", state.presentationMode);
+  if (el.presentationExitButton) el.presentationExitButton.hidden = !state.presentationMode;
   for (const button of [el.presentationModeButton, el.radarPresentationButton, el.battlePresentationButton]) {
     if (!button) continue;
     button.setAttribute("aria-pressed", String(state.presentationMode));
@@ -905,13 +909,11 @@ async function refreshFinalsHome() {
       api("/api/opportunity-radar?scope=domestic&window_days=365"),
       api("/api/demo-reliability?compact=true"),
       api("/api/integrations/feishu/overview"),
-      api("/api/training/team-readiness"),
     ]);
     state.finalsHome = {
       radar: settledValue(results[0]),
       demo: settledValue(results[1]),
       feishu: settledValue(results[2]),
-      training: settledValue(results[3]),
       partialFailureCount: results.filter((item) => item.status === "rejected").length,
     };
     renderFinalsHome(state.finalsHome);
@@ -991,18 +993,6 @@ function routeFinalsIntent(event) {
   const query = el.finalsHomeIntentInput?.value.trim() || "";
   if (!query) {
     el.finalsHomeIntentInput?.focus();
-    return;
-  }
-  if (/训练|演练|答辩|追问/.test(query)) {
-    showView("trainingView");
-    return;
-  }
-  if (/企业|合作方|供应商|风险|尽调/.test(query)) {
-    showView("partnerView");
-    return;
-  }
-  if (/战情|态势|地图|地区|外部事件/.test(query)) {
-    showView("battleMapView");
     return;
   }
   showView("workbenchView");
@@ -7750,6 +7740,31 @@ async function sendWorkspaceReport(workspaceId, filename) {
   showToast("Word 报告已发送到当前飞书项目群");
 }
 
+function updateOrganizationMemberCount() {
+  const selectedCount = el.organizationMemberSelect?.selectedOptions.length || 0;
+  if (el.organizationMemberCount) el.organizationMemberCount.textContent = `已选择 ${selectedCount} 人`;
+}
+
+function renderOrganizationMemberPicker(users) {
+  if (!el.organizationMemberPicker) return;
+  if (!users.length) {
+    el.organizationMemberPicker.innerHTML = '<p class="empty-state">当前应用授权范围内没有可邀请成员</p>';
+    updateOrganizationMemberCount();
+    return;
+  }
+  el.organizationMemberPicker.innerHTML = users.map((user) => {
+    const name = user.name || "未命名成员";
+    const initial = Array.from(name)[0] || "人";
+    return `<label class="organization-member-choice">
+      <input type="checkbox" value="${escapeHtml(user.open_id)}" />
+      <span class="organization-member-avatar" aria-hidden="true">${escapeHtml(initial)}</span>
+      <span class="organization-member-identity"><strong>${escapeHtml(name)}</strong><small>飞书授权成员</small></span>
+      <span class="organization-member-check" aria-hidden="true">✓</span>
+    </label>`;
+  }).join("");
+  updateOrganizationMemberCount();
+}
+
 async function openOrganizationGroupDialog(mode) {
   if (mode === "invite" && !state.organizationWorkspaceId) {
     throw new Error("请先选择协作空间");
@@ -7765,6 +7780,7 @@ async function openOrganizationGroupDialog(mode) {
       )
       .join("");
   }
+  renderOrganizationMemberPicker(users);
   const creating = mode === "create";
   if (el.organizationGroupDialogTitle) {
     el.organizationGroupDialogTitle.textContent = creating ? "创建飞书项目群" : "邀请协作成员";
@@ -7779,11 +7795,14 @@ async function openOrganizationGroupDialog(mode) {
   }
   if (el.organizationGroupStatus) el.organizationGroupStatus.textContent = "";
   el.organizationGroupDialog?.showModal();
+  if (creating) el.organizationGroupName?.focus();
+  else el.organizationMemberPicker?.querySelector("input")?.focus();
 }
 
 function closeOrganizationGroupDialog() {
   el.organizationGroupDialog?.close();
   el.organizationGroupForm?.reset();
+  updateOrganizationMemberCount();
 }
 
 async function submitOrganizationGroup(event) {
@@ -9292,6 +9311,7 @@ function bindEvents() {
   });
   el.motionToggleButton?.addEventListener("click", () => applyMotionPreference(!state.motionDisabled));
   el.presentationModeButton?.addEventListener("click", () => applyPresentationMode(!state.presentationMode));
+  el.presentationExitButton?.addEventListener("click", () => applyPresentationMode(false));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state.presentationMode) applyPresentationMode(false);
   });
@@ -10171,6 +10191,13 @@ function bindEvents() {
   el.organizationGroupForm?.addEventListener("submit", (event) =>
     submitOrganizationGroup(event).catch(toastError("飞书群同步失败")),
   );
+  el.organizationMemberPicker?.addEventListener("change", (event) => {
+    const checkbox = event.target.closest('input[type="checkbox"]');
+    if (!checkbox || !el.organizationMemberSelect) return;
+    const option = [...el.organizationMemberSelect.options].find((item) => item.value === checkbox.value);
+    if (option) option.selected = checkbox.checked;
+    updateOrganizationMemberCount();
+  });
   el.closeOrganizationGroupButton?.addEventListener("click", closeOrganizationGroupDialog);
   el.cancelOrganizationGroupButton?.addEventListener("click", closeOrganizationGroupDialog);
   el.organizationGroupDialog?.addEventListener("click", (event) => {

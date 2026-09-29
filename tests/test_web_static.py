@@ -592,39 +592,41 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("@media (max-width: 560px)", css)
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)
 
-    def test_national_finals_home_connects_the_product_story_without_hiding_tools(self) -> None:
+    def test_home_prioritizes_core_workflow_without_removing_secondary_tools(self) -> None:
         root = Path(__file__).resolve().parents[1]
         html = (root / "web" / "dist" / "index.html").read_text(encoding="utf-8")
         js = (root / "web" / "dist" / "app.js").read_text(encoding="utf-8")
         css = (root / "web" / "dist" / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn('id="finalsHomeView" class="view active"', html)
-        self.assertIn("从公开机会，到可执行的投标决策", html)
-        for label in ("机会", "项目", "企业", "战情图", "训练", "协作"):
+        self.assertIn("从查项目到交标书，一条线完成", html)
+        for label in ("首页", "查招标", "投标项目", "团队协作"):
             self.assertIn(f">{label}</button>", html)
-        self.assertIn("<summary>更多工具</summary>", html)
-        for tool in ("检索工作台", "评委挑战", "演示控制台", "数据源", "评测与价值", "设置"):
+        self.assertIn("<summary>更多</summary>", html)
+        for tool in ("机会雷达", "企业尽调", "战情图", "训练中心", "评委挑战", "数据源", "评测与价值", "设置"):
             self.assertIn(tool, html)
-        for section in ("发现机会", "判断局面", "进入行动", "四层架构", "7-MINUTE ROUTE", "DATA FEASIBILITY"):
+        for section in ("查找招标", "管理投标项目", "团队协作交付", "重点投标项目", "系统状态与数据概览"):
             self.assertIn(section, html)
         for identifier in (
             "finalsHomeIntentForm",
             "finalsHomeOpportunityCount",
             "finalsHomeScoreGrid",
             "finalsHomeActions",
-            "finalsHomeSourceBoundary",
+            "presentationExitButton",
+            "organizationMemberPicker",
         ):
             self.assertIn(f'id="{identifier}"', html)
+        self.assertIn('class="deferred-tool-section"', html)
+        self.assertNotIn("四层架构，共用同一组业务编号", html)
         self.assertIn("refreshFinalsHome", js)
         self.assertIn("/api/demo-reliability?compact=true", js)
         self.assertIn("routeFinalsIntent", js)
         self.assertIn("openFinalsPrimaryCase", js)
-        self.assertIn(".finals-home-shell", css)
-        self.assertIn(".finals-architecture-flow", css)
-        self.assertIn(".finals-roadshow-route", css)
-        self.assertIn("@media (max-width: 980px)", css)
+        self.assertIn("renderOrganizationMemberPicker", js)
+        self.assertIn(".primary-workflow", css)
+        self.assertIn(".presentation-exit-button", css)
+        self.assertIn(".organization-member-choice", css)
         self.assertIn("@media (max-width: 620px)", css)
-        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
 
 
 if __name__ == "__main__":

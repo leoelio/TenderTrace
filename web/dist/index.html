@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TenderTrace 工作台</title>
     <link rel="icon" href="/logo.svg" />
-    <link rel="stylesheet" href="/styles.css?v=20260929-finals-home" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-simplified-workflow" />
     <link rel="stylesheet" href="/workspace.css?v=20260914" />
   </head>
   <body>
@@ -31,25 +31,31 @@
         </button>
 
         <nav id="topNavigation" class="topnav" aria-label="主导航">
-          <button class="nav-tab active" type="button" data-view="finalsHomeView">总决赛</button>
-          <button class="nav-tab" type="button" data-view="radarView">机会</button>
-          <button class="nav-tab" type="button" data-view="opportunityView">项目</button>
-          <button class="nav-tab" type="button" data-view="partnerView">企业</button>
-          <button class="nav-tab" type="button" data-view="battleMapView">战情图</button>
-          <button class="nav-tab" type="button" data-view="trainingView">训练</button>
-          <button class="nav-tab" type="button" data-view="organizationView">协作</button>
+          <button class="nav-tab active" type="button" data-view="finalsHomeView">首页</button>
+          <button class="nav-tab" type="button" data-view="workbenchView">查招标</button>
+          <button class="nav-tab" type="button" data-view="opportunityView">投标项目</button>
+          <button class="nav-tab" type="button" data-view="organizationView">团队协作</button>
           <details class="nav-more">
-            <summary>更多工具</summary>
-            <div>
-              <button class="nav-tab" type="button" data-view="workbenchView">检索工作台</button>
+            <summary>更多</summary>
+            <div class="nav-more-menu">
+              <span class="nav-more-label">分析工具</span>
+              <button class="nav-tab" type="button" data-view="radarView">机会雷达</button>
+              <button class="nav-tab" type="button" data-view="partnerView">企业尽调</button>
+              <button class="nav-tab" type="button" data-view="battleMapView">战情图</button>
+              <span class="nav-more-label">辅助工具</span>
+              <button class="nav-tab" type="button" data-view="trainingView">训练中心</button>
               <button class="nav-tab" type="button" data-view="challengeView">评委挑战</button>
-              <button class="nav-tab" type="button" data-view="demoConsoleView">演示控制台</button>
               <button class="nav-tab" type="button" data-view="historyView">历史运行</button>
               <button class="nav-tab" type="button" data-view="subscriptionsView">订阅管理</button>
+              <span class="nav-more-label">系统管理</span>
               <button class="nav-tab" type="button" data-view="sourcesView">数据源</button>
               <button class="nav-tab" type="button" data-view="evaluationView">评测与价值</button>
               <button class="nav-tab" type="button" data-view="memoryView">用户记忆</button>
+              <button class="nav-tab" type="button" data-view="demoConsoleView">演示控制台</button>
               <button class="nav-tab" type="button" data-view="settingsView">设置</button>
+              <span class="nav-more-label">显示</span>
+              <button id="motionToggleButton" class="nav-tab nav-utility-button" type="button" aria-pressed="false" title="关闭业务动效">减少动效</button>
+              <button id="presentationModeButton" class="nav-tab nav-utility-button" type="button" aria-pressed="false" title="进入大屏模式">演示大屏</button>
             </div>
           </details>
         </nav>
@@ -57,14 +63,6 @@
         <div class="topbar-actions">
           <span id="apiStatus" class="status-dot status-muted"></span>
           <span id="apiStatusText">连接中</span>
-          <div class="visual-controls" role="group" aria-label="展示设置">
-            <button id="motionToggleButton" class="display-control-button" type="button" aria-pressed="false" title="关闭业务动效">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"></path></svg><span>动效开</span>
-            </button>
-            <button id="presentationModeButton" class="display-control-button" type="button" aria-pressed="false" title="进入大屏模式">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path></svg><span>大屏</span>
-            </button>
-          </div>
           <button
             id="notificationButton"
             class="icon-button"
@@ -136,108 +134,84 @@
         </div>
       </header>
 
+      <button id="presentationExitButton" class="presentation-exit-button" type="button" hidden>
+        <span aria-hidden="true">←</span> 退出大屏
+        <small>Esc</small>
+      </button>
+
       <main class="page">
         <section id="finalsHomeView" class="view active">
-          <div class="finals-home-shell">
+          <div class="finals-home-shell streamlined-home">
             <header class="finals-home-hero">
               <div>
-                <span class="workspace-eyebrow">TENDERTRACE / NATIONAL FINALS</span>
-                <h1>从公开机会，到可执行的投标决策</h1>
-                <p>一条主线贯通真实来源、项目数字孪生、证据与变更、企业风险、飞书协作和团队训练。</p>
+                <span class="workspace-eyebrow">TENDERTRACE / 招投标工作台</span>
+                <h1>从查项目到交标书，一条线完成</h1>
+                <p>先找到合适的招标项目，再完成研判、准备和团队协作。</p>
               </div>
               <div class="finals-home-hero-actions">
-                <button class="primary-button" type="button" data-finals-primary-case>进入主案例</button>
-                <button class="ghost-button" type="button" data-finals-view="challengeView">评委现场挑战</button>
-                <button id="finalsHomeRefreshButton" class="ghost-button" type="button">刷新现场状态</button>
+                <button class="primary-button" type="button" data-finals-view="workbenchView">开始查招标</button>
+                <button class="ghost-button" type="button" data-finals-view="opportunityView">查看投标项目</button>
+                <button id="finalsHomeRefreshButton" class="ghost-button" type="button">刷新数据</button>
               </div>
             </header>
 
-            <form id="finalsHomeIntentForm" class="finals-intent-bar">
-              <label for="finalsHomeIntentInput"><span>一句话进入业务动作</span><input id="finalsHomeIntentInput" type="text" placeholder="例如：查看北京服务器机会、核验合作方风险、打开全国态势、开始答辩训练" /></label>
-              <button class="primary-button" type="submit">开始</button>
-              <div class="finals-intent-chips" aria-label="快捷入口">
-                <button type="button" data-finals-intent="最近一个月北京服务器招标机会">查机会</button>
-                <button type="button" data-finals-view="partnerView">查企业风险</button>
-                <button type="button" data-finals-view="battleMapView">看地区态势</button>
-                <button type="button" data-finals-view="trainingView">开始训练</button>
+            <form id="finalsHomeIntentForm" class="finals-intent-bar streamlined-intent-bar">
+              <label for="finalsHomeIntentInput"><span>告诉我你要找什么</span><input id="finalsHomeIntentInput" type="text" placeholder="例如：最近 30 天北京服务器招标项目" /></label>
+              <button class="primary-button" type="submit">查找招标</button>
+              <div class="finals-intent-chips" aria-label="常用搜索">
+                <button type="button" data-finals-intent="最近一个月北京服务器招标机会">北京服务器</button>
+                <button type="button" data-finals-intent="最近一个月上海充电桩招标机会">上海充电桩</button>
+                <button type="button" data-finals-intent="最近一个月全国医疗设备招标机会">全国医疗设备</button>
               </div>
             </form>
 
-            <section class="finals-trust-strip" aria-label="首页可信状态">
-              <span><b>REAL DATA</b><i id="finalsHomeDataAsOf">读取中</i></span>
-              <span><b>LOCAL FIRST</b><i id="finalsHomeLocalState">服务检查中</i></span>
-              <span><b>FEISHU LOOP</b><i id="finalsHomeFeishuState">协作检查中</i></span>
-              <span><b>SAFE DEMO</b><i id="finalsHomeReplayState">回放检查中</i></span>
+            <section class="primary-workflow" aria-label="核心工作流程">
+              <button class="workflow-step-button" type="button" data-finals-view="workbenchView"><span>01</span><strong>查找招标</strong><small>按地区、品类和时间查真实公告</small></button>
+              <button class="workflow-step-button" type="button" data-finals-view="opportunityView"><span>02</span><strong>管理投标项目</strong><small>判断机会、拆解要求、准备标书</small></button>
+              <button class="workflow-step-button" type="button" data-finals-view="organizationView"><span>03</span><strong>团队协作交付</strong><small>邀请成员、同步任务、沉淀经验</small></button>
             </section>
 
-            <div class="finals-home-grid">
-              <section class="finals-home-panel finals-discovery-panel">
-                <div class="finals-panel-head"><div><span>01 / 发现机会</span><h2>全国机会雷达</h2></div><button type="button" data-finals-view="radarView">打开雷达</button></div>
-                <div class="finals-radar-pulse" aria-hidden="true"><i></i><i></i><i></i><b>TT</b></div>
-                <div class="finals-discovery-metrics">
-                  <strong id="finalsHomeOpportunityCount">-<small>有效机会</small></strong>
-                  <strong id="finalsHomeRecentCount">-<small>近 7 日新增</small></strong>
-                  <strong id="finalsHomeRegionCount">-<small>覆盖地区</small></strong>
-                  <strong id="finalsHomeSourceCount">-<small>本地有结果来源</small></strong>
-                </div>
-                <p id="finalsHomeRadarMeta">正在读取本地索引与来源状态。</p>
-              </section>
-
+            <div class="home-work-grid">
               <section class="finals-home-panel finals-main-case-panel">
-                <div class="finals-panel-head"><div><span>02 / 判断局面</span><h2>当前主机会</h2></div><span id="finalsHomeCaseState" class="finals-case-state">核验中</span></div>
-                <h3 id="finalsHomeCaseTitle">正在载入已核验主案例</h3>
+                <div class="finals-panel-head"><div><span>当前工作</span><h2>重点投标项目</h2></div><span id="finalsHomeCaseState" class="finals-case-state">读取中</span></div>
+                <h3 id="finalsHomeCaseTitle">正在载入重点项目</h3>
                 <p id="finalsHomeCaseMeta">项目、证据和评分读取中。</p>
                 <div id="finalsHomeScoreGrid" class="finals-score-grid"></div>
                 <div id="finalsHomeCaseEvidence" class="finals-case-evidence"></div>
                 <div class="finals-case-actions">
-                  <button class="primary-button" type="button" data-finals-primary-case>打开数字孪生</button>
-                  <button class="ghost-button" type="button" data-finals-view="demoConsoleView">查看可信回放</button>
+                  <button class="primary-button" type="button" data-finals-primary-case>继续准备标书</button>
+                  <button class="ghost-button" type="button" data-finals-view="opportunityView">查看全部项目</button>
                 </div>
               </section>
 
               <section class="finals-home-panel finals-action-panel">
-                <div class="finals-panel-head"><div><span>03 / 进入行动</span><h2>风险与下一步</h2></div><button type="button" data-finals-view="organizationView">进入协作</button></div>
-                <div id="finalsHomeActions" class="finals-action-list"><p>正在生成主案例行动列表。</p></div>
-                <div class="finals-action-links">
-                  <button type="button" data-finals-view="partnerView"><b>企业尽调</b><span>核验合作方风险</span></button>
-                  <button type="button" data-finals-view="trainingView"><b>检验准备度</b><span>连续追问与复算评分</span></button>
-                  <button type="button" data-finals-view="organizationView"><b>飞书战情室</b><span>任务、表格、日历和回写</span></button>
-                </div>
+                <div class="finals-panel-head"><div><span>下一步</span><h2>待处理事项</h2></div><button type="button" data-finals-view="organizationView">团队协作</button></div>
+                <div id="finalsHomeActions" class="finals-action-list"><p>正在生成重点项目行动列表。</p></div>
               </section>
             </div>
 
-            <section class="finals-architecture" aria-labelledby="finalsArchitectureTitle">
-              <div class="finals-panel-head"><div><span>INTEGRATED PRODUCT</span><h2 id="finalsArchitectureTitle">四层架构，共用同一组业务编号</h2></div></div>
-              <div class="finals-architecture-flow">
-                <article><span>01</span><b>数据与事件层</b><p>公告、附件、结果、企业材料、外部事件</p></article>
-                <article><span>02</span><b>可信情报层</b><p>数字孪生、证据链、企业尽调、来源关系</p></article>
-                <article><span>03</span><b>决策与执行层</b><p>拆标、会审、变更响应、飞书战情室</p></article>
-                <article><span>04</span><b>学习与复盘层</b><p>组织记忆、决策沙盘、训练、价值实验</p></article>
+            <details class="home-status-details">
+              <summary><span>系统状态与数据概览</span><small>低频信息，按需展开</small></summary>
+              <div class="home-status-body">
+                <section class="finals-trust-strip" aria-label="系统状态">
+                  <span><b>数据时间</b><i id="finalsHomeDataAsOf">读取中</i></span>
+                  <span><b>本地服务</b><i id="finalsHomeLocalState">检查中</i></span>
+                  <span><b>飞书协作</b><i id="finalsHomeFeishuState">检查中</i></span>
+                  <span><b>安全回放</b><i id="finalsHomeReplayState">检查中</i></span>
+                </section>
+                <div class="finals-discovery-metrics">
+                  <strong id="finalsHomeOpportunityCount">-<small>有效机会</small></strong>
+                  <strong id="finalsHomeRecentCount">-<small>近 7 日新增</small></strong>
+                  <strong id="finalsHomeRegionCount">-<small>覆盖地区</small></strong>
+                  <strong id="finalsHomeSourceCount">-<small>有结果来源</small></strong>
+                </div>
+                <p id="finalsHomeRadarMeta">正在读取本地索引与来源状态。</p>
+                <div class="home-status-actions">
+                  <button class="ghost-button" type="button" data-finals-view="sourcesView">查看数据源</button>
+                  <button class="ghost-button" type="button" data-finals-view="historyView">查看运行记录</button>
+                </div>
               </div>
-              <p class="finals-id-rule">项目编号、企业编号、证据编号、事件编号和任务编号贯穿全链路；任一结论都能回到来源，任一行动都能回到项目。</p>
-            </section>
-
-            <section class="finals-roadshow-route" aria-labelledby="finalsRouteTitle">
-              <div class="finals-panel-head"><div><span>7-MINUTE ROUTE</span><h2 id="finalsRouteTitle">总决赛现场只演示一条连续链路</h2></div><button type="button" data-finals-view="demoConsoleView">演示预检</button></div>
-              <ol>
-                <li><time>00:00</time><button type="button" data-finals-view="radarView"><b>发现真实机会</b><span>雷达与来源状态</span></button></li>
-                <li><time>01:10</time><button type="button" data-finals-primary-case><b>判断是否值得投</b><span>数字孪生三评分</span></button></li>
-                <li><time>02:30</time><button type="button" data-finals-primary-case><b>回查证据与变更</b><span>原文、要求、影响</span></button></li>
-                <li><time>03:50</time><button type="button" data-finals-primary-case><b>拆标并人工裁决</b><span>任务、缺口、专业分歧</span></button></li>
-                <li><time>05:10</time><button type="button" data-finals-view="organizationView"><b>进入飞书执行</b><span>群、表格、任务、日历</span></button></li>
-                <li><time>06:20</time><button type="button" data-finals-view="trainingView"><b>用训练完成收束</b><span>连续追问、可复算评分</span></button></li>
-              </ol>
-            </section>
-
-            <section class="finals-source-boundary">
-              <div class="finals-panel-head"><div><span>DATA FEASIBILITY</span><h2>新增方向的数据源边界</h2></div><button type="button" data-finals-view="sourcesView">查看全部来源</button></div>
-              <div id="finalsHomeSourceBoundary" class="finals-source-boundary-grid">
-                <article data-state="ready"><b>官方采购来源</b><span>已接入并有本地证据</span></article>
-                <article data-state="ready"><b>USGS 外部事件</b><span>已接入，影响只作为待复核候选</span></article>
-                <article data-state="manual"><b>企业主体与风险</b><span>当前使用真实公告 + 人工/授权材料</span></article>
-                <article data-state="planned"><b>ReliefWeb / WTO</b><span>需应用名、密钥或产品映射，尚未接入</span></article>
-              </div>
-            </section>
+            </details>
           </div>
         </section>
 
@@ -820,31 +794,26 @@
           <section class="panel page-panel opportunity-panel">
             <div class="panel-heading">
               <div>
-                <h1>机会情报</h1>
-                <span class="panel-meta">按时效、完整度、可信度与可行动性统一研判</span>
+                <h1>投标项目</h1>
+                <span class="panel-meta">筛选机会、判断是否参与，并推进标书准备</span>
               </div>
               <div class="action-group">
-                <a id="openFeishuBitableButton" class="ghost-button" href="#" target="_blank" rel="noreferrer" hidden>打开飞书台账</a>
-                <select id="opportunityTopicFilter" aria-label="筛选采购品类">
-                  <option value="">全部品类</option>
-                </select>
-                <select id="opportunityLevelFilter" aria-label="筛选机会等级">
-                  <option value="">全部等级</option>
-                  <option value="A">A · 优先跟进</option>
-                  <option value="B">B · 重点观察</option>
-                  <option value="C">C · 信息补全</option>
-                  <option value="D">D · 低优先级</option>
-                </select>
-                <select id="opportunitySortSelect" aria-label="机会排序">
-                  <option value="priority">行动优先</option>
-                  <option value="deadline">截止时间</option>
-                  <option value="recent">最新发布</option>
-                </select>
-                <button id="syncFeishuTasksButton" class="ghost-button" type="button">同步任务状态</button>
-                <button id="sendOpportunityChangesButton" class="ghost-button" type="button">推送公告变更</button>
-                <button id="sendOpportunityBriefingButton" class="ghost-button" type="button">发送经营晨报</button>
                 <button id="refreshOpportunitiesButton" class="primary-lite-button" type="button">刷新</button>
+                <details class="panel-more-actions">
+                  <summary>更多操作</summary>
+                  <div>
+                    <a id="openFeishuBitableButton" class="ghost-button" href="#" target="_blank" rel="noreferrer" hidden>打开飞书台账</a>
+                    <button id="syncFeishuTasksButton" class="ghost-button" type="button">同步任务状态</button>
+                    <button id="sendOpportunityChangesButton" class="ghost-button" type="button">推送公告变更</button>
+                    <button id="sendOpportunityBriefingButton" class="ghost-button" type="button">发送经营晨报</button>
+                  </div>
+                </details>
               </div>
+            </div>
+            <div class="opportunity-filterbar" aria-label="项目筛选">
+              <label>采购品类<select id="opportunityTopicFilter" aria-label="筛选采购品类"><option value="">全部品类</option></select></label>
+              <label>机会等级<select id="opportunityLevelFilter" aria-label="筛选机会等级"><option value="">全部等级</option><option value="A">A · 优先跟进</option><option value="B">B · 重点观察</option><option value="C">C · 信息补全</option><option value="D">D · 低优先级</option></select></label>
+              <label>排序方式<select id="opportunitySortSelect" aria-label="机会排序"><option value="priority">行动优先</option><option value="deadline">截止时间</option><option value="recent">最新发布</option></select></label>
             </div>
             <div id="opportunitySummary" class="opportunity-summary empty-state">等待机会数据</div>
             <div id="opportunityDecisionBoard" class="opportunity-decision-board empty-state">等待决策数据</div>
@@ -1585,23 +1554,29 @@
               </button>
             </div>
             <div id="organizationSummary" class="organization-summary empty-state">请选择或创建协作空间</div>
-            <section class="bid-memory-cockpit" aria-labelledby="bidMemoryTitle">
-              <div class="bid-memory-heading">
-                <div>
-                  <span>ENTERPRISE BID MEMORY</span>
-                  <h2 id="bidMemoryTitle">企业投标记忆体</h2>
-                  <p>把项目、要求、材料、缺口、决策与结果连接成可追溯的组织经验网络</p>
+            <details class="deferred-tool-section">
+              <summary>
+                <span><strong>历史项目与经验</strong><small>归档项目较多时，可用记忆图谱查找相似经验</small></span>
+                <em>展开</em>
+              </summary>
+              <section class="bid-memory-cockpit" aria-labelledby="bidMemoryTitle">
+                <div class="bid-memory-heading">
+                  <div>
+                    <span>ENTERPRISE BID MEMORY</span>
+                    <h2 id="bidMemoryTitle">企业投标记忆体</h2>
+                    <p>把项目、要求、材料、缺口、决策与结果连接成可追溯的组织经验网络</p>
+                  </div>
+                  <div class="bid-memory-target-control">
+                    <label>
+                      新机会 ID
+                      <input id="bidMemoryTargetNoticeId" maxlength="160" placeholder="输入机会 ID 查看相似经验" />
+                    </label>
+                    <button id="loadBidMemoryButton" class="primary-lite-button" type="button">生成记忆图谱</button>
+                  </div>
                 </div>
-                <div class="bid-memory-target-control">
-                  <label>
-                    新机会 ID
-                    <input id="bidMemoryTargetNoticeId" maxlength="160" placeholder="输入机会 ID 查看相似经验" />
-                  </label>
-                  <button id="loadBidMemoryButton" class="primary-lite-button" type="button">生成记忆图谱</button>
-                </div>
-              </div>
-              <div id="bidMemoryDashboard" class="bid-memory-dashboard empty-state">选择协作空间后加载企业投标记忆体</div>
-            </section>
+                <div id="bidMemoryDashboard" class="bid-memory-dashboard empty-state">选择协作空间后加载企业投标记忆体</div>
+              </section>
+            </details>
             <section id="organizationReportDelivery" class="organization-report-delivery" aria-labelledby="organizationReportDeliveryTitle"></section>
             <div class="organization-layout">
               <section class="organization-memory-stream" aria-labelledby="organizationMemoryTitle">
@@ -1655,25 +1630,30 @@
           </section>
         </section>
 
-        <dialog id="organizationGroupDialog" class="owner-assignment-dialog organization-group-dialog">
-          <form id="organizationGroupForm" method="dialog">
-            <div class="dialog-heading">
+        <dialog id="organizationGroupDialog" class="owner-assignment-dialog organization-group-dialog" aria-labelledby="organizationGroupDialogTitle">
+          <form id="organizationGroupForm" class="organization-group-form" method="dialog">
+            <div class="organization-dialog-heading">
               <div>
+                <span>TEAM COLLABORATION</span>
                 <h2 id="organizationGroupDialogTitle">创建飞书项目群</h2>
                 <p id="organizationGroupDialogMeta">选择授权成员</p>
               </div>
-              <button id="closeOrganizationGroupButton" class="icon-button" type="button" aria-label="关闭">×</button>
+              <button id="closeOrganizationGroupButton" class="icon-close-button" type="button" aria-label="关闭邀请成员对话框">×</button>
             </div>
-            <label id="organizationGroupNameField">
-              群名称
+            <label id="organizationGroupNameField" class="organization-group-name-field">
+              <span>群名称</span>
               <input id="organizationGroupName" maxlength="100" required />
             </label>
-            <label>
-              成员
-              <select id="organizationMemberSelect" multiple size="8"></select>
-            </label>
+            <div class="organization-member-field">
+              <div class="organization-member-label"><span>选择成员</span><small id="organizationMemberCount">已选择 0 人</small></div>
+              <div id="organizationMemberPicker" class="organization-member-picker" role="group" aria-label="选择飞书成员">
+                <p class="empty-state">正在读取飞书通讯录…</p>
+              </div>
+              <select id="organizationMemberSelect" multiple size="8" aria-hidden="true" tabindex="-1" hidden></select>
+              <p class="organization-member-help">成员将收到邀请，并同步到当前项目协作空间。</p>
+            </div>
             <div id="organizationGroupStatus" class="form-status" aria-live="polite"></div>
-            <div class="dialog-actions">
+            <div class="dialog-actions organization-dialog-actions">
               <button id="cancelOrganizationGroupButton" class="ghost-button" type="button">取消</button>
               <button id="submitOrganizationGroupButton" class="primary-button" type="submit">创建并邀请</button>
             </div>
@@ -1856,6 +1836,6 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js?v=20260929-finals-home" type="module"></script>
+    <script src="/app.js?v=20260929-simplified-workflow" type="module"></script>
   </body>
 </html>

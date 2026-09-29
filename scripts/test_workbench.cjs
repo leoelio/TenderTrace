@@ -139,20 +139,28 @@ test("training center declares six phases, evidence boundaries, replay, and resp
   assert.match(css, /prefers-reduced-motion: reduce/);
 });
 
-test("national finals home keeps one story, six primary entrances, and specialist tools", () => {
+test("home prioritizes the core tender workflow and keeps secondary tools available", () => {
   const html = fs.readFileSync(path.join(__dirname, "../web/dist/index.html"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "../web/dist/styles.css"), "utf8");
   assert.match(html, /id="finalsHomeView" class="view active"/);
-  assert.match(html, /从公开机会，到可执行的投标决策/);
-  for (const view of ["radarView", "opportunityView", "partnerView", "battleMapView", "trainingView", "organizationView"]) {
+  assert.match(html, /从查项目到交标书，一条线完成/);
+  for (const entrance of ["首页", "查招标", "投标项目", "团队协作"]) {
+    assert.match(html, new RegExp(`>${entrance}<\\/button>`));
+  }
+  assert.match(html, /<summary>更多<\/summary>/);
+  for (const view of ["radarView", "partnerView", "battleMapView", "trainingView", "sourcesView", "settingsView"]) {
     assert.match(html, new RegExp(`data-view="${view}"`));
   }
-  assert.match(html, /<summary>更多工具<\/summary>/);
-  assert.match(html, /四层架构，共用同一组业务编号/);
-  assert.match(html, /总决赛现场只演示一条连续链路/);
+  assert.match(html, /class="primary-workflow"/);
+  assert.match(html, /class="home-status-details"/);
+  assert.doesNotMatch(html, /四层架构，共用同一组业务编号/);
+  assert.match(html, /id="presentationExitButton"/);
+  assert.match(html, /id="organizationMemberPicker"/);
+  assert.match(html, /class="deferred-tool-section"/);
   assert.match(source, /\/api\/demo-reliability\?compact=true/);
   assert.match(source, /function routeFinalsIntent/);
-  assert.match(css, /\.finals-home-shell/);
-  assert.match(css, /@media \(max-width: 980px\)/);
-  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(source, /function renderOrganizationMemberPicker/);
+  assert.match(css, /\.primary-workflow/);
+  assert.match(css, /\.presentation-exit-button/);
+  assert.match(css, /\.organization-member-choice/);
 });
