@@ -151,6 +151,18 @@ body.theme-dark :is(.ghost-button, .link-button, .primary-lite-button, .danger-b
   font-weight: 550;
 }
 .ghost-button:hover, .link-button:hover, .primary-lite-button:hover { background: var(--accent-soft); border-color: var(--accent); }
+.primary-lite-button,
+body.theme-dark .primary-lite-button {
+  color: #fff;
+  background: #1762cf;
+  border-color: #1762cf;
+}
+.primary-lite-button:hover,
+body.theme-dark .primary-lite-button:hover {
+  color: #fff;
+  background: #104fae;
+  border-color: #104fae;
+}
 .danger-button { color: #c23f4b; }
 .danger-button:hover { background: #fff1f2; border-color: #e5aab0; }
 .primary-button { background: #1762cf; border-color: #1762cf; box-shadow: 0 3px 7px rgba(23,98,207,.14); border-radius: 6px; }
@@ -206,8 +218,8 @@ tbody tr:nth-child(even), body.theme-dark tbody tr:nth-child(even) { background:
 tbody tr:hover, body.theme-dark tbody tr:hover { background: var(--accent-soft); }
 .table-subvalue { color: var(--muted); margin-top: 5px; }
 .list-hint { color: var(--muted); padding: 10px 20px; }
-.opportunity-panel > .panel-heading { align-items: flex-start; flex-direction: column; }
-.opportunity-panel > .panel-heading > .action-group { width: 100%; justify-content: flex-start; }
+.opportunity-panel > .panel-heading { align-items: flex-start; flex-direction: row; }
+.opportunity-panel > .panel-heading > .action-group { width: auto; justify-content: flex-end; }
 .opportunity-summary, .opportunity-market, .opportunity-decision-board,
 body.theme-dark :is(.opportunity-summary, .opportunity-market, .opportunity-decision-board) { background: var(--surface); }
 .opportunity-summary .summary-tile, body.theme-dark .opportunity-summary .summary-tile {
@@ -293,6 +305,8 @@ dialog::backdrop { background: rgba(25,30,38,.35); backdrop-filter: blur(4px); }
   .list-tools { padding: 12px; }
   .opportunity-summary .summary-tile { padding: 14px; }
   .opportunity-summary .summary-tile strong { font-size: 23px; }
+  .opportunity-panel > .panel-heading { flex-direction: column; }
+  .opportunity-panel > .panel-heading > .action-group { width: 100%; justify-content: flex-start; }
   .opportunity-panel > .panel-heading .action-group > * { min-width: 0; max-width: 100%; }
   .source-grid .source-row, .eval-card { padding: 16px; }
   #evaluationView .eval-grid, #recallMetrics { grid-template-columns: minmax(0, 1fr); }

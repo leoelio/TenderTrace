@@ -94,7 +94,27 @@ def main(url: str) -> int:
             return 1
         print("OK  presentation mode exposes and honors the fixed exit action")
 
+        page.locator('#topNavigation > [data-view="opportunityView"]').click()
+        refresh_button = page.locator("#refreshOpportunitiesButton")
+        refresh_style = refresh_button.evaluate(
+            "element => ({ color: getComputedStyle(element).color, background: getComputedStyle(element).backgroundColor })"
+        )
+        if refresh_button.inner_text().strip() != "刷新" or refresh_style["color"] == refresh_style["background"]:
+            print(f"FAIL: project refresh action is unreadable: {refresh_style!r}")
+            return 1
+        if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
+            print("FAIL: project view overflows horizontally")
+            return 1
+        print("OK  project actions are readable and the desktop layout has no horizontal overflow")
+
         page.locator('#topNavigation > [data-view="organizationView"]').click()
+        create_group_button = page.locator("#createOrganizationWorkspaceButton")
+        create_group_style = create_group_button.evaluate(
+            "element => ({ color: getComputedStyle(element).color, background: getComputedStyle(element).backgroundColor })"
+        )
+        if create_group_button.inner_text().strip() != "创建项目群" or create_group_style["color"] == create_group_style["background"]:
+            print(f"FAIL: create-group action is unreadable: {create_group_style!r}")
+            return 1
         page.locator("#createOrganizationWorkspaceButton").click()
         group_dialog = page.locator("#organizationGroupDialog")
         group_dialog.wait_for(state="visible", timeout=8000)
@@ -117,6 +137,17 @@ def main(url: str) -> int:
                 return 1
             page.locator("#cancelOrganizationGroupButton").click()
         print("OK  organization member picker opens in create and invite modes")
+
+        mobile = browser.new_page(viewport={"width": 390, "height": 844})
+        mobile.goto(url, wait_until="networkidle", timeout=30000)
+        for view_id in ("finalsHomeView", "workbenchView", "opportunityView", "organizationView"):
+            mobile.locator(f'[data-view="{view_id}"]').first.evaluate("element => element.click()")
+            mobile.wait_for_timeout(250)
+            if mobile.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
+                print(f"FAIL: {view_id} overflows on the 390px mobile viewport")
+                return 1
+        mobile.close()
+        print("OK  all four primary views fit the mobile viewport")
 
         browser.close()
     print("PASS: browser smoke test")

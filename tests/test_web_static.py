@@ -628,6 +628,19 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn(".organization-member-choice", css)
         self.assertIn("@media (max-width: 620px)", css)
 
+    def test_windows_local_launcher_checks_health_and_starts_hidden_service(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        wrapper = (root / "启动TenderTrace.cmd").read_text(encoding="ascii")
+        launcher = (root / "scripts" / "launch-local.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("scripts\\launch-local.ps1", wrapper)
+        self.assertIn('$serviceUrl = "http://127.0.0.1:8000/"', launcher)
+        self.assertIn('${serviceUrl}api/health', launcher)
+        self.assertIn(".venv\\Scripts\\python.exe", launcher)
+        self.assertIn("-WindowStyle Hidden", launcher)
+        self.assertIn('Start-Process $serviceUrl', launcher)
+        self.assertIn("$attempt -lt 40", launcher)
+
 
 if __name__ == "__main__":
     unittest.main()
