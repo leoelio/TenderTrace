@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 from typing import Any
@@ -16,6 +17,8 @@ REQUIREMENT_TYPE_LABELS = {
     "scoring": "评分项",
     "disqualification": "废标条款",
     "attachment": "附件清单",
+    "technical": "技术参数",
+    "commercial": "商务条款",
 }
 
 REQUIREMENT_STATUS_LABELS = {
@@ -25,6 +28,7 @@ REQUIREMENT_STATUS_LABELS = {
     "in_progress": "准备中",
     "review": "待复核",
     "completed": "已完成",
+    "superseded": "已拆分/合并",
 }
 
 
@@ -41,11 +45,16 @@ class OpportunityRequirement:
     source_locator: str
     mandatory: bool
     confidence: int
+    weight: float
     status: str
     status_label: str
     assignee_member_id: str
     due_at: str
     note: str
+    source_revision_id: str
+    parent_requirement_id: str
+    confirmed_at: str
+    extraction_mode: str
     created_by: str
     created_at: str
     updated_at: str
@@ -66,10 +75,14 @@ def upsert_requirement(
     source_locator: str,
     mandatory: bool = False,
     confidence: int = 0,
+    weight: float = 0,
     status: str = "pending",
     assignee_member_id: str = "",
     due_at: str = "",
     note: str = "",
+    source_revision_id: str = "",
+    parent_requirement_id: str = "",
+    extraction_mode: str = "manual",
     actor: str = "admin",
 ) -> OpportunityRequirement:
     init_db(settings)
@@ -85,9 +98,12 @@ def upsert_requirement(
         "assignee_member_id": assignee_member_id.strip(),
         "due_at": due_at.strip(),
         "note": note.strip(),
+        "source_revision_id": source_revision_id.strip(),
+        "parent_requirement_id": parent_requirement_id.strip(),
+        "extraction_mode": extraction_mode.strip() or "manual",
         "actor": actor.strip() or "admin",
     }
-    _validate(values, confidence)
+    _validate(values, confidence, weight)
     requirement_id = _requirement_id(values["notice_id"], values["requirement_key"])
     with connection(settings) as conn:
         if conn.execute("SELECT 1 FROM notices WHERE id = ?", (values["notice_id"],)).fetchone() is None:
@@ -100,13 +116,17 @@ def upsert_requirement(
             (values["assignee_member_id"], values["notice_id"]),
         ).fetchone() is None:
             raise ValueError("assignee_member_id must be an active member of this opportunity")
+        before = conn.execute(
+            "SELECT * FROM opportunity_requirements WHERE id = ?", (requirement_id,)
+        ).fetchone()
         conn.execute(
             """
             INSERT INTO opportunity_requirements(
                 id, notice_id, requirement_key, requirement_type, title, evidence_text,
                 source_url, source_locator, mandatory, confidence, status,
-                assignee_member_id, due_at, note, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                assignee_member_id, due_at, note, created_by, weight,
+                source_revision_id, parent_requirement_id, confirmed_at, extraction_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(notice_id, requirement_key) DO UPDATE SET
                 requirement_type = excluded.requirement_type,
                 title = excluded.title,
@@ -119,6 +139,15 @@ def upsert_requirement(
                 assignee_member_id = excluded.assignee_member_id,
                 due_at = excluded.due_at,
                 note = excluded.note,
+                weight = excluded.weight,
+                source_revision_id = excluded.source_revision_id,
+                parent_requirement_id = excluded.parent_requirement_id,
+                confirmed_at = CASE
+                    WHEN excluded.status IN ('confirmed', 'assigned', 'in_progress', 'review', 'completed')
+                    THEN COALESCE(opportunity_requirements.confirmed_at, datetime('now'))
+                    ELSE opportunity_requirements.confirmed_at
+                END,
+                extraction_mode = excluded.extraction_mode,
                 created_by = excluded.created_by,
                 updated_at = datetime('now')
             """,
@@ -138,6 +167,13 @@ def upsert_requirement(
                 values["due_at"] or None,
                 values["note"] or None,
                 values["actor"],
+                float(weight),
+                values["source_revision_id"],
+                values["parent_requirement_id"],
+                datetime.now(timezone.utc).isoformat(timespec="seconds")
+                if values["status"] in {"confirmed", "assigned", "in_progress", "review", "completed"}
+                else None,
+                values["extraction_mode"],
             ),
         )
         _record_requirement_event(
@@ -150,7 +186,16 @@ def upsert_requirement(
         row = conn.execute(
             "SELECT * FROM opportunity_requirements WHERE id = ?", (requirement_id,)
         ).fetchone()
-    assert row is not None
+        assert row is not None
+        _record_bid_history(
+            conn,
+            notice_id=values["notice_id"],
+            requirement_id=requirement_id,
+            action="created" if before is None else "edited",
+            before=dict(before) if before is not None else {},
+            after=dict(row),
+            actor=values["actor"],
+        )
     return _from_row(row)
 
 
@@ -170,14 +215,15 @@ def list_requirements(settings: Settings, notice_id: str) -> list[OpportunityReq
 
 def requirement_summary(settings: Settings, notice_id: str) -> dict[str, object]:
     requirements = list_requirements(settings, notice_id)
-    total_count = len(requirements)
-    confirmed_count = sum(item.status in {"confirmed", "assigned", "in_progress", "review", "completed"} for item in requirements)
-    completed_count = sum(item.status == "completed" for item in requirements)
+    active = [item for item in requirements if item.status != "superseded"]
+    total_count = len(active)
+    confirmed_count = sum(item.status in {"confirmed", "assigned", "in_progress", "review", "completed"} for item in active)
+    completed_count = sum(item.status == "completed" for item in active)
     mandatory_pending_count = sum(
-        item.mandatory and item.status in {"pending", "review"} for item in requirements
+        item.mandatory and item.status in {"pending", "review"} for item in active
     )
     by_type = {
-        requirement_type: sum(item.requirement_type == requirement_type for item in requirements)
+        requirement_type: sum(item.requirement_type == requirement_type for item in active)
         for requirement_type in REQUIREMENT_TYPE_LABELS
     }
     return {
@@ -190,7 +236,7 @@ def requirement_summary(settings: Settings, notice_id: str) -> dict[str, object]
     }
 
 
-def _validate(values: dict[str, str], confidence: int) -> None:
+def _validate(values: dict[str, str], confidence: int, weight: float) -> None:
     for field in ("notice_id", "requirement_key", "title", "evidence_text", "source_url", "source_locator"):
         if not values[field]:
             raise ValueError(f"{field} is required")
@@ -200,6 +246,10 @@ def _validate(values: dict[str, str], confidence: int) -> None:
         raise ValueError(f"unsupported requirement status: {values['status']}")
     if not isinstance(confidence, int) or not 0 <= confidence <= 100:
         raise ValueError("confidence must be an integer from 0 to 100")
+    if not isinstance(weight, (int, float)) or not 0 <= float(weight) <= 100:
+        raise ValueError("weight must be a number from 0 to 100")
+    if values["extraction_mode"] not in {"manual", "rules", "ocr", "model"}:
+        raise ValueError("unsupported extraction_mode")
 
 
 def _from_row(row: Any) -> OpportunityRequirement:
@@ -217,11 +267,16 @@ def _from_row(row: Any) -> OpportunityRequirement:
         source_locator=str(row["source_locator"] or ""),
         mandatory=bool(row["mandatory"]),
         confidence=int(row["confidence"] or 0),
+        weight=float(row["weight"] or 0),
         status=status,
         status_label=REQUIREMENT_STATUS_LABELS.get(status, status),
         assignee_member_id=str(row["assignee_member_id"] or ""),
         due_at=str(row["due_at"] or ""),
         note=str(row["note"] or ""),
+        source_revision_id=str(row["source_revision_id"] or ""),
+        parent_requirement_id=str(row["parent_requirement_id"] or ""),
+        confirmed_at=str(row["confirmed_at"] or ""),
+        extraction_mode=str(row["extraction_mode"] or "manual"),
         created_by=str(row["created_by"] or ""),
         created_at=str(row["created_at"] or ""),
         updated_at=str(row["updated_at"] or ""),
@@ -255,5 +310,33 @@ def _record_requirement_event(
                 ensure_ascii=False,
                 sort_keys=True,
             ),
+        ),
+    )
+
+
+def _record_bid_history(
+    conn,
+    *,
+    notice_id: str,
+    requirement_id: str,
+    action: str,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    actor: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO bid_requirement_history(
+            id, notice_id, requirement_id, action, before_json, after_json, actor
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            uuid4().hex,
+            notice_id,
+            requirement_id,
+            action,
+            json.dumps(before, ensure_ascii=False, sort_keys=True),
+            json.dumps(after, ensure_ascii=False, sort_keys=True),
+            actor,
         ),
     )

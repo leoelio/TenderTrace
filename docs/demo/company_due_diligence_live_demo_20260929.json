@@ -1,0 +1,407 @@
+{
+  "workspace_id": "b9e56ca6-c5f1-58fc-b79e-58b26e053f16",
+  "entity_id": "898a69fb-2c89-4ab7-a881-13d228de2ba6",
+  "notice_id": "ggzy:0051eddfc588cedd4da698903cec566821e7",
+  "source_fact": "真实公开服务器采购合同公告中的成交供应商；其他合作材料均明确标为脱敏路演材料",
+  "aggregation": {
+    "imported_count": 1,
+    "source_counts": {
+      "notice": 1
+    }
+  },
+  "risk_summary": {
+    "dimensions": [
+      {
+        "key": "subject",
+        "label": "主体与股权"
+      },
+      {
+        "key": "operations",
+        "label": "经营与信用"
+      },
+      {
+        "key": "judicial",
+        "label": "司法与合规"
+      },
+      {
+        "key": "performance",
+        "label": "历史项目与履约"
+      },
+      {
+        "key": "relationships",
+        "label": "关系与冲突"
+      },
+      {
+        "key": "public_opinion",
+        "label": "舆情与外部事件"
+      }
+    ],
+    "risks": [],
+    "facts": [
+      {
+        "id": "9efad33579cb78c8b9f5073dde1652d2",
+        "evidence_id": "d802cb24b888f3187b6ba279c3895370",
+        "evidence_title": "脱敏合作访谈纪要（路演演示材料）",
+        "source_url": "",
+        "occurred_at": "2026-09-29",
+        "dimension": "operations",
+        "dimension_label": "经营与信用",
+        "signal_kind": "fact",
+        "fact_signal": "路演演示用脱敏材料，不代表对真实企业的事实判断。访谈记录显示交付联系人已建立，但验收口径和重大事项持续披露机制仍需在签约前确认。",
+        "risk_interpretation": "已发现可核验的历史合作或履约事实",
+        "business_impact": "可作为合作经验参考，仍需核验项目相似度与当前有效性",
+        "due_diligence_question": "该项目与本次合作在规模、范围和交付条件上有哪些可比性？",
+        "mitigation": "由业务负责人复核相似度，不直接等同于本次履约能力。",
+        "severity": "info",
+        "confidence": 80,
+        "signal_status": "active",
+        "evidence_status": "verified",
+        "valid_until": "2027-03-31",
+        "manually_confirmed_by": "",
+        "deterministic": true
+      }
+    ],
+    "missing": [
+      {
+        "id": "83d3ec29e902339fe62529b7eb47a915",
+        "evidence_id": "",
+        "evidence_title": "",
+        "source_url": "",
+        "occurred_at": "",
+        "dimension": "judicial",
+        "dimension_label": "司法与合规",
+        "signal_kind": "missing",
+        "fact_signal": "司法与合规信息尚未覆盖",
+        "risk_interpretation": "这是信息缺口，不代表负面事实",
+        "business_impact": "在证据补齐前，该维度无法形成确定结论",
+        "due_diligence_question": "请核验当前司法、执行、行政处罚及行业禁入状态。",
+        "mitigation": "补充权威来源或经授权材料后重新评估。",
+        "severity": "info",
+        "confidence": 100,
+        "signal_status": "needs_evidence",
+        "evidence_status": "",
+        "valid_until": "",
+        "manually_confirmed_by": "",
+        "deterministic": false
+      },
+      {
+        "id": "19c01b5df4292e627fdb5fdf36a04a02",
+        "evidence_id": "",
+        "evidence_title": "",
+        "source_url": "",
+        "occurred_at": "",
+        "dimension": "public_opinion",
+        "dimension_label": "舆情与外部事件",
+        "signal_kind": "missing",
+        "fact_signal": "舆情与外部事件信息尚未覆盖",
+        "risk_interpretation": "这是信息缺口，不代表负面事实",
+        "business_impact": "在证据补齐前，该维度无法形成确定结论",
+        "due_diligence_question": "请核验近期重大舆情、事故和对外公告，并确认事件状态。",
+        "mitigation": "补充权威来源或经授权材料后重新评估。",
+        "severity": "info",
+        "confidence": 100,
+        "signal_status": "needs_evidence",
+        "evidence_status": "",
+        "valid_until": "",
+        "manually_confirmed_by": "",
+        "deterministic": false
+      },
+      {
+        "id": "e2571f16b212f2605377e0b95fd89caf",
+        "evidence_id": "",
+        "evidence_title": "",
+        "source_url": "",
+        "occurred_at": "",
+        "dimension": "relationships",
+        "dimension_label": "关系与冲突",
+        "signal_kind": "missing",
+        "fact_signal": "关系与冲突信息尚未覆盖",
+        "risk_interpretation": "这是信息缺口，不代表负面事实",
+        "business_impact": "在证据补齐前，该维度无法形成确定结论",
+        "due_diligence_question": "请披露股东、高管、联合体、客户及潜在利益冲突关系。",
+        "mitigation": "补充权威来源或经授权材料后重新评估。",
+        "severity": "info",
+        "confidence": 100,
+        "signal_status": "needs_evidence",
+        "evidence_status": "",
+        "valid_until": "",
+        "manually_confirmed_by": "",
+        "deterministic": false
+      },
+      {
+        "id": "d9b6596ef74157509eff2842ca777b6f",
+        "evidence_id": "",
+        "evidence_title": "",
+        "source_url": "",
+        "occurred_at": "",
+        "dimension": "subject",
+        "dimension_label": "主体与股权",
+        "signal_kind": "missing",
+        "fact_signal": "主体身份尚未用统一社会信用代码确认",
+        "risk_interpretation": "这是信息缺口，不代表负面事实",
+        "business_impact": "在证据补齐前，该维度无法形成确定结论",
+        "due_diligence_question": "请核验营业执照原件并确认统一社会信用代码。",
+        "mitigation": "补充权威来源或经授权材料后重新评估。",
+        "severity": "info",
+        "confidence": 100,
+        "signal_status": "needs_evidence",
+        "evidence_status": "",
+        "valid_until": "",
+        "manually_confirmed_by": "",
+        "deterministic": false
+      }
+    ],
+    "has_opaque_overall_score": false,
+    "visibility": "full"
+  },
+  "answer": {
+    "id": "e135a5bb-13ff-40ea-8c9d-ca5b34e61c36",
+    "entity_id": "898a69fb-2c89-4ab7-a881-13d228de2ba6",
+    "question": "如果合作，合同里最需要约束什么？",
+    "answer": "针对“如果合作，合同里最需要约束什么？”，当前没有已核验的负面风险证据；这不等于无风险，仍需先补齐缺失信息。 尚缺：司法与合规信息尚未覆盖；舆情与外部事件信息尚未覆盖；关系与冲突信息尚未覆盖；主体身份尚未用统一社会信用代码确认。",
+    "evidence_ids": [],
+    "missing_items": [
+      "司法与合规信息尚未覆盖",
+      "舆情与外部事件信息尚未覆盖",
+      "关系与冲突信息尚未覆盖",
+      "主体身份尚未用统一社会信用代码确认"
+    ],
+    "worst_impact": "证据不足可能导致在签约前遗漏关键准入、履约或合规问题",
+    "mitigation": "将未覆盖维度列为签约前置条件，补证后重新评估。",
+    "basis": "仅基于当前工作区证据；待复核材料不会表述为确定事实"
+  },
+  "review": {
+    "id": "0cd6781d-9ec2-4e59-8167-b5acc0149cb3",
+    "entity_id": "898a69fb-2c89-4ab7-a881-13d228de2ba6",
+    "notice_id": "ggzy:0051eddfc588cedd4da698903cec566821e7",
+    "recommendation": "conditional",
+    "reason": "已核验真实服务器项目公告和脱敏合作材料；主体、司法合规与验收证明仍需在签约前补齐。",
+    "conditions": [
+      "补齐官方主体及司法合规核验",
+      "合同写明验收标准、重大事项披露与退出条款"
+    ],
+    "valid_until": "2027-03-28",
+    "review_status": "confirmed",
+    "previous_review_id": "",
+    "confirmed_by": "admin",
+    "confirmed_at": "2026-09-29 02:42:44"
+  },
+  "subscription": {
+    "id": "f64054f2986fbc55d6a8c1ebe4281c66",
+    "entity_id": "898a69fb-2c89-4ab7-a881-13d228de2ba6",
+    "event_types": [
+      "judicial",
+      "operations",
+      "performance",
+      "relationships",
+      "subject"
+    ],
+    "status": "active",
+    "review_policy": "仅受变化影响的结论重新进入复核；不覆盖已确认结论"
+  },
+  "tasks": [
+    {
+      "task": {
+        "id": "7dcc26ad-1550-49cd-af65-39209e377515",
+        "workspace_id": "b9e56ca6-c5f1-58fc-b79e-58b26e053f16",
+        "entity_id": "898a69fb-2c89-4ab7-a881-13d228de2ba6",
+        "notice_id": "ggzy:0051eddfc588cedd4da698903cec566821e7",
+        "risk_signal_id": "",
+        "title": "法务核验主体与司法合规",
+        "question": "请补充当前有效的主体登记、司法执行和行政处罚核验结果。",
+        "task_type": "legal",
+        "assignee_open_id": "ou_7c7bf0b2fea7bcea1f17988437ac25d9",
+        "assignee_name": "杨沈卿",
+        "due_at": "2026-10-06T18:00:00",
+        "status": "open",
+        "feishu_task_guid": "",
+        "feishu_task_status": "not_created",
+        "feishu_receipt": {},
+        "feishu_sync_error": "",
+        "feishu_task_synced_at": ""
+      },
+      "sync": {
+        "status": "created",
+        "task_id": "7dcc26ad-1550-49cd-af65-39209e377515",
+        "task_guid": "c998a4f4-def1-4d0a-a3c8-4e3a2a478258",
+        "receipt": {
+          "code": 0,
+          "data": {
+            "task": {
+              "agent_task_status": 1,
+              "completed_at": "0",
+              "created_at": "1790649763377",
+              "creator": {
+                "id": "[redacted]",
+                "type": "app"
+              },
+              "dependencies": [],
+              "description": "合作方：成都华东电脑系统集成有限公司\n责任域：legal\n核验问题：请补充当前有效的主体登记、司法执行和行政处罚核验结果。\nTenderTrace任务ID：7dcc26ad-1550-49cd-af65-39209e377515",
+              "due": {
+                "is_all_day": false,
+                "timestamp": "1791280800000"
+              },
+              "extra": "",
+              "guid": "c998a4f4-def1-4d0a-a3c8-4e3a2a478258",
+              "is_milestone": false,
+              "members": [
+                {
+                  "id": "ou_7c7bf0b2fea7bcea1f17988437ac25d9",
+                  "role": "assignee",
+                  "type": "user"
+                }
+              ],
+              "mode": 2,
+              "origin": {
+                "href": {
+                  "title": "123",
+                  "url": ""
+                },
+                "platform_i18n_name": {
+                  "de_de": "123",
+                  "en_us": "123",
+                  "es_es": "123",
+                  "fr_fr": "123",
+                  "it_it": "123",
+                  "ja_jp": "123",
+                  "ko_kr": "123",
+                  "ru_ru": "123",
+                  "th_th": "123",
+                  "zh_cn": "123",
+                  "zh_hk": "123",
+                  "zh_tw": "123"
+                }
+              },
+              "parent_task_guid": "",
+              "reminders": [
+                {
+                  "id": "7690782172453620696",
+                  "relative_fire_minute": 1440
+                }
+              ],
+              "repeat_rule": "",
+              "source": 6,
+              "status": "todo",
+              "subtask_count": 0,
+              "summary": "合作方尽调：法务核验主体与司法合规",
+              "task_id": "t139758",
+              "tasklists": [],
+              "updated_at": "1790649763426",
+              "url": "https://applink.feishu.cn/client/todo/detail?guid=c998a4f4-def1-4d0a-a3c8-4e3a2a478258&suite_entity_num=t139758"
+            }
+          },
+          "msg": ""
+        }
+      }
+    },
+    {
+      "task": {
+        "id": "eeb88f23-89aa-4fdb-9675-6cc25713fd78",
+        "workspace_id": "b9e56ca6-c5f1-58fc-b79e-58b26e053f16",
+        "entity_id": "898a69fb-2c89-4ab7-a881-13d228de2ba6",
+        "notice_id": "ggzy:0051eddfc588cedd4da698903cec566821e7",
+        "risk_signal_id": "",
+        "title": "交付确认同类项目验收口径",
+        "question": "请核对历史服务器项目的交付范围、验收标准和客户证明。",
+        "task_type": "delivery",
+        "assignee_open_id": "ou_7c7bf0b2fea7bcea1f17988437ac25d9",
+        "assignee_name": "杨沈卿",
+        "due_at": "2026-10-06T18:00:00",
+        "status": "open",
+        "feishu_task_guid": "",
+        "feishu_task_status": "not_created",
+        "feishu_receipt": {},
+        "feishu_sync_error": "",
+        "feishu_task_synced_at": ""
+      },
+      "sync": {
+        "status": "created",
+        "task_id": "eeb88f23-89aa-4fdb-9675-6cc25713fd78",
+        "task_guid": "a721610f-7de2-4c21-8315-285fcbebeb68",
+        "receipt": {
+          "code": 0,
+          "data": {
+            "task": {
+              "agent_task_status": 1,
+              "completed_at": "0",
+              "created_at": "1790649764952",
+              "creator": {
+                "id": "[redacted]",
+                "type": "app"
+              },
+              "dependencies": [],
+              "description": "合作方：成都华东电脑系统集成有限公司\n责任域：delivery\n核验问题：请核对历史服务器项目的交付范围、验收标准和客户证明。\nTenderTrace任务ID：eeb88f23-89aa-4fdb-9675-6cc25713fd78",
+              "due": {
+                "is_all_day": false,
+                "timestamp": "1791280800000"
+              },
+              "extra": "",
+              "guid": "a721610f-7de2-4c21-8315-285fcbebeb68",
+              "is_milestone": false,
+              "members": [
+                {
+                  "id": "ou_7c7bf0b2fea7bcea1f17988437ac25d9",
+                  "role": "assignee",
+                  "type": "user"
+                }
+              ],
+              "mode": 2,
+              "origin": {
+                "href": {
+                  "title": "123",
+                  "url": ""
+                },
+                "platform_i18n_name": {
+                  "de_de": "123",
+                  "en_us": "123",
+                  "es_es": "123",
+                  "fr_fr": "123",
+                  "it_it": "123",
+                  "ja_jp": "123",
+                  "ko_kr": "123",
+                  "ru_ru": "123",
+                  "th_th": "123",
+                  "zh_cn": "123",
+                  "zh_hk": "123",
+                  "zh_tw": "123"
+                }
+              },
+              "parent_task_guid": "",
+              "reminders": [
+                {
+                  "id": "7690782179122514892",
+                  "relative_fire_minute": 1440
+                }
+              ],
+              "repeat_rule": "",
+              "source": 6,
+              "status": "todo",
+              "subtask_count": 0,
+              "summary": "合作方尽调：交付确认同类项目验收口径",
+              "task_id": "t139759",
+              "tasklists": [],
+              "updated_at": "1790649764992",
+              "url": "https://applink.feishu.cn/client/todo/detail?guid=a721610f-7de2-4c21-8315-285fcbebeb68&suite_entity_num=t139759"
+            }
+          },
+          "msg": ""
+        }
+      }
+    }
+  ],
+  "snapshot": {
+    "id": "05c315f0-00ba-4c18-98b9-1d74abffbc76",
+    "state_hash": "71c95175e0b93f2d56e598297fb89a7fa8e674415225e82b2cd43c640e5ea884",
+    "verified": true,
+    "verified_at": "2026-09-29 02:42:44"
+  },
+  "profile_summary": {
+    "recommendation": "conditional",
+    "risk_level": "pending",
+    "evidence_completeness": 33,
+    "evidence_count": 2,
+    "manual_review_status": "confirmed",
+    "last_updated_at": "2026-09-29 02:42:41"
+  },
+  "url": "http://127.0.0.1:8000/?view=partnerView&workspace=b9e56ca6-c5f1-58fc-b79e-58b26e053f16&partner=898a69fb-2c89-4ab7-a881-13d228de2ba6"
+}

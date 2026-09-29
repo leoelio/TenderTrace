@@ -59,6 +59,15 @@ class IntentCompilerTests(unittest.TestCase):
 
         self.assertEqual(bidql["topic"]["core"], ["设备"])
         self.assertIsNone(bidql["region"]["province"])
+        self.assertEqual(bidql["region"]["scope"], "domestic")
+        self.assertEqual(bidql["region"]["origin"], "rule")
+        self.assertNotIn("region", bidql["meta"]["clarify_needed"])
+        self.assertEqual(bidql["meta"]["confidence"]["region"], 1.0)
+
+    def test_missing_region_still_requires_clarification(self) -> None:
+        bidql = compile_intent("最近一个月服务器招标信息", now=NOW)
+        self.assertIn("region", bidql["meta"]["clarify_needed"])
+        self.assertEqual(bidql["meta"]["confidence"]["region"], 0.0)
 
     def test_city_scope_and_multiple_topics_are_parsed(self) -> None:
         bidql = compile_intent("最近36个月杭州市的空调或者服务器投标信息都有哪些", now=NOW)

@@ -1,0 +1,34 @@
+{
+  "notice_id": "demo-feishu-war-room",
+  "title": "政务云一键投标战情室",
+  "workspace_id": "8ddf7acc-7d6e-5491-ab11-c7f9e6565fe7",
+  "demo_url": "http://127.0.0.1:8000/?opportunity=demo-feishu-war-room",
+  "first_launch_status": "partial",
+  "final_status": "archived",
+  "launch_count": 3,
+  "preflight_ready_count": 8,
+  "preflight_total": 8,
+  "journey_steps": 7,
+  "receipt_count": 6,
+  "resource_ids": {
+    "group_card": "om_demo_war_room_overview",
+    "owner_task": "task_demo_war_room_owner",
+    "deadline_calendar": "event_demo_bid_deadline",
+    "workflow_bitable": "TeN9biQO6aov3cscq77cdETfncd?table=[redacted]"
+  },
+  "writeback_conflict_count": 1,
+  "incremental_dispatch_status": "sent",
+  "digital_twin_war_room_resources": 4,
+  "proof": {
+    "two_account_collaboration_fixture": true,
+    "seven_stage_journey": true,
+    "three_launches_without_duplicate_receipts": true,
+    "stable_external_resource_ids": true,
+    "failed_step_retried_independently": true,
+    "human_state_not_overwritten": true,
+    "affected_changes_only_after_confirmation": true,
+    "organization_memory_archived": true,
+    "all_receipts_finished": true
+  },
+  "boundary": "本演示使用两个脱敏账号身份与确定性飞书客户端验证闭环；真实双账号协作仍需在已发布应用、真实群和对应权限下进行现场验收。"
+}

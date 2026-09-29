@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -10,8 +11,40 @@ from threading import Thread
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+import httpx
+
 from tendertrace.config import Settings
 from tendertrace.db import connection, database_health, init_db
+from tendertrace.digital_twin import build_digital_twin
+from tendertrace.decision_sandbox import (
+    compare_scenarios,
+    decide_scenario_suggestion,
+    get_decision_sandbox,
+    promote_scenario,
+    recompute_scenario,
+    simulate_scenario,
+)
+from tendertrace.evidence_microscope import build_evidence_microscope, review_evidence
+from tendertrace.change_impact_engine import (
+    confirm_change_impact_action,
+    dispatch_change_impact,
+    get_change_impact,
+)
+from tendertrace.bid_workplan import (
+    build_bid_workplan,
+    complete_bid_task,
+    confirm_requirement,
+    export_bid_workplan,
+    get_bid_workplan,
+    merge_requirements,
+    split_requirement,
+    upsert_pricing_item,
+)
+from tendertrace.bid_memory import (
+    archive_project_memory,
+    decide_bid_memory_asset,
+    get_bid_memory_dashboard,
+)
 from tendertrace.delivery.feishu_bitable import (
     check_feishu_bitable,
     update_opportunity_facts_in_bitable,
@@ -33,6 +66,43 @@ from tendertrace.business_measurements import (
     business_measurement_summary,
     upsert_business_measurement,
 )
+from tendertrace.live_challenge import (
+    begin_live_challenge_supplement,
+    cancel_live_challenge_supplement,
+    create_live_challenge,
+    get_live_challenge,
+    list_live_challenges,
+    run_live_challenge_supplement,
+)
+from tendertrace.demo_reliability import (
+    demo_reliability_overview,
+    freeze_demo_case,
+    get_demo_rehearsal,
+    prepare_default_demo_cases,
+    record_demo_layout_audit,
+    run_demo_rehearsal,
+)
+from tendertrace.visual_system import record_visual_system_audit, visual_system_overview
+from tendertrace.company_due_diligence import (
+    add_authorized_external_evidence,
+    add_company_evidence,
+    add_company_relationship,
+    aggregate_existing_company_data,
+    ask_company_due_diligence,
+    confirm_company_identity,
+    create_company_due_diligence_task,
+    create_company_entity,
+    evaluate_company_risks,
+    get_company_due_diligence_profile,
+    latest_verified_company_snapshot,
+    list_company_due_diligence_tasks,
+    list_company_entities,
+    resolve_company_candidates,
+    review_company_evidence,
+    save_company_due_diligence_snapshot,
+    submit_due_diligence_review,
+    subscribe_company_changes,
+)
 from tendertrace.integrations.feishu import (
     FeishuClient,
     FeishuError,
@@ -47,10 +117,20 @@ from tendertrace.integrations.feishu_card_actions import (
 from tendertrace.integrations.feishu_memory import build_memory_weekly_card
 from tendertrace.integrations.feishu_notice_changes import send_opportunity_change_alerts
 from tendertrace.integrations.feishu_opportunity import start_opportunity_collaboration
-from tendertrace.integrations.feishu_war_room import build_war_room_plan, launch_war_room
+from tendertrace.integrations.feishu_war_room import (
+    archive_war_room,
+    build_war_room_plan,
+    dispatch_war_room_changes,
+    launch_war_room,
+    retry_war_room_step,
+    sync_war_room_back,
+)
 from tendertrace.integrations.feishu_relationship_actions import (
     create_relationship_action_task,
     sync_relationship_action_tasks,
+)
+from tendertrace.integrations.feishu_company_due_diligence import (
+    sync_company_due_diligence_task,
 )
 from tendertrace.integrations.feishu_team import sync_opportunity_team
 from tendertrace.integrations.feishu_source_alerts import (
@@ -65,6 +145,8 @@ from tendertrace.integrations.feishu_source_incidents import (
 )
 from tendertrace.integrations.feishu_tasks import sync_feishu_tasks
 from tendertrace.integrations.feishu_requirement_sync import (
+    sync_bid_workplan_task_status,
+    sync_bid_workplan_to_feishu,
     sync_requirement_completion_to_feishu,
     sync_requirement_task_status,
     sync_requirements_to_bitable,
@@ -104,6 +186,35 @@ from tendertrace.opportunity import (
     get_opportunity,
     list_opportunities,
 )
+from tendertrace.opportunity_radar import build_opportunity_radar
+from tendertrace.battle_map import (
+    battle_map_event_detail,
+    battle_map_revision,
+    build_battle_map,
+    evaluate_external_event_impacts,
+    fetch_usgs_external_events,
+    review_impact_link,
+    save_battle_map_replay,
+    sync_business_events,
+)
+from tendertrace.source_relation_graph import (
+    build_source_relation_graph,
+    decide_source_relation,
+)
+from tendertrace.scenario_training import (
+    begin_training_session,
+    create_training_session,
+    get_training_hint,
+    get_training_scenario,
+    get_training_session,
+    list_training_scenarios,
+    list_training_sessions,
+    recompute_training_result,
+    seed_default_training_scenarios,
+    submit_training_answer,
+    sync_training_remediation_task,
+    team_training_readiness,
+)
 from tendertrace.opportunity_facts import load_fact_audit, upsert_verified_facts
 from tendertrace.opportunity_outcomes import record_outcome
 from tendertrace.opportunity_collaboration import (
@@ -123,6 +234,12 @@ from tendertrace.capability_matching import (
     list_requirement_capability_matches,
     upsert_capability,
 )
+from tendertrace.capability_passport import (
+    build_capability_passport,
+    complete_gap_action,
+    create_gap_action,
+    sync_project_results_to_passport,
+)
 from tendertrace.requirement_extraction import extract_and_save_requirements
 from tendertrace.requirement_change_impact import requirement_change_impact
 from tendertrace.requirement_review_board import (
@@ -132,7 +249,10 @@ from tendertrace.requirement_review_board import (
     sync_requirement_review_cases,
 )
 from tendertrace.requirement_review_agents import (
+    list_review_agent_runs,
     list_review_opinions,
+    retry_review_agent,
+    review_agent_runtime_summary,
     review_agent_suggestions,
     run_review_agents,
 )
@@ -204,7 +324,7 @@ def create_app():
     try:
         from fastapi import Body, FastAPI, HTTPException, Request
         from fastapi.middleware.cors import CORSMiddleware
-        from fastapi.responses import FileResponse, JSONResponse
+        from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
     except ImportError as exc:
         raise RuntimeError(
             "FastAPI is not installed. Run: python -m pip install -e .[dev]"
@@ -311,6 +431,321 @@ def create_app():
     @app.get("/api/source-map")
     def source_map() -> dict[str, object]:
         return build_source_map(settings)
+
+    @app.get("/api/opportunity-radar")
+    def opportunity_radar(
+        scope: str = "all",
+        window_days: int = 365,
+        category: str = "",
+    ) -> dict[str, object]:
+        try:
+            return build_opportunity_radar(
+                settings,
+                scope=scope,
+                window_days=window_days,
+                category=category,
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunity-radar/refresh")
+    def refresh_opportunity_radar(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return build_opportunity_radar(
+                settings,
+                scope=str(request.get("scope") or "all"),
+                window_days=int(request.get("window_days") or 365),
+                category=str(request.get("category") or ""),
+                persist=True,
+                actor=str(request.get("actor") or "admin"),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/battle-map")
+    def battle_map(
+        scope: str = "global",
+        window_hours: int = 2160,
+        category: str = "",
+        layers: str = "opportunity,award,flow,external",
+        mode: str = "live",
+    ) -> dict[str, object]:
+        try:
+            return build_battle_map(
+                settings,
+                scope=scope,
+                window_hours=window_hours,
+                category=category,
+                layers=[item.strip() for item in layers.split(",") if item.strip()],
+                mode=mode,
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/battle-map/sync")
+    def sync_battle_map(request: dict[str, object] = Body(default={})) -> dict[str, object]:
+        try:
+            business = sync_business_events(settings)
+            external: dict[str, object] = {"status": "not_requested", "event_ids": []}
+            evaluations = []
+            if bool(request.get("fetch_external")):
+                external = fetch_usgs_external_events(
+                    settings,
+                    limit=int(request.get("external_limit") or 60),
+                )
+                for event_id in external.get("event_ids", []):
+                    evaluations.append(
+                        evaluate_external_event_impacts(
+                            settings,
+                            str(event_id),
+                            actor=str(request.get("actor") or "admin"),
+                        )
+                    )
+            return {
+                "status": "synced",
+                "business": business,
+                "external": external,
+                "evaluated_event_count": len(evaluations),
+                "candidate_impact_count": sum(
+                    int(item.get("candidate_impact_count") or 0) for item in evaluations
+                ),
+                "revision": battle_map_revision(settings),
+            }
+        except (httpx.HTTPError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/battle-map/events/{event_id}")
+    def battle_map_event(event_id: str) -> dict[str, object]:
+        try:
+            return battle_map_event_detail(settings, event_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/battle-map/external-events/{event_id}/evaluate")
+    def evaluate_battle_map_external_event(
+        event_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return evaluate_external_event_impacts(
+                settings,
+                event_id,
+                actor=str(request.get("actor") or "admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/battle-map/impacts/{impact_id}/review")
+    def review_battle_map_impact(
+        impact_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return review_impact_link(
+                settings,
+                impact_id,
+                status=str(request.get("status") or ""),
+                actor=str(request.get("actor") or "admin"),
+                note=str(request.get("note") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/battle-map/replays")
+    def save_battle_map_replay_api(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return save_battle_map_replay(
+                settings,
+                scope=str(request.get("scope") or "global"),
+                window_hours=int(request.get("window_hours") or 2160),
+                category=str(request.get("category") or ""),
+                actor=str(request.get("actor") or "admin"),
+                verified=bool(request.get("verified", True)),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/battle-map/stream")
+    async def battle_map_stream():
+        async def stream():
+            previous = ""
+            for _ in range(6):
+                revision = battle_map_revision(settings)
+                current = str(revision["revision"])
+                if current != previous:
+                    yield f"event: revision\ndata: {json.dumps(revision, ensure_ascii=False)}\n\n"
+                    previous = current
+                else:
+                    yield ": heartbeat\n\n"
+                await asyncio.sleep(10)
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.post("/api/training/scenarios/seed")
+    def seed_training_scenarios_api(
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return seed_default_training_scenarios(
+                settings, actor=str(request.get("actor") or "training-curator")
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/training/scenarios")
+    def training_scenarios_api() -> dict[str, object]:
+        return list_training_scenarios(settings)
+
+    @app.get("/api/training/scenarios/{scenario_id}")
+    def training_scenario_api(scenario_id: str) -> dict[str, object]:
+        try:
+            return get_training_scenario(settings, scenario_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/training/sessions")
+    def create_training_session_api(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return create_training_session(
+                settings,
+                str(request.get("scenario_id") or ""),
+                mode=str(request.get("mode") or "preparation"),
+                role=str(request.get("role") or ""),
+                difficulty=str(request.get("difficulty") or "standard"),
+                participant_key=str(request.get("participant_key") or "local-user"),
+                participant_display=str(request.get("participant_display") or "本地学员"),
+                sample_kind=str(request.get("sample_kind") or "live"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/training/sessions/{session_id}/begin")
+    def begin_training_session_api(
+        session_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return begin_training_session(
+                settings,
+                session_id,
+                participant_key=str(request.get("participant_key") or "local-user"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/training/sessions/{session_id}/hint")
+    def training_hint_api(
+        session_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return get_training_hint(
+                settings,
+                session_id,
+                participant_key=str(request.get("participant_key") or "local-user"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/training/sessions/{session_id}/answer")
+    def submit_training_answer_api(
+        session_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            refs = request.get("evidence_refs")
+            return submit_training_answer(
+                settings,
+                session_id,
+                participant_key=str(request.get("participant_key") or "local-user"),
+                answer=str(request.get("answer") or ""),
+                evidence_refs=[str(item) for item in refs] if isinstance(refs, list) else [],
+                model_evaluation=(
+                    dict(request["model_evaluation"])
+                    if isinstance(request.get("model_evaluation"), dict)
+                    else None
+                ),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/training/sessions/{session_id}")
+    def training_session_api(
+        session_id: str,
+        participant_key: str = "local-user",
+        manager: bool = False,
+    ) -> dict[str, object]:
+        try:
+            return get_training_session(
+                settings,
+                session_id,
+                participant_key=participant_key,
+                manager=manager,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/training/sessions")
+    def training_session_history_api(
+        participant_key: str = "local-user",
+        manager: bool = False,
+        limit: int = 50,
+    ) -> dict[str, object]:
+        return list_training_sessions(
+            settings,
+            participant_key=participant_key,
+            manager=manager,
+            limit=limit,
+        )
+
+    @app.get("/api/training/team-readiness")
+    def team_training_readiness_api() -> dict[str, object]:
+        return team_training_readiness(settings)
+
+    @app.post("/api/training/results/{result_id}/recompute")
+    def recompute_training_result_api(result_id: str) -> dict[str, object]:
+        try:
+            return recompute_training_result(settings, result_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/training/results/{result_id}/tasks/{task_id}/sync-feishu")
+    def sync_training_task_api(
+        result_id: str,
+        task_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return sync_training_remediation_task(
+                settings,
+                result_id,
+                task_id,
+                assignee_open_id=str(request.get("assignee_open_id") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/sources/qianlima/verify")
     def verify_qianlima_login() -> dict[str, object]:
@@ -463,6 +898,9 @@ def create_app():
         webhook_ready = bool(
             message["configured"] and settings.feishu_callback_verification_token_present
         )
+        event_callback_ready = bool(
+            message["configured"] and (bool(listener["running"]) or webhook_ready)
+        )
         bitable_ready = bool(
             settings.feishu_app_id
             and settings.feishu_app_secret_present
@@ -489,7 +927,7 @@ def create_app():
             issues.append({"code": "receiver", "message": "尚未设置默认飞书会话或用户"})
         if not bitable_ready:
             issues.append({"code": "bitable", "message": "多维表格凭据或数据表标识不完整"})
-        if not agent["configured"]:
+        if agent["enabled"] and not agent["configured"]:
             issues.append({"code": "agent", "message": "智能体应用尚未启用或凭据不完整"})
         return {
             "status": "ready" if report_ready else "attention",
@@ -540,7 +978,17 @@ def create_app():
                     "workspace_count": len(organization_spaces),
                     "memory_count": sum(item.memory_count for item in organization_spaces),
                 },
-                "agent_service": {"ready": bool(agent["configured"])},
+                "agent_service": {
+                    "ready": bool(agent["configured"]) or not bool(agent["enabled"]),
+                    "configured": bool(agent["configured"]),
+                    "enabled": bool(agent["enabled"]),
+                    "optional": True,
+                    "detail": (
+                        "独立智能体应用已配置"
+                        if agent["configured"]
+                        else "未启用；现有机器人、表格、任务与日历继续使用消息应用"
+                    ),
+                },
                 "opportunity_cards": {"ready": bool(message["configured"])},
                 "decision_escalation": {
                     "ready": report_ready,
@@ -580,10 +1028,7 @@ def create_app():
                     "ready": bool(message["configured"] and settings.feishu_calendar_id),
                 },
                 "card_callback": {
-                    "ready": bool(
-                        message["configured"]
-                        and settings.feishu_callback_verification_token_present
-                    ),
+                    "ready": event_callback_ready,
                 },
             },
             "issues": issues,
@@ -645,6 +1090,194 @@ def create_app():
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return preference.safe_dict()
+
+    @app.get("/api/live-challenges")
+    def live_challenges(limit: int = 20) -> dict[str, object]:
+        return list_live_challenges(settings, limit=limit)
+
+    @app.post("/api/live-challenges")
+    def create_live_challenge_session(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return create_live_challenge(
+                settings,
+                category=request.get("category"),
+                region=request.get("region"),
+                time_window=request.get("time_window") or "90d",
+                keyword=request.get("keyword") or "",
+                actor=request.get("actor") or "judge",
+                max_results=int(request.get("max_results") or 12),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/live-challenges/{session_id}")
+    def live_challenge_detail(session_id: str) -> dict[str, object]:
+        try:
+            return get_live_challenge(settings, session_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/live-challenges/{session_id}/supplement")
+    def supplement_live_challenge(session_id: str) -> dict[str, object]:
+        try:
+            payload = begin_live_challenge_supplement(settings, session_id)
+        except ValueError as exc:
+            message = str(exc)
+            status_code = 404 if "not found" in message else 409
+            raise HTTPException(status_code=status_code, detail=message) from exc
+        Thread(
+            target=run_live_challenge_supplement,
+            kwargs={"settings": settings, "session_id": session_id},
+            daemon=True,
+            name=f"live-challenge-{session_id[:8]}",
+        ).start()
+        return payload
+
+    @app.post("/api/live-challenges/{session_id}/cancel")
+    def cancel_live_challenge(session_id: str) -> dict[str, object]:
+        try:
+            return cancel_live_challenge_supplement(settings, session_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/demo-reliability")
+    def demo_reliability(compact: bool = False) -> dict[str, object]:
+        overview = demo_reliability_overview(settings)
+        if not compact:
+            return overview
+        cases = []
+        for item in overview.get("cases", []):
+            if not isinstance(item, dict):
+                continue
+            snapshot = item.get("snapshot") if isinstance(item.get("snapshot"), dict) else {}
+            result = snapshot.get("result") if isinstance(snapshot.get("result"), dict) else {}
+            twin = result.get("digital_twin") if isinstance(result.get("digital_twin"), dict) else {}
+            cases.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "id",
+                        "role",
+                        "label",
+                        "source_id",
+                        "verification_status",
+                        "snapshot_verified",
+                        "replay_verified",
+                        "display",
+                    )
+                }
+                | {
+                    "snapshot": {
+                        "result": {
+                            "digital_twin": {
+                                key: twin.get(key)
+                                for key in ("project", "scores", "next_actions")
+                            }
+                        }
+                    }
+                }
+            )
+        return {
+            "status": overview.get("status"),
+            "environment": overview.get("environment", {}),
+            "cases": cases,
+        }
+
+    @app.post("/api/demo-reliability/prepare")
+    def prepare_demo_reliability(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            result = prepare_default_demo_cases(
+                settings,
+                actor=str(request.get("actor") or "admin"),
+            )
+        except (LookupError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {**result, "overview": demo_reliability_overview(settings)}
+
+    @app.post("/api/demo-reliability/cases/freeze")
+    def freeze_demo_reliability_case(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return freeze_demo_case(
+                settings,
+                role=request.get("role"),
+                label=request.get("label"),
+                source_type=request.get("source_type"),
+                source_id=request.get("source_id"),
+                actor=request.get("actor") or "admin",
+            )
+        except (LookupError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/demo-reliability/rehearsals")
+    def run_demo_reliability_rehearsal(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return run_demo_rehearsal(
+                settings,
+                case_id=request.get("case_id"),
+                requested_mode=request.get("requested_mode") or "live",
+                browser_online=request.get("browser_online", True),
+                viewport_width=request.get("viewport_width") or 1440,
+                viewport_height=request.get("viewport_height") or 900,
+                scenario=request.get("scenario") or "standard",
+                actor=request.get("actor") or "judge",
+            )
+        except (LookupError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/demo-reliability/rehearsals/{rehearsal_id}")
+    def demo_reliability_rehearsal(rehearsal_id: str) -> dict[str, object]:
+        try:
+            return get_demo_rehearsal(settings, rehearsal_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/demo-reliability/layout-audits")
+    def save_demo_layout_audit(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return record_demo_layout_audit(
+                settings,
+                profile=request.get("profile"),
+                viewport_width=request.get("viewport_width"),
+                viewport_height=request.get("viewport_height"),
+                scroll_width=request.get("scroll_width"),
+                critical_overflows=request.get("critical_overflows") or [],
+                user_agent=request.get("user_agent") or "",
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/visual-system")
+    def visual_system() -> dict[str, object]:
+        return visual_system_overview(settings)
+
+    @app.post("/api/visual-system/audits")
+    def save_visual_system_audit(
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return record_visual_system_audit(
+                settings,
+                profile=request.get("profile"),
+                viewport_width=request.get("viewport_width"),
+                viewport_height=request.get("viewport_height"),
+                notice_id=request.get("notice_id"),
+                scroll_width=request.get("scroll_width"),
+                critical_overflows=request.get("critical_overflows") or [],
+                checks=request.get("checks") or {},
+                user_agent=request.get("user_agent") or "",
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/integrations/feishu/test-message")
     def feishu_test_message(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -922,6 +1555,495 @@ def create_app():
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "converted", "target_type": target_type, "result": result}
 
+    @app.get("/api/organization/workspaces/{workspace_id}/bid-memory")
+    def organization_bid_memory_dashboard(
+        workspace_id: str,
+        notice_id: str = "",
+        actor: str = "admin",
+    ) -> dict[str, object]:
+        try:
+            return get_bid_memory_dashboard(
+                settings,
+                workspace_id=workspace_id,
+                notice_id=notice_id.strip(),
+                actor=actor.strip() or "admin",
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/organization/workspaces/{workspace_id}/companies")
+    def company_due_diligence_entities(
+        workspace_id: str,
+        query: str = "",
+        actor: str = "admin",
+        limit: int = 100,
+    ) -> dict[str, object]:
+        try:
+            return {
+                "items": list_company_entities(
+                    settings,
+                    workspace_id=workspace_id,
+                    actor=actor,
+                    query=query,
+                    limit=limit,
+                )
+            }
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies")
+    def create_company_due_diligence_entity_api(
+        workspace_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            entity = create_company_entity(
+                settings,
+                workspace_id=workspace_id,
+                legal_name=request.get("legal_name"),
+                unified_credit_code=request.get("unified_credit_code") or "",
+                region=request.get("region") or "",
+                legal_representative=request.get("legal_representative") or "",
+                entity_type=request.get("entity_type") or "company",
+                aliases=request.get("aliases") if isinstance(request.get("aliases"), list) else [],
+                actor=str(request.get("actor") or "admin"),
+            )
+            return {"status": "created", "entity": entity}
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/resolve")
+    def resolve_company_due_diligence_entity_api(
+        workspace_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return resolve_company_candidates(
+                settings,
+                workspace_id=workspace_id,
+                query=request.get("query") or "",
+                unified_credit_code=request.get("unified_credit_code") or "",
+                region=request.get("region") or "",
+                legal_representative=request.get("legal_representative") or "",
+                actor=str(request.get("actor") or "admin"),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/confirm")
+    def confirm_company_due_diligence_entity_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return {
+                "status": "confirmed",
+                "entity": confirm_company_identity(
+                    settings,
+                    entity_id,
+                    workspace_id=workspace_id,
+                    actor=str(request.get("actor") or "admin"),
+                    unified_credit_code=request.get("unified_credit_code"),
+                    reason=request.get("reason"),
+                ),
+            }
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/organization/workspaces/{workspace_id}/companies/{entity_id}")
+    def company_due_diligence_profile_api(
+        workspace_id: str,
+        entity_id: str,
+        actor: str = "admin",
+    ) -> dict[str, object]:
+        try:
+            return get_company_due_diligence_profile(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=actor,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/aggregate")
+    def aggregate_company_due_diligence_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return aggregate_existing_company_data(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/evaluate")
+    def evaluate_company_due_diligence_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return evaluate_company_risks(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/evidence")
+    def add_company_due_diligence_evidence_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            external = bool(request.get("external"))
+            if external:
+                evidence = add_authorized_external_evidence(
+                    settings,
+                    entity_id,
+                    workspace_id=workspace_id,
+                    actor=str(request.get("actor") or "admin"),
+                    evidence_type=request.get("evidence_type"),
+                    title=request.get("title"),
+                    content_text=request.get("content_text"),
+                    source_type=request.get("source_type"),
+                    source_name=request.get("source_name"),
+                    source_url=request.get("source_url"),
+                    source_license=request.get("source_license"),
+                    access_frequency=request.get("access_frequency"),
+                    occurred_at=request.get("occurred_at") or "",
+                    valid_until=request.get("valid_until") or "",
+                    confidence=int(request.get("confidence") or 80),
+                )
+            else:
+                evidence = add_company_evidence(
+                    settings,
+                    entity_id,
+                    workspace_id=workspace_id,
+                    actor=str(request.get("actor") or "admin"),
+                    evidence_type=request.get("evidence_type"),
+                    title=request.get("title"),
+                    content_text=request.get("content_text"),
+                    source_type=request.get("source_type") or "manual_upload",
+                    source_name=request.get("source_name") or "人工提交材料",
+                    source_url=request.get("source_url") or "",
+                    source_license=request.get("source_license") or "authorized_manual",
+                    access_policy=request.get("access_policy") or "workspace",
+                    access_frequency=request.get("access_frequency") or "manual",
+                    occurred_at=request.get("occurred_at") or "",
+                    valid_until=request.get("valid_until") or "",
+                    confidence=int(request.get("confidence") or 70),
+                    redacted_content=request.get("redacted_content") or "",
+                    sensitive=bool(request.get("sensitive")),
+                    notice_id=str(request.get("notice_id") or ""),
+                )
+            return {"status": "recorded", "evidence": evidence}
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/evidence/{evidence_id}/review")
+    def review_company_due_diligence_evidence_api(
+        workspace_id: str,
+        entity_id: str,
+        evidence_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        del entity_id
+        try:
+            return review_company_evidence(
+                settings,
+                evidence_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+                status=request.get("status"),
+                reason=request.get("reason"),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/ask")
+    def ask_company_due_diligence_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return ask_company_due_diligence(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+                question=request.get("question"),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/relationships")
+    def add_company_due_diligence_relationship_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return add_company_relationship(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+                related_label=request.get("related_label"),
+                relationship_type=request.get("relationship_type"),
+                basis_type=request.get("basis_type"),
+                confidence=int(request.get("confidence") or 0),
+                evidence_id=str(request.get("evidence_id") or ""),
+                to_entity_id=str(request.get("to_entity_id") or ""),
+                related_object_type=request.get("related_object_type") or "company",
+                related_object_id=request.get("related_object_id") or "",
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/reviews")
+    def submit_company_due_diligence_review_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return submit_due_diligence_review(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+                recommendation=request.get("recommendation"),
+                reason=request.get("reason"),
+                valid_until=request.get("valid_until"),
+                conditions=request.get("conditions") if isinstance(request.get("conditions"), list) else [],
+                notice_id=str(request.get("notice_id") or ""),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/subscribe")
+    def subscribe_company_due_diligence_changes_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return subscribe_company_changes(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+                event_types=request.get("event_types") if isinstance(request.get("event_types"), list) else [],
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/tasks")
+    def create_company_due_diligence_task_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return create_company_due_diligence_task(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+                title=request.get("title"),
+                question=request.get("question"),
+                task_type=request.get("task_type"),
+                assignee_open_id=request.get("assignee_open_id") or "",
+                due_at=request.get("due_at"),
+                risk_signal_id=str(request.get("risk_signal_id") or ""),
+                notice_id=str(request.get("notice_id") or ""),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/tasks/{task_id}/sync-feishu")
+    def sync_company_due_diligence_task_api(
+        workspace_id: str,
+        entity_id: str,
+        task_id: str,
+        actor: str = "admin",
+    ) -> dict[str, object]:
+        try:
+            task_ids = {
+                str(item["id"])
+                for item in list_company_due_diligence_tasks(
+                    settings,
+                    entity_id,
+                    workspace_id=workspace_id,
+                    actor=actor,
+                )
+            }
+            if task_id not in task_ids:
+                raise LookupError("company due diligence task not found")
+            return sync_company_due_diligence_task(settings, task_id)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/snapshots")
+    def save_company_due_diligence_snapshot_api(
+        workspace_id: str,
+        entity_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return save_company_due_diligence_snapshot(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=str(request.get("actor") or "admin"),
+                verified=bool(request.get("verified")),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/organization/workspaces/{workspace_id}/companies/{entity_id}/snapshots/latest")
+    def latest_company_due_diligence_snapshot_api(
+        workspace_id: str,
+        entity_id: str,
+        actor: str = "admin",
+    ) -> dict[str, object]:
+        try:
+            return latest_verified_company_snapshot(
+                settings,
+                entity_id,
+                workspace_id=workspace_id,
+                actor=actor,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/bid-memory/archive")
+    def archive_opportunity_to_bid_memory(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        raw_tags = request.get("tags")
+        raw_materials = request.get("materials")
+        tags = [str(value) for value in raw_tags] if isinstance(raw_tags, list) else []
+        materials = [dict(value) for value in raw_materials if isinstance(value, dict)] if isinstance(raw_materials, list) else []
+        try:
+            return archive_project_memory(
+                settings,
+                notice_id,
+                workspace_id=str(request.get("workspace_id") or ""),
+                actor=str(request.get("actor") or "admin"),
+                tags=tags,
+                materials=materials,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/organization/workspaces/{workspace_id}/bid-memory/assets/{asset_id}/decision")
+    def decide_organization_bid_memory_asset(
+        workspace_id: str,
+        asset_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return {
+                "status": "updated",
+                "asset": decide_bid_memory_asset(
+                    settings,
+                    asset_id,
+                    workspace_id=workspace_id,
+                    action=str(request.get("action") or ""),
+                    actor=str(request.get("actor") or "admin"),
+                    note=str(request.get("note") or ""),
+                    corrections=_mapping_value(request.get("corrections")),
+                ),
+            }
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/intent/parse")
     def parse_intent(request: dict[str, object] = Body(...)) -> dict[str, object]:
         query = str(request.get("query") or "")
@@ -979,6 +2101,210 @@ def create_app():
         if item is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         return item
+
+    @app.get("/api/opportunities/{notice_id}/digital-twin")
+    def opportunity_digital_twin(notice_id: str) -> dict[str, object]:
+        item = build_digital_twin(settings, notice_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return item
+
+    @app.get("/api/opportunities/{notice_id}/source-relations")
+    def opportunity_source_relations(notice_id: str) -> dict[str, object]:
+        item = build_source_relation_graph(settings, notice_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return item
+
+    @app.post("/api/opportunities/{notice_id}/source-relations/{related_notice_id}/decision")
+    def decide_opportunity_source_relation(
+        notice_id: str,
+        related_notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return decide_source_relation(
+                settings,
+                notice_id,
+                related_notice_id,
+                action=str(request.get("action") or ""),
+                actor=str(request.get("actor") or ""),
+                reason=str(request.get("reason") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/opportunities/{notice_id}/decision-sandbox")
+    def opportunity_decision_sandbox(notice_id: str) -> dict[str, object]:
+        try:
+            return get_decision_sandbox(settings, notice_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/decision-sandbox/scenarios")
+    def create_decision_sandbox_scenario(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return simulate_scenario(
+                settings,
+                notice_id,
+                name=str(request.get("name") or ""),
+                params=dict(request.get("params") or {}),
+                actor=str(request.get("actor") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/decision-sandbox/scenarios/{scenario_id}/recompute")
+    def recompute_decision_sandbox_scenario(notice_id: str, scenario_id: str) -> dict[str, object]:
+        try:
+            return recompute_scenario(settings, notice_id, scenario_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/opportunities/{notice_id}/decision-sandbox/compare")
+    def compare_decision_sandbox_scenarios(
+        notice_id: str,
+        left_id: str,
+        right_id: str,
+    ) -> dict[str, object]:
+        try:
+            return compare_scenarios(settings, notice_id, left_id, right_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/decision-sandbox/scenarios/{scenario_id}/promote")
+    def promote_decision_sandbox_scenario(
+        notice_id: str,
+        scenario_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return promote_scenario(
+                settings,
+                notice_id,
+                scenario_id,
+                actor=str(request.get("actor") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/decision-sandbox/suggestions/{suggestion_id}/decision")
+    def decide_decision_sandbox_suggestion(
+        notice_id: str,
+        suggestion_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return decide_scenario_suggestion(
+                settings,
+                notice_id,
+                suggestion_id,
+                accept=bool(request.get("accept")),
+                actor=str(request.get("actor") or ""),
+                note=str(request.get("note") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/opportunities/{notice_id}/evidence-microscope")
+    def opportunity_evidence_microscope(
+        notice_id: str,
+        claim_type: str = "",
+        claim_key: str = "",
+    ) -> dict[str, object]:
+        payload = build_evidence_microscope(
+            settings,
+            notice_id,
+            claim_type=claim_type.strip(),
+            claim_key=claim_key.strip(),
+        )
+        if payload is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return payload
+
+    @app.get("/api/opportunities/{notice_id}/change-impact")
+    def opportunity_change_impact(
+        notice_id: str,
+        revision_id: str = "",
+        affected_only: bool = False,
+    ) -> dict[str, object]:
+        payload = get_change_impact(
+            settings,
+            notice_id,
+            revision_id=revision_id.strip(),
+            affected_only=affected_only,
+        )
+        if payload is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return payload
+
+    @app.post("/api/opportunities/{notice_id}/change-impact/actions/{action_id}/confirm")
+    def confirm_opportunity_change_impact_action(
+        notice_id: str,
+        action_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return confirm_change_impact_action(
+                settings,
+                notice_id,
+                action_id,
+                actor=str(request.get("actor") or ""),
+                note=str(request.get("note") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/change-impact/{round_id}/dispatch")
+    def dispatch_opportunity_change_impact(
+        notice_id: str,
+        round_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return dispatch_change_impact(
+                settings,
+                notice_id,
+                round_id,
+                actor=str(request.get("actor") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/evidence-microscope/{evidence_id}/review")
+    def review_opportunity_evidence(
+        notice_id: str,
+        evidence_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            return review_evidence(
+                settings,
+                notice_id,
+                evidence_id,
+                action=str(request.get("action") or ""),
+                actor=str(request.get("actor") or ""),
+                reason=str(request.get("reason") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/opportunities/changes/send-feishu")
     def send_opportunity_changes(
@@ -1112,6 +2438,8 @@ def create_app():
                 notice_id,
                 receive_id=receive_id,
                 receive_id_type=receive_id_type,
+                actor=_optional_string(request.get("actor")) or "admin",
+                workspace_id=workspace_id,
             )
         except (FeishuError, ValueError, TypeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1123,6 +2451,72 @@ def create_app():
             metadata={"status": result.get("status"), "failed_count": result.get("failed_count", 0)},
         )
         return result
+
+    @app.post("/api/opportunities/{notice_id}/war-room/steps/{step_key}/retry")
+    def retry_opportunity_war_room_step(
+        notice_id: str,
+        step_key: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return retry_war_room_step(
+                settings,
+                notice_id,
+                step_key,
+                actor=_optional_string(request.get("actor")) or "admin",
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/war-room/sync-back")
+    def sync_opportunity_war_room_back(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return sync_war_room_back(
+                settings,
+                notice_id,
+                actor=_optional_string(request.get("actor")) or "admin",
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/war-room/dispatch-changes")
+    def dispatch_opportunity_war_room_changes(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return dispatch_war_room_changes(
+                settings,
+                notice_id,
+                actor=_optional_string(request.get("actor")) or "admin",
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FeishuError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/war-room/archive")
+    def archive_opportunity_war_room(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return archive_war_room(
+                settings,
+                notice_id,
+                actor=_optional_string(request.get("actor")) or "admin",
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/opportunities/{notice_id}/collaboration-notes")
     def opportunity_collaboration_notes(notice_id: str, limit: int = 50) -> dict[str, object]:
@@ -1229,8 +2623,8 @@ def create_app():
         }
 
     @app.get("/api/capabilities")
-    def enterprise_capabilities() -> dict[str, object]:
-        return {"items": [item.to_dict() for item in list_capabilities(settings)]}
+    def enterprise_capabilities(workspace_id: str = "default") -> dict[str, object]:
+        return {"items": [item.to_dict() for item in list_capabilities(settings, workspace_id=workspace_id)]}
 
     @app.post("/api/capabilities")
     def save_enterprise_capability(request: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -1246,6 +2640,15 @@ def create_app():
                 verification_status=str(request.get("verification_status") or "draft"),
                 owner=str(request.get("owner") or ""),
                 valid_until=str(request.get("valid_until") or ""),
+                workspace_id=str(request.get("workspace_id") or "default"),
+                applicable_entity=str(request.get("applicable_entity") or ""),
+                product_model=str(request.get("product_model") or ""),
+                regions=request.get("regions") if isinstance(request.get("regions"), list) else [],
+                authorization_scope=str(request.get("authorization_scope") or ""),
+                source_file_name=str(request.get("source_file_name") or ""),
+                valid_from=str(request.get("valid_from") or ""),
+                industry=str(request.get("industry") or ""),
+                sample_redacted=bool(request.get("sample_redacted")),
                 actor=str(request.get("actor") or "admin"),
             )
         except (TypeError, ValueError) as exc:
@@ -1262,11 +2665,18 @@ def create_app():
         }
 
     @app.post("/api/opportunities/{notice_id}/capability-matches/analyze")
-    def analyze_opportunity_capability_matches(notice_id: str) -> dict[str, object]:
+    def analyze_opportunity_capability_matches(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
         try:
-            return analyze_capability_matches(settings, notice_id)
+            return analyze_capability_matches(
+                settings,
+                notice_id,
+                workspace_id=str(request.get("workspace_id") or ""),
+            )
         except LookupError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1295,6 +2705,62 @@ def create_app():
             "item": item.to_dict(),
             "summary": capability_match_summary(settings, notice_id),
         }
+
+    @app.get("/api/opportunities/{notice_id}/capability-passport")
+    def opportunity_capability_passport(notice_id: str, workspace_id: str = "") -> dict[str, object]:
+        if get_opportunity(settings, notice_id) is None:
+            raise HTTPException(status_code=404, detail="opportunity not found")
+        return build_capability_passport(settings, notice_id, workspace_id=workspace_id)
+
+    @app.post("/api/opportunities/{notice_id}/capability-gap-actions")
+    def create_opportunity_capability_gap_action(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            item = create_gap_action(
+                settings,
+                notice_id,
+                str(request.get("match_id") or ""),
+                action_type=str(request.get("action_type") or ""),
+                actor=str(request.get("actor") or "admin"),
+                assignee_member_id=str(request.get("assignee_member_id") or ""),
+                due_at=str(request.get("due_at") or ""),
+                title=str(request.get("title") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "created", "item": item, "passport": build_capability_passport(settings, notice_id)}
+
+    @app.post("/api/opportunities/{notice_id}/capability-gap-actions/{action_id}/complete")
+    def complete_opportunity_capability_gap_action(
+        notice_id: str,
+        action_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            item = complete_gap_action(
+                settings,
+                notice_id,
+                action_id,
+                actor=str(request.get("actor") or "admin"),
+                note=str(request.get("note") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "completed", "item": item, "passport": build_capability_passport(settings, notice_id)}
+
+    @app.post("/api/opportunities/{notice_id}/capability-passport/sync-result")
+    def sync_opportunity_result_to_capability_passport(notice_id: str) -> dict[str, object]:
+        try:
+            result = sync_project_results_to_passport(settings, notice_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"status": "synced", **result, "passport": build_capability_passport(settings, notice_id)}
 
     @app.post("/api/opportunities/{notice_id}/requirements/extract")
     def extract_opportunity_requirements(notice_id: str) -> dict[str, object]:
@@ -1349,10 +2815,14 @@ def create_app():
                 source_locator=str(request.get("source_locator") or ""),
                 mandatory=bool(request.get("mandatory")),
                 confidence=int(request.get("confidence") or 0),
+                weight=float(request.get("weight") or 0),
                 status=str(request.get("status") or "pending"),
                 assignee_member_id=str(request.get("assignee_member_id") or ""),
                 due_at=str(request.get("due_at") or ""),
                 note=str(request.get("note") or ""),
+                source_revision_id=str(request.get("source_revision_id") or ""),
+                parent_requirement_id=str(request.get("parent_requirement_id") or ""),
+                extraction_mode=str(request.get("extraction_mode") or "manual"),
                 actor=str(request.get("actor") or "admin"),
             )
         except LookupError as exc:
@@ -1365,6 +2835,154 @@ def create_app():
             "summary": requirement_summary(settings, notice_id),
             "impact": requirement_change_impact(settings, notice_id),
         }
+
+    @app.get("/api/opportunities/{notice_id}/bid-workplan")
+    def opportunity_bid_workplan(notice_id: str) -> dict[str, object]:
+        try:
+            return get_bid_workplan(settings, notice_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/requirements/{requirement_id}/confirm")
+    def confirm_opportunity_requirement(
+        notice_id: str,
+        requirement_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            item = confirm_requirement(
+                settings,
+                notice_id,
+                requirement_id,
+                actor=str(request.get("actor") or "web:admin"),
+                assignee_member_id=str(request.get("assignee_member_id") or ""),
+                due_at=str(request.get("due_at") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "confirmed", "requirement": item, "workplan": get_bid_workplan(settings, notice_id)}
+
+    @app.post("/api/opportunities/{notice_id}/requirements/{requirement_id}/split")
+    def split_opportunity_requirement(
+        notice_id: str,
+        requirement_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        raw_parts = request.get("parts")
+        parts = [item for item in raw_parts if isinstance(item, dict)] if isinstance(raw_parts, list) else []
+        try:
+            children = split_requirement(
+                settings,
+                notice_id,
+                requirement_id,
+                parts,
+                actor=str(request.get("actor") or "web:admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "split", "items": children, "workplan": get_bid_workplan(settings, notice_id)}
+
+    @app.post("/api/opportunities/{notice_id}/requirements/merge")
+    def merge_opportunity_requirements(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        raw_ids = request.get("requirement_ids")
+        requirement_ids = [str(value) for value in raw_ids] if isinstance(raw_ids, list) else []
+        try:
+            item = merge_requirements(
+                settings,
+                notice_id,
+                requirement_ids,
+                requirement_key=str(request.get("requirement_key") or ""),
+                title=str(request.get("title") or ""),
+                actor=str(request.get("actor") or "web:admin"),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "merged", "requirement": item, "workplan": get_bid_workplan(settings, notice_id)}
+
+    @app.post("/api/opportunities/{notice_id}/bid-workplan/build")
+    def build_opportunity_bid_workplan(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return build_bid_workplan(settings, notice_id, actor=str(request.get("actor") or "web:admin"))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/bid-workplan/tasks/{task_id}/complete")
+    def complete_opportunity_bid_workplan_task(
+        notice_id: str,
+        task_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
+        try:
+            return complete_bid_task(settings, notice_id, task_id, actor=str(request.get("actor") or "web:admin"))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/bid-workplan/pricing")
+    def save_opportunity_bid_pricing(
+        notice_id: str,
+        request: dict[str, object] = Body(...),
+    ) -> dict[str, object]:
+        try:
+            item = upsert_pricing_item(
+                settings,
+                notice_id,
+                item_key=str(request.get("item_key") or ""),
+                title=str(request.get("title") or ""),
+                requirement_id=str(request.get("requirement_id") or ""),
+                quantity=float(request.get("quantity") or 0),
+                unit=str(request.get("unit") or "项"),
+                unit_price=float(request.get("unit_price") or 0),
+                cost=float(request.get("cost") or 0),
+                tax_rate=float(request.get("tax_rate") or 0),
+                owner_member_id=str(request.get("owner_member_id") or ""),
+                status=str(request.get("status") or "draft"),
+                note=str(request.get("note") or ""),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"status": "saved", "item": item, "workplan": get_bid_workplan(settings, notice_id)}
+
+    @app.post("/api/opportunities/{notice_id}/bid-workplan/sync-feishu")
+    def sync_opportunity_bid_workplan_feishu(notice_id: str) -> dict[str, object]:
+        try:
+            result = sync_bid_workplan_to_feishu(settings, notice_id)
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {**result, "workplan": get_bid_workplan(settings, notice_id)}
+
+    @app.post("/api/opportunities/{notice_id}/bid-workplan/sync-task-status")
+    def sync_opportunity_bid_workplan_status(notice_id: str) -> dict[str, object]:
+        try:
+            result = sync_bid_workplan_task_status(settings, notice_id)
+        except (FeishuError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {**result, "workplan": get_bid_workplan(settings, notice_id)}
+
+    @app.get("/api/opportunities/{notice_id}/bid-workplan/export")
+    def export_opportunity_bid_workplan(notice_id: str):
+        try:
+            path = export_bid_workplan(settings, notice_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return FileResponse(path, filename=path.name, media_type="application/zip")
 
     @app.get("/api/opportunities/{notice_id}/review-board")
     def opportunity_review_board(notice_id: str) -> dict[str, object]:
@@ -1380,6 +2998,8 @@ def create_app():
             "actions": [item.to_dict() for item in list_review_actions(settings, notice_id)],
             "action_summary": review_action_summary(settings, notice_id),
             "suggestions": review_agent_suggestions(settings, notice_id),
+            "agent_runs": list_review_agent_runs(settings, notice_id),
+            "agent_runtime": review_agent_runtime_summary(settings, notice_id),
         }
 
     @app.post("/api/opportunities/{notice_id}/review-board/sync")
@@ -1389,10 +3009,33 @@ def create_app():
         return sync_requirement_review_cases(settings, notice_id)
 
     @app.post("/api/opportunities/{notice_id}/review-board/agents")
-    def run_opportunity_review_agents(notice_id: str) -> dict[str, object]:
+    def run_opportunity_review_agents(
+        notice_id: str,
+        request: dict[str, object] = Body(default={}),
+    ) -> dict[str, object]:
         if get_opportunity(settings, notice_id) is None:
             raise HTTPException(status_code=404, detail="opportunity not found")
-        return run_review_agents(settings, notice_id)
+        roles = request.get("roles") if isinstance(request.get("roles"), list) else None
+        review_ids = request.get("review_ids") if isinstance(request.get("review_ids"), list) else None
+        try:
+            return run_review_agents(
+                settings,
+                notice_id,
+                roles=[str(item) for item in roles] if roles is not None else None,
+                review_ids=[str(item) for item in review_ids] if review_ids is not None else None,
+                actor=str(request.get("actor") or "web:admin"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/opportunities/{notice_id}/review-board/{review_id}/agents/{agent_role}/retry")
+    def retry_opportunity_review_agent(notice_id: str, review_id: str, agent_role: str) -> dict[str, object]:
+        try:
+            return retry_review_agent(settings, notice_id, review_id, agent_role, actor="web:admin")
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/opportunities/{notice_id}/review-board/send-feishu")
     def send_opportunity_review_board_to_feishu(
@@ -2508,10 +4151,44 @@ def create_app():
                 reviewer=str(request.get("reviewer") or ""),
                 note=str(request.get("note") or ""),
                 recorded_by=str(request.get("recorded_by") or ""),
+                experiment_id=str(request.get("experiment_id") or "tendertrace-value-lab-v1"),
+                experiment_version=int(request.get("experiment_version") or 1),
+                participant=str(request.get("participant") or ""),
+                document_type=str(request.get("document_type") or ""),
+                file_count=int(request.get("file_count") or 1),
+                sequence_order=str(request.get("sequence_order") or "manual_first"),
+                conditions=str(request.get("conditions") or ""),
+                source_url=str(request.get("source_url") or ""),
+                raw_record_url=str(request.get("raw_record_url") or ""),
+                gold_standard_url=str(request.get("gold_standard_url") or ""),
+                baseline_active_minutes=float(
+                    request.get("baseline_active_minutes")
+                    if request.get("baseline_active_minutes") is not None
+                    else request.get("baseline_minutes") or 0
+                ),
+                assisted_active_minutes=float(
+                    request.get("assisted_active_minutes")
+                    if request.get("assisted_active_minutes") is not None
+                    else request.get("assisted_minutes") or 0
+                ),
+                baseline_machine_wait_seconds=float(request.get("baseline_machine_wait_seconds") or 0),
+                assisted_machine_wait_seconds=float(request.get("assisted_machine_wait_seconds") or 0),
+                baseline_omissions=int(request.get("baseline_omissions") or 0),
+                assisted_omissions=int(request.get("assisted_omissions") or 0),
+                baseline_false_satisfied=int(request.get("baseline_false_satisfied") or 0),
+                assisted_false_satisfied=int(request.get("assisted_false_satisfied") or 0),
+                baseline_rework_count=int(request.get("baseline_rework_count") or 0),
+                assisted_rework_count=int(request.get("assisted_rework_count") or 0),
+                is_outlier=bool(request.get("is_outlier")),
+                outlier_reason=str(request.get("outlier_reason") or ""),
             )
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "saved", "item": item.to_dict(), "summary": business_measurement_summary(settings)}
+
+    @app.get("/api/evaluations/business-measurements")
+    def read_business_measurements() -> dict[str, object]:
+        return business_measurement_summary(settings)
 
     @app.post("/api/memory/events")
     def memory_event(request: dict[str, object] = Body(...)) -> dict[str, object]:

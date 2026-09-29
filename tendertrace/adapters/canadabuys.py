@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import csv
+from contextlib import closing
 from io import StringIO
 import re
+import time
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
 import httpx
 
 from tendertrace.adapters.ccgp import Attachment, Notice, _clean_spaces, _make_notice_id
-from tendertrace.fetching import FetchPolicy, ManagedFetcher
+from tendertrace.fetching import FetchError, FetchPolicy, ManagedFetcher
 
 
 CANADABUYS_OPEN_TENDERS_URL = (
@@ -78,17 +80,57 @@ class CanadaBuysAdapter:
         max_results: int = 10,
     ) -> list[Notice]:
         del max_pages
+        browser_fallback_used = False
+        download_elapsed_ms = 0
         with ManagedFetcher(self.policy, transport=self.transport) as fetcher:
             try:
                 response = fetcher.get(CANADABUYS_OPEN_TENDERS_URL)
-                response.raise_for_status()
+                try:
+                    response.raise_for_status()
+                    text = response.text
+                except FetchError:
+                    started = time.monotonic()
+                    text = _download_open_tenders()
+                    browser_fallback_used = True
+                    download_elapsed_ms = int((time.monotonic() - started) * 1000)
                 return parse_open_tenders(
-                    response.text,
+                    text,
                     bidql,
                     max_results=max_results,
                 )
             finally:
-                self.last_fetch_stats = fetcher.stats.to_dict()
+                if browser_fallback_used:
+                    self.last_fetch_stats = {
+                        "requests": 1,
+                        "succeeded": 1,
+                        "failed": 0,
+                        "blocked": 0,
+                        "retries": 0,
+                        "browser_fallbacks": 1,
+                        "avg_elapsed_ms": download_elapsed_ms,
+                        "status_codes": {"200": 1},
+                        "last_error": "",
+                    }
+                else:
+                    self.last_fetch_stats = fetcher.stats.to_dict()
+
+
+def _download_open_tenders() -> str:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError("Playwright is required for the CanadaBuys download") from exc
+
+    with sync_playwright() as playwright, closing(playwright.chromium.launch(headless=True)) as browser:
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.set_content(f'<a id="download" href="{CANADABUYS_OPEN_TENDERS_URL}">download</a>')
+        with page.expect_download(timeout=45000) as download_info:
+            page.click("#download")
+        path = download_info.value.path()
+        if path is None:
+            raise RuntimeError("CanadaBuys download did not create a local file")
+        return path.read_bytes().decode("utf-8-sig")
 
 
 def _notice_from_row(row: dict[str, str]) -> Notice | None:

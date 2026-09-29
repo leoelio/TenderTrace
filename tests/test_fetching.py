@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import httpx
 
@@ -8,6 +9,31 @@ from tendertrace.pipeline.artifacts import page_artifact_from_fetch
 
 
 class ManagedFetcherTests(unittest.TestCase):
+    def test_curl_fallback_recovers_ssl_eof(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("SSL: unexpected EOF while reading", request=request)
+
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout=(
+                b"<html><body>ok</body></html>\n"
+                b"__TENDERTRACE_CURL__:200\thttps://example.com/page\ttext/html; charset=utf-8"
+            ),
+            stderr=b"",
+        )
+        policy = FetchPolicy(max_retries=0, curl_fallback=True)
+        with (
+            patch("tendertrace.fetching.shutil.which", return_value="curl.exe"),
+            patch("tendertrace.fetching.subprocess.run", return_value=completed),
+            ManagedFetcher(policy, transport=httpx.MockTransport(handler)) as fetcher,
+        ):
+            result = fetcher.get("https://example.com/page")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.fetcher, "curl")
+        self.assertIn("ok", result.text)
+        self.assertEqual(fetcher.stats.to_dict()["succeeded"], 1)
+
     def test_retries_retryable_status_and_records_stats(self) -> None:
         calls = 0
 

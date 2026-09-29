@@ -261,8 +261,8 @@ class CapabilityMatchingTests(unittest.TestCase):
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(analyzed.status_code, 200)
         self.assertEqual(listed.status_code, 200)
-        self.assertEqual(listed.json()["items"][0]["verdict"], "needs_evidence")
-        self.assertEqual(listed.json()["summary"]["needs_evidence_count"], 1)
+        self.assertEqual(listed.json()["items"][0]["verdict"], "pending")
+        self.assertEqual(listed.json()["summary"]["pending_count"], 1)
 
 
 def _settings(root: Path) -> Settings:
@@ -298,13 +298,14 @@ def _insert_notice_and_requirement(settings: Settings):
         settings,
         notice_id="notice-1",
         requirement_key="TECH-01",
-        requirement_type="qualification",
+        requirement_type="technical",
         title="服务器技术规格满足采购要求",
         evidence_text="投标产品须满足招标文件所列服务器技术规格。",
         source_url="https://example.com/notice-1",
         source_locator="招标文件第 3 页",
         mandatory=True,
         confidence=80,
+        status="confirmed",
     )
 
 

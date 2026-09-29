@@ -1,0 +1,54 @@
+{
+  "direction": 13,
+  "name": "评委现场挑战模式",
+  "verified_at": "2026-09-28T18:00:30+08:00",
+  "base_url": "http://127.0.0.1:8000",
+  "direct_url": "http://127.0.0.1:8000/?view=challengeView",
+  "query": {
+    "category": "Server",
+    "region": "Philippines",
+    "time_window": "365d",
+    "keyword": "HAProxy"
+  },
+  "session_id": "9cb852fb-e4c2-479d-965a-b1e6c8bee46e",
+  "status": "local_ready",
+  "local_duration_ms": 5,
+  "local_result_count": 1,
+  "result_sample": [
+    {
+      "id": "9cb852fb-e4c2-479d-965a-b1e6c8bee46e:ungm:ungm-314912",
+      "notice_id": "ungm:ungm-314912",
+      "origin": "local",
+      "verification_status": "local_verified",
+      "source_site": "ungm",
+      "title": "Procurement of Server for DMZ for HAProxy",
+      "publish_time": "2026-09-23",
+      "region": "Philippines",
+      "purchaser": "WHO",
+      "source_url": "https://www.ungm.org/Public/Notice/314912",
+      "indexed_at": "2026-09-24 17:27:06",
+      "position": 1,
+      "recorded_at": "2026-09-28 10:00:29"
+    }
+  ],
+  "checks": {
+    "service_healthy": true,
+    "direct_page_http_200": true,
+    "direct_page_contains_challenge_view": true,
+    "four_controlled_fields_present": true,
+    "local_response_under_5_seconds": true,
+    "local_real_result_returned": true,
+    "all_results_have_source_url": true,
+    "all_results_have_index_time": true,
+    "query_persisted_in_history": true,
+    "network_is_optional": true,
+    "not_replay_data": true,
+    "unsafe_input_rejected": true,
+    "schema_version_50_active": true
+  },
+  "passed": true,
+  "notes": [
+    "联网补充为评委主动触发的可选步骤，本次验收没有向外部来源发起新采集。",
+    "联网失败隔离与停止机制由自动化测试覆盖。"
+  ]
+}

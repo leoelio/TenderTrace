@@ -1,0 +1,43 @@
+{
+  "acceptance_date": "2026-09-28",
+  "notice_id": "demo-decision-sandbox",
+  "product_name": "投标决策沙盘",
+  "schema_version": 44,
+  "service_url": "http://127.0.0.1:8000/?opportunity=demo-decision-sandbox",
+  "automated_tests": {
+    "result": "passed",
+    "tests_passed": 499,
+    "subtests_passed": 546,
+    "warnings": 1,
+    "warning_detail": "Starlette TestClient 依赖迁移提示，不影响功能与结果",
+    "duration_seconds": 86.01
+  },
+  "runtime_checks": {
+    "health_status": "ok",
+    "home_http_status": 200,
+    "app_js_http_status": 200,
+    "decision_sandbox_scenarios": 2,
+    "decision_sandbox_suggestions": 2,
+    "formal_data_is_read_only_during_simulation": true,
+    "no_win_probability": true
+  },
+  "acceptance_items": {
+    "sandbox_never_writes_formal_project": "passed",
+    "each_change_explains_input_impact_and_rule": "passed",
+    "two_scenarios_saved_for_main_case": "passed",
+    "scenario_save_recompute_and_compare": "passed",
+    "insufficient_samples_hide_win_probability": "passed",
+    "pending_suggestion_requires_human_confirmation": "passed",
+    "accepted_suggestion_enters_formal_plan": "passed",
+    "rejected_suggestion_never_creates_formal_task": "passed",
+    "existing_features_regression": "passed",
+    "responsive_and_dark_theme_styles_present": "passed"
+  },
+  "formal_state_evidence": {
+    "before": "8899f2bb88dd7319833982c730dd7bc8f324039782ffd779bea0b50f2e46a883",
+    "after_simulation": "8899f2bb88dd7319833982c730dd7bc8f324039782ffd779bea0b50f2e46a883",
+    "after_pending_suggestion": "8899f2bb88dd7319833982c730dd7bc8f324039782ffd779bea0b50f2e46a883",
+    "after_human_acceptance": "8b12f6434c2573275859b199450fdcee884de898cb4a4ea761a206c457e045a2"
+  },
+  "result": "passed"
+}

@@ -256,7 +256,7 @@ def build_opportunity_card(
                         f"**可信依据** {trust.get('verification_label') or '证据待核验'} · {trust_text}\n"
                         f"**门禁** {qualification_blockers or '已满足 Go 决策条件'}\n"
                         f"**变更复核** {change_review_text}\n"
-                        f"**五角色会审** 待裁决 {review_board.get('pending_count') or 0} 项 · "
+                        f"**可质询多角色会审** 待裁决 {review_board.get('pending_count') or 0} 项 · "
                         f"已裁决 {review_board.get('resolved_count') or 0} 项\n"
                         f"**群内意见** 发送“项目意见 {opportunity.get('notice_id') or '-'}：内容”可回写机会审计链\n"
                         f"**关系风险** {relationship_risk_text}\n"

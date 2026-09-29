@@ -1,0 +1,74 @@
+{
+  "version": "direction16-gold-v1",
+  "redacted": true,
+  "workspace_id": "cc951bec-38e4-530f-93ee-95f767c40df2",
+  "cases": [
+    {
+      "case_id": "gold-clean-history",
+      "legal_name": "云岭交付服务有限公司（脱敏）",
+      "evidence": [
+        [
+          "award_result",
+          "历史中标结果",
+          "已完成同类项目并取得验收证明。"
+        ]
+      ],
+      "expected_rules": [],
+      "entity_id": "656075b5-08c3-4af7-babc-e7c38b211d4a",
+      "workspace_id": "cc951bec-38e4-530f-93ee-95f767c40df2",
+      "actual_rules": [],
+      "risk_count": 0,
+      "missing_is_separate": true
+    },
+    {
+      "case_id": "gold-penalty",
+      "legal_name": "华兴科技有限公司（脱敏A）",
+      "evidence": [
+        [
+          "administrative_penalty",
+          "行政处罚快照",
+          "处罚已履行，整改材料仍需法务核验。"
+        ]
+      ],
+      "expected_rules": [
+        "evidence:administrative_penalty"
+      ],
+      "entity_id": "df4003ee-3aec-4bcd-9ab3-a1f9cee22d1f",
+      "workspace_id": "cc951bec-38e4-530f-93ee-95f767c40df2",
+      "actual_rules": [
+        "evidence:administrative_penalty"
+      ],
+      "risk_count": 1,
+      "missing_is_separate": true
+    },
+    {
+      "case_id": "gold-conflict-judicial",
+      "legal_name": "安衡联合服务有限公司（脱敏）",
+      "evidence": [
+        [
+          "conflict",
+          "利益冲突声明",
+          "存在待披露的关联关系，需独立审批。"
+        ],
+        [
+          "judicial_case",
+          "司法案件快照",
+          "执行状态和涉案金额需法务复核。"
+        ]
+      ],
+      "expected_rules": [
+        "evidence:conflict",
+        "evidence:judicial_case"
+      ],
+      "entity_id": "d46776f2-2dbe-46ad-8d19-5ed4cf575272",
+      "workspace_id": "cc951bec-38e4-530f-93ee-95f767c40df2",
+      "actual_rules": [
+        "evidence:conflict",
+        "evidence:judicial_case"
+      ],
+      "risk_count": 2,
+      "missing_is_separate": true
+    }
+  ],
+  "evaluation_command": ".venv\\Scripts\\python.exe scripts\\evaluate_company_due_diligence.py"
+}

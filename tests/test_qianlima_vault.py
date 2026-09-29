@@ -2,11 +2,15 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import MagicMock
+
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from tendertrace.config import Settings
 from tendertrace.fetching import FetchResult
 from tendertrace.vault.qianlima import (
     QianlimaSessionVault,
+    _load_rendered_page,
     build_member_search_url,
     login_session_expired,
     parse_rendered_detail,
@@ -16,6 +20,31 @@ from tendertrace.vault.qianlima import (
 
 
 class QianlimaVaultTests(unittest.TestCase):
+    def test_rendered_page_retries_one_navigation_timeout(self) -> None:
+        page = MagicMock()
+        response = MagicMock()
+        response.status = 200
+        page.goto.side_effect = [PlaywrightTimeoutError("timeout"), response]
+        page.url = "https://search.vip.qianlima.com/index.html"
+        page.content.return_value = "<html></html>"
+
+        _load_rendered_page(page, "https://search.vip.qianlima.com/", timeout_ms=1000)
+
+        self.assertEqual(page.goto.call_count, 2)
+
+    def test_rendered_search_waits_for_slow_results_until_configured_timeout(self) -> None:
+        page = MagicMock()
+        response = MagicMock()
+        response.status = 200
+        page.goto.return_value = response
+        page.url = "https://search.vip.qianlima.com/index.html"
+        page.content.return_value = "<html></html>"
+
+        _load_rendered_page(page, "https://search.vip.qianlima.com/", timeout_ms=30000)
+
+        waits = page.wait_for_function.call_args_list
+        self.assertEqual(waits[1].kwargs["timeout"], 30000)
+
     def test_status_reports_missing_and_existing_storage_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

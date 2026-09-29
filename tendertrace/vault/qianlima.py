@@ -545,7 +545,10 @@ def _load_rendered_page(
 
     page.on("response", capture_auth_failure)
     try:
-        response = page.goto(url, wait_until="commit", timeout=timeout_ms)
+        try:
+            response = page.goto(url, wait_until="commit", timeout=timeout_ms)
+        except PlaywrightTimeoutError:
+            response = page.goto(url, wait_until="commit", timeout=timeout_ms)
         try:
             page.wait_for_function(
                 "document.readyState !== 'loading'",
@@ -566,7 +569,7 @@ def _load_rendered_page(
                   );
                 }
                 """,
-                timeout=max(1000, min(timeout_ms, 6000)),
+                timeout=max(1000, timeout_ms),
             )
         except PlaywrightTimeoutError:
             pass

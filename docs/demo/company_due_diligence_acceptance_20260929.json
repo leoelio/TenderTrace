@@ -1,0 +1,51 @@
+{
+  "direction": 16,
+  "gold_case_count": 3,
+  "true_positive": 3,
+  "false_negative": 0,
+  "false_positive": 0,
+  "true_negative": 1,
+  "key_risk_recall": 1.0,
+  "false_positive_rate": 0.0,
+  "missing_information_separated": true,
+  "passed": true,
+  "cases": [
+    {
+      "case_id": "gold-clean-history",
+      "expected": [],
+      "actual": [],
+      "true_positive": 0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "passed": true
+    },
+    {
+      "case_id": "gold-penalty",
+      "expected": [
+        "evidence:administrative_penalty"
+      ],
+      "actual": [
+        "evidence:administrative_penalty"
+      ],
+      "true_positive": 1,
+      "false_negative": 0,
+      "false_positive": 0,
+      "passed": true
+    },
+    {
+      "case_id": "gold-conflict-judicial",
+      "expected": [
+        "evidence:conflict",
+        "evidence:judicial_case"
+      ],
+      "actual": [
+        "evidence:conflict",
+        "evidence:judicial_case"
+      ],
+      "true_positive": 2,
+      "false_negative": 0,
+      "false_positive": 0,
+      "passed": true
+    }
+  ]
+}

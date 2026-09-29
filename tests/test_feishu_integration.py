@@ -624,6 +624,7 @@ class FeishuIntegrationTests(unittest.TestCase):
             os.environ["TENDERTRACE_MODEL_ENHANCEMENT_ENABLED"] = "false"
             os.environ["FEISHU_ENABLED"] = "false"
             os.environ["FEISHU_AGENT_ENABLED"] = "false"
+            os.environ["TENDERTRACE_FEISHU_TASK_SYNC_ENABLED"] = "false"
             try:
                 response = TestClient(create_app()).get("/api/integrations/feishu/status")
             finally:

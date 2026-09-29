@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
+
+import httpx
 
 from tendertrace.adapters.canadabuys import CanadaBuysAdapter, parse_open_tenders
 
@@ -13,6 +16,25 @@ Historical server notice,,PW-003,SOL-003,2026-05-01,2026-05-20T14:00:00,Open,Req
 
 
 class CanadaBuysAdapterTests(unittest.TestCase):
+    def test_adapter_uses_browser_download_when_http_is_blocked(self) -> None:
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(403, text="Access denied", request=request)
+        )
+        adapter = CanadaBuysAdapter(transport=transport)
+
+        with patch(
+            "tendertrace.adapters.canadabuys._download_open_tenders",
+            return_value=CSV_TEXT,
+        ):
+            notices = adapter.collect(
+                {"topic": {"source_terms": ["server"]}, "time": {}},
+                max_results=5,
+            )
+
+        self.assertEqual(len(notices), 2)
+        self.assertEqual(adapter.last_fetch_stats["browser_fallbacks"], 1)
+        self.assertEqual(adapter.last_fetch_stats["failed"], 0)
+
     def test_parser_filters_topic_and_window_and_preserves_public_evidence(self) -> None:
         notices = parse_open_tenders(
             CSV_TEXT,

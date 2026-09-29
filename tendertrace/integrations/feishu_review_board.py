@@ -196,7 +196,7 @@ def build_requirement_review_card(
         "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {
             "template": "blue",
-            "title": {"tag": "plain_text", "content": "TenderTrace 五角色会审"},
+            "title": {"tag": "plain_text", "content": "TenderTrace 可质询多角色会审"},
         },
         "elements": elements,
     }

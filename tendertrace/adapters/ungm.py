@@ -12,6 +12,7 @@ from tendertrace.pipeline.artifacts import page_artifact_from_fetch
 
 
 UNGM_BASE_URL = "https://www.ungm.org"
+UNGM_NOTICE_URL = f"{UNGM_BASE_URL}/Public/Notice"
 UNGM_SEARCH_URL = f"{UNGM_BASE_URL}/Public/Notice/Search"
 
 
@@ -98,6 +99,12 @@ def parse_search_results(html: str) -> list[Notice]:
     return notices
 
 
+def parse_request_verification_token(html: str) -> str:
+    parser = HTMLParser(html)
+    node = parser.css_first('input[name="__RequestVerificationToken"]')
+    return _clean_spaces(node.attributes.get("value", "")) if node is not None else ""
+
+
 def enrich_from_detail(
     notice: Notice,
     html: str,
@@ -157,10 +164,16 @@ class UngmAdapter:
         seen: set[str] = set()
         with ManagedFetcher(self.policy) as fetcher:
             try:
+                landing = fetcher.get(UNGM_NOTICE_URL)
+                landing.raise_for_status()
+                verification_token = parse_request_verification_token(landing.text)
+                if not verification_token:
+                    raise RuntimeError("UNGM search page did not provide an anti-forgery token")
                 for term in terms[:3]:
                     for page in range(max_pages):
                         response = fetcher.post(
                             UNGM_SEARCH_URL,
+                            headers={"RequestVerificationToken": verification_token},
                             json=build_search_body(
                                 bidql,
                                 page=page,

@@ -1,0 +1,118 @@
+{
+  "demo_url": "http://127.0.0.1:8000/?view=battleMapView&battle_scope=global&battle_hours=2160",
+  "source_contract": {
+    "name": "USGS Earthquake GeoJSON Feed",
+    "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_month.geojson",
+    "license": "USGS public domain",
+    "frequency": "official feed updated every minute; TenderTrace fetches only on explicit sync",
+    "captured_count": 60,
+    "source_generated_at": "2026-09-29T03:29:54+00:00"
+  },
+  "business_sync": {
+    "geo_events": 45,
+    "awards": 18,
+    "flows": 1
+  },
+  "global_summary": {
+    "event_count": 86,
+    "opportunity_count": 17,
+    "award_count": 9,
+    "flow_count": 1,
+    "external_event_count": 60,
+    "candidate_impact_count": 6,
+    "confirmed_impact_count": 0,
+    "cluster_count": 40,
+    "domestic_geocoded_rate": 1.0,
+    "province_precision_rate": 1.0,
+    "country_level_count": 2
+  },
+  "china_summary": {
+    "event_count": 20,
+    "opportunity_count": 9,
+    "award_count": 7,
+    "flow_count": 1,
+    "external_event_count": 4,
+    "candidate_impact_count": 0,
+    "confirmed_impact_count": 0,
+    "cluster_count": 11,
+    "domestic_geocoded_rate": 1.0,
+    "province_precision_rate": 1.0,
+    "country_level_count": 2
+  },
+  "evaluated_event_count": 60,
+  "candidate_impact_count": 10,
+  "featured_case": {
+    "event": {
+      "id": "d69fbe549bc049d8f12d1411",
+      "layer": "external",
+      "source_event_id": "us6000ty1l",
+      "event_type": "earthquake",
+      "title": "M4.9 · 43 km W of Palauig, Philippines",
+      "summary": "USGS 实时 GeoJSON 事件。事件存在不等于 TenderTrace 项目已经受影响。",
+      "severity": "info",
+      "magnitude": 4.9,
+      "region_name": "43 km W of Palauig, Philippines",
+      "country_code": "PH",
+      "latitude": 15.4374,
+      "longitude": 119.503,
+      "map_x": 83.195,
+      "map_y": 41.424,
+      "coordinate_precision": "exact",
+      "impact_radius_km": 250.0,
+      "event_time": "2026-09-28T00:54:43+00:00",
+      "source_name": "USGS",
+      "source_url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000ty1l",
+      "source_license": "USGS public domain",
+      "access_policy": "public",
+      "access_frequency": "minute_geojson_feed",
+      "evidence_status": "verified_source",
+      "snapshot_sha256": "e0331746d74183244650c9f24762fae6203849521f56a92eb8d0aadb6f6d167d",
+      "captured_at": "2026-09-29 03:27:58"
+    },
+    "impacts": [
+      {
+        "id": "04044b027189395ec0b8d09c",
+        "external_event_id": "d69fbe549bc049d8f12d1411",
+        "target_type": "notice",
+        "target_id": "ungm:ungm-314912",
+        "target_title": "Procurement of Server for DMZ for HAProxy",
+        "relation_basis": "rule",
+        "rule_key": "same-country-v1",
+        "match_basis": {
+          "event_country": "PH",
+          "target_country": "PH",
+          "kind": "same_country"
+        },
+        "impact_scope": "地区：Philippines；品类：服务器",
+        "severity": "info",
+        "confidence": 86,
+        "explanation": "外部事件地点与项目地区被标准化为同一国家；这是规则关联，仍需核验实际交付地点和供应路径。",
+        "suggested_action": "核验项目交付地点、合作方所在地与运输路径；确认前不修改原项目结论。",
+        "review_status": "pending",
+        "review_note": "",
+        "reviewed_by": "",
+        "reviewed_at": "",
+        "category": "服务器",
+        "region_name": "Philippines",
+        "counterparty": "WHO",
+        "notice_id": "ungm:ungm-314912"
+      }
+    ],
+    "impact_count": 1
+  },
+  "replays": {
+    "global": {
+      "id": "ba3ac11bd2c957155225a660",
+      "state_hash": "df39b7ec93b07c7b164910491576a0b71cc1136bc1b9c2f11d6b37603037a862",
+      "data_as_of": "2026-09-29 03:27:58",
+      "verified_at": "2026-09-29 03:30:28"
+    },
+    "china": {
+      "id": "d451f590454ec7ef97e09a9c",
+      "state_hash": "6f987d7d4b085b715cd87c95474b7b767e59d287bc5cdf59ae2c36d1de55d513",
+      "data_as_of": "2026-09-29 03:27:58",
+      "verified_at": "2026-09-29 03:30:28"
+    }
+  },
+  "interpretation_boundary": "USGS 地震事实与 TenderTrace 业务影响分开保存；同国或距离规则只生成待人工复核候选，不会改写原机会、尽调或投标结论。"
+}

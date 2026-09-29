@@ -24,6 +24,14 @@ ADB_HTML = """
 </table>
 """
 
+ADB_READER_MARKDOWN = """
+## Request for Proposal
+
+| Title | Start date | End date |
+| --- | --- | --- |
+| [Request for Proposal: Rapid Assessment](https://www.adb.org/sites/default/files/page/559266/rfp-radar.zip) | 28 September 2026 | 9 October 2026, 5:00 p.m. (Manila time) |
+"""
+
 
 class AdbAdapterTests(unittest.TestCase):
     def test_parse_notices_preserves_official_pdf_and_deadline(self) -> None:
@@ -49,6 +57,15 @@ class AdbAdapterTests(unittest.TestCase):
         self.assertTrue(adapter.supports({"region": {"scope": "global"}}))
         self.assertTrue(adapter.supports({"region": {"scope": "adb"}}))
         self.assertFalse(adapter.supports({"region": {"scope": "domestic"}}))
+
+    def test_parse_reader_markdown_preserves_official_url_and_provenance(self) -> None:
+        notices = parse_notices(ADB_READER_MARKDOWN, retrieval_via="r.jina.ai")
+
+        self.assertEqual(len(notices), 1)
+        self.assertEqual(notices[0].publish_time, "2026-09-28")
+        self.assertEqual(notices[0].fields["deadline"], "2026-10-09")
+        self.assertEqual(notices[0].fields["retrieval_via"], "r.jina.ai")
+        self.assertTrue(notices[0].source_url.startswith("https://www.adb.org/"))
 
 
 if __name__ == "__main__":

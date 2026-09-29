@@ -1,0 +1,18 @@
+{
+  "notice_id": "demo-direction4-public-gold",
+  "title": "方向四｜三份政府采购公开文档联合验收作战图",
+  "source_case_count": 3,
+  "source_urls": [
+    "https://www.ccgp.gov.cn/cggg/dfgg/gzgg/202508/t20250812_25149498.htm",
+    "https://www.ccgp.gov.cn/cggg/zygg/gzgg/202503/t20250325_24351013.htm",
+    "https://www.ccgp.gov.cn/cggg/zygg/gkzb/202605/t20260529_26657419.htm"
+  ],
+  "requirements": 19,
+  "deliverables": 19,
+  "tasks": 23,
+  "completed_tasks": 1,
+  "execution_readiness_before": 0,
+  "execution_readiness_after": 4,
+  "digital_twin_bid_readiness_after": 36,
+  "export_path": "E:\\tt\\outputs\\bid_workplans\\demo-direction4-public-gold-bid-workplan.zip"
+}

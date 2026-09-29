@@ -141,6 +141,14 @@ def record_notice_revision(
             json_dumps(after_changed),
         ),
     )
+    from tendertrace.evidence_microscope import invalidate_evidence_for_revision
+
+    invalidate_evidence_for_revision(
+        conn,
+        notice_id=notice_id,
+        revision_id=revision_id,
+        changed_fields=changed_fields,
+    )
     row = conn.execute(
         """
         SELECT r.*, n.title, n.source_url
@@ -150,7 +158,20 @@ def record_notice_revision(
         """,
         (revision_id,),
     ).fetchone()
-    return _from_row(row)
+    revision = _from_row(row)
+    from tendertrace.change_impact_engine import ensure_change_impact_round
+
+    ensure_change_impact_round(
+        conn,
+        revision_id=revision.id,
+        notice_id=revision.notice_id,
+        changed_fields=revision.changed_fields,
+        before=revision.before,
+        after=revision.after,
+        source_url=revision.source_url,
+        created_at=revision.created_at,
+    )
+    return revision
 
 
 def list_notice_revisions(

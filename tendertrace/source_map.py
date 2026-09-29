@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 import json
 from typing import Any
 
-from tendertrace.adapters.adb import ADB_NOTICES_URL
+from tendertrace.adapters.adb import ADB_NOTICES_URL, ADB_READER_URL
 from tendertrace.adapters.afdb import AFDB_SOLICITATIONS_URL
 from tendertrace.adapters.canadabuys import CANADABUYS_OPEN_TENDERS_URL
 from tendertrace.adapters.ebrd import EBRD_NOTICES_URL
@@ -225,7 +225,7 @@ def build_source_map(settings: Settings) -> dict[str, object]:
         ),
         SourceMapItem(
             site="adb",
-            engine="official-html+pdf",
+            engine="official-html+public-reader+pdf",
             status="configured",
             requires_login=False,
             routes=[
@@ -233,14 +233,20 @@ def build_source_map(settings: Settings) -> dict[str, object]:
                     name="adb-institutional-procurement-notices",
                     url=ADB_NOTICES_URL,
                     kind="list",
-                )
+                ),
+                SourceMapRoute(
+                    name="adb-public-reader-fallback",
+                    url=ADB_READER_URL,
+                    kind="fallback",
+                ),
             ],
             health=health.get("adb", {}),
             discovery_rules={
                 "scope": ["global", "adb"],
                 "authority": "Asian Development Bank",
                 "documents": "official PDF",
-                "same_domain": True,
+                "reader_fallback": "r.jina.ai",
+                "same_domain": False,
             },
         ),
         SourceMapItem(
@@ -624,6 +630,8 @@ def _health_status(bucket: dict[str, object]) -> str:
     if score >= 0.85:
         return "healthy"
     if score >= 0.6:
+        return "degraded"
+    if str(bucket["last_success_at"]) > str(bucket["last_failure_at"]):
         return "degraded"
     return "unhealthy"
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TenderTrace 工作台</title>
     <link rel="icon" href="/logo.svg" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-finals-home" />
     <link rel="stylesheet" href="/workspace.css?v=20260914" />
   </head>
   <body>
@@ -31,20 +31,40 @@
         </button>
 
         <nav id="topNavigation" class="topnav" aria-label="主导航">
-          <button class="nav-tab active" type="button" data-view="workbenchView">工作台</button>
-          <button class="nav-tab" type="button" data-view="opportunityView">机会情报</button>
-          <button class="nav-tab" type="button" data-view="historyView">历史运行</button>
-          <button class="nav-tab" type="button" data-view="subscriptionsView">订阅管理</button>
-          <button class="nav-tab" type="button" data-view="sourcesView">数据源</button>
-          <button class="nav-tab" type="button" data-view="evaluationView">Agent评测</button>
-          <button class="nav-tab" type="button" data-view="memoryView">用户记忆</button>
-          <button class="nav-tab" type="button" data-view="organizationView">组织协作</button>
-          <button class="nav-tab" type="button" data-view="settingsView">设置</button>
+          <button class="nav-tab active" type="button" data-view="finalsHomeView">总决赛</button>
+          <button class="nav-tab" type="button" data-view="radarView">机会</button>
+          <button class="nav-tab" type="button" data-view="opportunityView">项目</button>
+          <button class="nav-tab" type="button" data-view="partnerView">企业</button>
+          <button class="nav-tab" type="button" data-view="battleMapView">战情图</button>
+          <button class="nav-tab" type="button" data-view="trainingView">训练</button>
+          <button class="nav-tab" type="button" data-view="organizationView">协作</button>
+          <details class="nav-more">
+            <summary>更多工具</summary>
+            <div>
+              <button class="nav-tab" type="button" data-view="workbenchView">检索工作台</button>
+              <button class="nav-tab" type="button" data-view="challengeView">评委挑战</button>
+              <button class="nav-tab" type="button" data-view="demoConsoleView">演示控制台</button>
+              <button class="nav-tab" type="button" data-view="historyView">历史运行</button>
+              <button class="nav-tab" type="button" data-view="subscriptionsView">订阅管理</button>
+              <button class="nav-tab" type="button" data-view="sourcesView">数据源</button>
+              <button class="nav-tab" type="button" data-view="evaluationView">评测与价值</button>
+              <button class="nav-tab" type="button" data-view="memoryView">用户记忆</button>
+              <button class="nav-tab" type="button" data-view="settingsView">设置</button>
+            </div>
+          </details>
         </nav>
 
         <div class="topbar-actions">
           <span id="apiStatus" class="status-dot status-muted"></span>
           <span id="apiStatusText">连接中</span>
+          <div class="visual-controls" role="group" aria-label="展示设置">
+            <button id="motionToggleButton" class="display-control-button" type="button" aria-pressed="false" title="关闭业务动效">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"></path></svg><span>动效开</span>
+            </button>
+            <button id="presentationModeButton" class="display-control-button" type="button" aria-pressed="false" title="进入大屏模式">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path></svg><span>大屏</span>
+            </button>
+          </div>
           <button
             id="notificationButton"
             class="icon-button"
@@ -117,7 +137,111 @@
       </header>
 
       <main class="page">
-        <section id="workbenchView" class="view active">
+        <section id="finalsHomeView" class="view active">
+          <div class="finals-home-shell">
+            <header class="finals-home-hero">
+              <div>
+                <span class="workspace-eyebrow">TENDERTRACE / NATIONAL FINALS</span>
+                <h1>从公开机会，到可执行的投标决策</h1>
+                <p>一条主线贯通真实来源、项目数字孪生、证据与变更、企业风险、飞书协作和团队训练。</p>
+              </div>
+              <div class="finals-home-hero-actions">
+                <button class="primary-button" type="button" data-finals-primary-case>进入主案例</button>
+                <button class="ghost-button" type="button" data-finals-view="challengeView">评委现场挑战</button>
+                <button id="finalsHomeRefreshButton" class="ghost-button" type="button">刷新现场状态</button>
+              </div>
+            </header>
+
+            <form id="finalsHomeIntentForm" class="finals-intent-bar">
+              <label for="finalsHomeIntentInput"><span>一句话进入业务动作</span><input id="finalsHomeIntentInput" type="text" placeholder="例如：查看北京服务器机会、核验合作方风险、打开全国态势、开始答辩训练" /></label>
+              <button class="primary-button" type="submit">开始</button>
+              <div class="finals-intent-chips" aria-label="快捷入口">
+                <button type="button" data-finals-intent="最近一个月北京服务器招标机会">查机会</button>
+                <button type="button" data-finals-view="partnerView">查企业风险</button>
+                <button type="button" data-finals-view="battleMapView">看地区态势</button>
+                <button type="button" data-finals-view="trainingView">开始训练</button>
+              </div>
+            </form>
+
+            <section class="finals-trust-strip" aria-label="首页可信状态">
+              <span><b>REAL DATA</b><i id="finalsHomeDataAsOf">读取中</i></span>
+              <span><b>LOCAL FIRST</b><i id="finalsHomeLocalState">服务检查中</i></span>
+              <span><b>FEISHU LOOP</b><i id="finalsHomeFeishuState">协作检查中</i></span>
+              <span><b>SAFE DEMO</b><i id="finalsHomeReplayState">回放检查中</i></span>
+            </section>
+
+            <div class="finals-home-grid">
+              <section class="finals-home-panel finals-discovery-panel">
+                <div class="finals-panel-head"><div><span>01 / 发现机会</span><h2>全国机会雷达</h2></div><button type="button" data-finals-view="radarView">打开雷达</button></div>
+                <div class="finals-radar-pulse" aria-hidden="true"><i></i><i></i><i></i><b>TT</b></div>
+                <div class="finals-discovery-metrics">
+                  <strong id="finalsHomeOpportunityCount">-<small>有效机会</small></strong>
+                  <strong id="finalsHomeRecentCount">-<small>近 7 日新增</small></strong>
+                  <strong id="finalsHomeRegionCount">-<small>覆盖地区</small></strong>
+                  <strong id="finalsHomeSourceCount">-<small>本地有结果来源</small></strong>
+                </div>
+                <p id="finalsHomeRadarMeta">正在读取本地索引与来源状态。</p>
+              </section>
+
+              <section class="finals-home-panel finals-main-case-panel">
+                <div class="finals-panel-head"><div><span>02 / 判断局面</span><h2>当前主机会</h2></div><span id="finalsHomeCaseState" class="finals-case-state">核验中</span></div>
+                <h3 id="finalsHomeCaseTitle">正在载入已核验主案例</h3>
+                <p id="finalsHomeCaseMeta">项目、证据和评分读取中。</p>
+                <div id="finalsHomeScoreGrid" class="finals-score-grid"></div>
+                <div id="finalsHomeCaseEvidence" class="finals-case-evidence"></div>
+                <div class="finals-case-actions">
+                  <button class="primary-button" type="button" data-finals-primary-case>打开数字孪生</button>
+                  <button class="ghost-button" type="button" data-finals-view="demoConsoleView">查看可信回放</button>
+                </div>
+              </section>
+
+              <section class="finals-home-panel finals-action-panel">
+                <div class="finals-panel-head"><div><span>03 / 进入行动</span><h2>风险与下一步</h2></div><button type="button" data-finals-view="organizationView">进入协作</button></div>
+                <div id="finalsHomeActions" class="finals-action-list"><p>正在生成主案例行动列表。</p></div>
+                <div class="finals-action-links">
+                  <button type="button" data-finals-view="partnerView"><b>企业尽调</b><span>核验合作方风险</span></button>
+                  <button type="button" data-finals-view="trainingView"><b>检验准备度</b><span>连续追问与复算评分</span></button>
+                  <button type="button" data-finals-view="organizationView"><b>飞书战情室</b><span>任务、表格、日历和回写</span></button>
+                </div>
+              </section>
+            </div>
+
+            <section class="finals-architecture" aria-labelledby="finalsArchitectureTitle">
+              <div class="finals-panel-head"><div><span>INTEGRATED PRODUCT</span><h2 id="finalsArchitectureTitle">四层架构，共用同一组业务编号</h2></div></div>
+              <div class="finals-architecture-flow">
+                <article><span>01</span><b>数据与事件层</b><p>公告、附件、结果、企业材料、外部事件</p></article>
+                <article><span>02</span><b>可信情报层</b><p>数字孪生、证据链、企业尽调、来源关系</p></article>
+                <article><span>03</span><b>决策与执行层</b><p>拆标、会审、变更响应、飞书战情室</p></article>
+                <article><span>04</span><b>学习与复盘层</b><p>组织记忆、决策沙盘、训练、价值实验</p></article>
+              </div>
+              <p class="finals-id-rule">项目编号、企业编号、证据编号、事件编号和任务编号贯穿全链路；任一结论都能回到来源，任一行动都能回到项目。</p>
+            </section>
+
+            <section class="finals-roadshow-route" aria-labelledby="finalsRouteTitle">
+              <div class="finals-panel-head"><div><span>7-MINUTE ROUTE</span><h2 id="finalsRouteTitle">总决赛现场只演示一条连续链路</h2></div><button type="button" data-finals-view="demoConsoleView">演示预检</button></div>
+              <ol>
+                <li><time>00:00</time><button type="button" data-finals-view="radarView"><b>发现真实机会</b><span>雷达与来源状态</span></button></li>
+                <li><time>01:10</time><button type="button" data-finals-primary-case><b>判断是否值得投</b><span>数字孪生三评分</span></button></li>
+                <li><time>02:30</time><button type="button" data-finals-primary-case><b>回查证据与变更</b><span>原文、要求、影响</span></button></li>
+                <li><time>03:50</time><button type="button" data-finals-primary-case><b>拆标并人工裁决</b><span>任务、缺口、专业分歧</span></button></li>
+                <li><time>05:10</time><button type="button" data-finals-view="organizationView"><b>进入飞书执行</b><span>群、表格、任务、日历</span></button></li>
+                <li><time>06:20</time><button type="button" data-finals-view="trainingView"><b>用训练完成收束</b><span>连续追问、可复算评分</span></button></li>
+              </ol>
+            </section>
+
+            <section class="finals-source-boundary">
+              <div class="finals-panel-head"><div><span>DATA FEASIBILITY</span><h2>新增方向的数据源边界</h2></div><button type="button" data-finals-view="sourcesView">查看全部来源</button></div>
+              <div id="finalsHomeSourceBoundary" class="finals-source-boundary-grid">
+                <article data-state="ready"><b>官方采购来源</b><span>已接入并有本地证据</span></article>
+                <article data-state="ready"><b>USGS 外部事件</b><span>已接入，影响只作为待复核候选</span></article>
+                <article data-state="manual"><b>企业主体与风险</b><span>当前使用真实公告 + 人工/授权材料</span></article>
+                <article data-state="planned"><b>ReliefWeb / WTO</b><span>需应用名、密钥或产品映射，尚未接入</span></article>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="workbenchView" class="view">
           <div class="workspace-heading">
             <div><span class="workspace-eyebrow">TENDERTRACE / WORKSPACE</span><h1 id="queryTitle">情报工作台</h1></div>
             <span class="workspace-caption">发现机会，推进协作。</span>
@@ -333,6 +457,365 @@
           </div>
         </section>
 
+        <section id="challengeView" class="view">
+          <section class="challenge-shell" aria-labelledby="challengeTitle">
+            <header class="challenge-hero">
+              <div>
+                <span class="workspace-eyebrow">TENDERTRACE / LIVE CHALLENGE</span>
+                <h1 id="challengeTitle">评委现场挑战</h1>
+                <p>输入四个受控条件，先在数秒内返回本地真实证据；联网补充由评委决定，失败不会清空本地结果。</p>
+              </div>
+              <div class="challenge-live-state" aria-live="polite">
+                <span id="challengeNetworkDot" class="challenge-network-dot"></span>
+                <div><small>当前浏览器</small><strong id="challengeNetworkState">检测中</strong></div>
+              </div>
+            </header>
+
+            <div class="challenge-trust-strip" aria-label="挑战模式规则">
+              <span><b>01</b> 本地索引优先</span>
+              <span><b>02</b> 每条结果可开原文</span>
+              <span><b>03</b> 联网状态不隐瞒</span>
+              <span><b>04</b> 全程自动留痕</span>
+            </div>
+
+            <form id="challengeForm" class="challenge-form">
+              <label>
+                <span>采购品类</span>
+                <input id="challengeCategory" name="category" list="challengeCategoryOptions" maxlength="30" value="服务器" required autocomplete="off" />
+                <datalist id="challengeCategoryOptions">
+                  <option value="服务器"></option><option value="AI算力"></option><option value="数据中心"></option>
+                  <option value="网络设备"></option><option value="信息安全"></option><option value="医疗设备"></option>
+                </datalist>
+              </label>
+              <label>
+                <span>地区</span>
+                <input id="challengeRegion" name="region" list="challengeRegionOptions" maxlength="30" value="全球" required autocomplete="off" />
+                <datalist id="challengeRegionOptions">
+                  <option value="全球"></option><option value="全国"></option><option value="北京"></option><option value="上海"></option>
+                  <option value="浙江"></option><option value="广东"></option><option value="江苏"></option>
+                </datalist>
+              </label>
+              <label>
+                <span>时间范围</span>
+                <select id="challengeTimeWindow" name="time_window">
+                  <option value="7d">最近7天</option><option value="30d">最近30天</option>
+                  <option value="90d">最近3个月</option><option value="365d" selected>最近12个月</option>
+                </select>
+              </label>
+              <label>
+                <span>补充关键词 <small>可不填</small></span>
+                <input id="challengeKeyword" name="keyword" maxlength="40" placeholder="如：液冷、国产化、扩容" autocomplete="off" />
+              </label>
+              <div class="challenge-form-actions">
+                <button id="challengeRunButton" class="primary-button" type="submit">开始现场挑战</button>
+                <button id="challengeSupplementButton" class="ghost-button" type="button" disabled>联网补充</button>
+                <button id="challengeCancelButton" class="ghost-button challenge-cancel" type="button" hidden>停止联网</button>
+                <button id="challengeCopyLinkButton" class="text-link" type="button">复制评委入口</button>
+              </div>
+            </form>
+
+            <section id="challengeStage" class="challenge-stage" aria-live="polite">
+              <div class="challenge-empty">
+                <strong>等待评委出题</strong>
+                <p>推荐先尝试“服务器 / 全球 / 最近12个月”，也可以输入评委指定的品类和地区。</p>
+              </div>
+            </section>
+
+            <div class="challenge-lower-grid">
+              <section class="challenge-sources-panel">
+                <div class="challenge-section-head"><div><strong>来源状态</strong><span>成功、受限与不适用分别显示</span></div></div>
+                <div id="challengeSourceList" class="challenge-source-list empty-state">完成一次挑战后显示</div>
+              </section>
+              <section class="challenge-history-panel">
+                <div class="challenge-section-head">
+                  <div><strong>挑战记录</strong><span>查询条件、耗时和结果自动保存</span></div>
+                  <button id="challengeRefreshHistoryButton" class="ghost-button" type="button">刷新</button>
+                </div>
+                <div id="challengeHistory" class="challenge-history empty-state">暂无挑战记录</div>
+              </section>
+            </div>
+          </section>
+        </section>
+
+        <section id="demoConsoleView" class="view">
+          <section class="demo-console-shell" aria-labelledby="demoConsoleTitle" data-demo-critical="demo-console-shell">
+            <header class="demo-console-hero">
+              <div>
+                <span class="workspace-eyebrow">TENDERTRACE / RELIABILITY CONTROL</span>
+                <h1 id="demoConsoleTitle">演示可靠性与真实回放控制台</h1>
+                <p>实时、已验证历史与同版本真实回放分开显示。外部连接异常时，核心故事仍可继续，并明确说明切换原因。</p>
+              </div>
+              <div id="demoConsoleOverall" class="demo-overall-state is-checking" aria-live="polite">
+                <i></i><div><small>现场状态</small><strong>正在检查</strong></div>
+              </div>
+            </header>
+
+            <div class="demo-trust-bar" data-demo-critical="demo-trust-bar">
+              <span><b>LIVE</b> 实时动作</span>
+              <span><b>HISTORY</b> 已验证历史</span>
+              <span><b>REPLAY</b> 同版本真实回放</span>
+              <span><b>AUDIT</b> 每一步有回执</span>
+            </div>
+
+            <div class="demo-console-toolbar">
+              <div>
+                <strong>现场导演台</strong>
+                <span>先预检，再打开案例；系统不会把固定页面包装成实时能力。</span>
+              </div>
+              <div class="demo-console-actions">
+                <button id="demoRefreshButton" class="ghost-button" type="button">刷新预检</button>
+                <button id="demoPrepareButton" class="ghost-button" type="button">从真实记录准备案例</button>
+                <button id="demoRunThreeButton" class="primary-button" type="button">连续三次全流程演练</button>
+              </div>
+            </div>
+
+            <div id="demoConsoleMetrics" class="demo-console-metrics empty-state">正在读取可靠性状态</div>
+
+            <div class="demo-console-grid">
+              <section class="demo-environment-panel" data-demo-critical="environment-panel">
+                <div class="demo-section-head"><div><strong>环境预检</strong><span>本地服务、数据库、浏览器、数据源与飞书</span></div><small id="demoEnvironmentTime">等待检查</small></div>
+                <div id="demoEnvironmentChecks" class="demo-check-grid empty-state">正在检查</div>
+              </section>
+              <section class="demo-layout-panel" data-demo-critical="layout-panel">
+                <div class="demo-section-head"><div><strong>投屏实测</strong><span>同源浏览器实际渲染，不使用估算结果</span></div><button id="demoLayoutAuditButton" class="ghost-button" type="button">检查两种尺寸</button></div>
+                <div id="demoLayoutAudits" class="demo-layout-audits empty-state">尚未检查</div>
+                <div class="visual-audit-heading"><div><strong>方向15视觉验收</strong><span>主案例、证据链、变更影响与战情室</span></div><button id="visualAuditButton" class="ghost-button" type="button">验收关键页面</button></div>
+                <div id="visualAuditResults" class="visual-audit-results empty-state">尚未验收</div>
+              </section>
+            </div>
+
+            <section class="demo-cases-panel" data-demo-critical="cases-panel">
+              <div class="demo-section-head"><div><strong>冻结案例</strong><span>主案例、备选案例与回放案例均绑定版本、数据时间和校验状态</span></div></div>
+              <div id="demoCaseGrid" class="demo-case-grid empty-state">尚未准备案例</div>
+            </section>
+
+            <section id="demoStage" class="demo-stage" aria-live="polite" data-demo-critical="demo-stage">
+              <div class="demo-stage-empty"><strong>等待选择案例</strong><p>打开实时、已验证历史或真实回放后，这里显示模式、切换原因、数据摘要与逐步回执。</p></div>
+            </section>
+
+            <section class="demo-log-panel" data-demo-critical="log-panel">
+              <div class="demo-section-head"><div><strong>演示日志</strong><span>每一步的耗时、成功回执和异常均保留</span></div></div>
+              <div id="demoRehearsalLog" class="demo-rehearsal-log empty-state">暂无演练记录</div>
+            </section>
+          </section>
+        </section>
+
+        <section id="radarView" class="view">
+          <section class="radar-command" aria-labelledby="radarTitle">
+            <header class="radar-command-head">
+              <div>
+                <span class="workspace-eyebrow">TENDERTRACE / OPPORTUNITY RADAR</span>
+                <h1 id="radarTitle">全国与全球机会雷达</h1>
+                <p>地图上的每个点都来自本地机会索引；来源可信状态与“0条结果”分别展示。</p>
+              </div>
+              <div class="radar-live-stamp">
+                <i></i><span>本地索引态势</span><strong id="radarDataAsOf">等待加载</strong>
+              </div>
+            </header>
+            <div class="radar-controls">
+              <div class="radar-segmented" role="group" aria-label="地图范围">
+                <button class="is-active" type="button" data-radar-scope="all">全球总览</button>
+                <button type="button" data-radar-scope="domestic">全国机会</button>
+                <button type="button" data-radar-scope="international">国际机会</button>
+              </div>
+              <label><span>时间窗口</span><select id="radarWindowSelect"><option value="30">近30天</option><option value="90">近90天</option><option value="365" selected>近一年</option><option value="0">全部索引</option></select></label>
+              <label><span>采购品类</span><select id="radarCategorySelect"><option value="">全部品类</option></select></label>
+              <button id="radarMotionButton" class="ghost-button" type="button" aria-pressed="false">关闭动效</button>
+              <button id="radarPresentationButton" class="ghost-button" type="button" aria-pressed="false">大屏模式</button>
+              <button id="refreshRadarButton" class="primary-button" type="button">刷新本地快照</button>
+            </div>
+            <div id="radarMetrics" class="radar-metrics empty-state">正在读取本地机会索引</div>
+            <div class="radar-stage">
+              <section class="radar-map-panel">
+                <div class="radar-panel-title"><div><strong id="radarMapTitle">全球机会分布</strong><span>点击光点查看地区机会，并可带入自然语言查询</span></div><small id="radarMapMeta">SVG离线地图</small></div>
+                <div id="radarMap" class="radar-map" role="img" aria-label="全球与全国机会分布地图"></div>
+                <div class="radar-map-legend"><span><i class="is-high"></i>可信</span><span><i class="is-medium"></i>需关注</span><span><i class="is-low"></i>待验证</span><em>点大小 = 机会数量</em></div>
+              </section>
+              <aside id="radarInspector" class="radar-inspector empty-state">点击地图光点查看机会明细</aside>
+            </div>
+            <div class="radar-secondary-grid">
+              <section class="radar-category-panel">
+                <div class="radar-panel-title"><div><strong>品类热度</strong><span>按当前范围与时间窗口统计</span></div></div>
+                <div id="radarCategoryHeat" class="radar-category-heat empty-state">等待统计</div>
+              </section>
+              <section class="radar-latest-panel">
+                <div class="radar-panel-title"><div><strong>最近新增</strong><span>可直接打开机会数字档案</span></div></div>
+                <div id="radarLatest" class="radar-latest empty-state">等待索引</div>
+              </section>
+            </div>
+            <section class="radar-source-panel">
+              <div class="radar-panel-title"><div><strong>数据源可信度地图</strong><span>访问状态、最近成功、延迟与本地结果分开显示</span></div><small id="radarSourceMeta">16个国内外来源</small></div>
+              <div id="radarSourceSummary" class="radar-source-summary empty-state">等待来源健康记录</div>
+              <div id="radarSourceMap" class="radar-source-map empty-state">等待来源健康记录</div>
+            </section>
+            <footer class="radar-method-note">
+              <strong>统计口径</strong><span id="radarMethodNote">只读取本地索引与已保存来源健康记录，不进行随机点模拟；手动刷新不会触发外部采集。</span>
+            </footer>
+          </section>
+        </section>
+
+        <section id="battleMapView" class="view">
+          <section class="battle-command" aria-labelledby="battleMapTitle" data-visual-component="battle-map">
+            <header class="battle-command-head">
+              <div>
+                <span class="workspace-eyebrow">TENDERTRACE / LIVE BUSINESS SITUATION</span>
+                <h1 id="battleMapTitle">实时商机战情图</h1>
+                <p>看见机会在哪里发生、成交流向哪里、外部事件可能影响什么，并从每个光点回到证据和行动。</p>
+              </div>
+              <div id="battleLiveState" class="battle-live-state is-live" aria-live="polite">
+                <i></i><div><small>事件总线</small><strong>连接中</strong><span id="battleDataAsOf">等待数据</span></div>
+              </div>
+            </header>
+
+            <div class="battle-truth-strip" aria-label="战情图数据口径">
+              <span><b>LIVE</b> 当前本地事件流</span>
+              <span><b>RULE</b> 规则关联待人工确认</span>
+              <span><b>REPLAY</b> 已验证历史回放</span>
+              <span><b>EVIDENCE</b> 点、线、影响均可追溯</span>
+            </div>
+
+            <div class="battle-controls">
+              <div class="battle-segmented" role="group" aria-label="战情图范围">
+                <button class="is-active" type="button" data-battle-scope="global">全球态势</button>
+                <button type="button" data-battle-scope="china">中国态势</button>
+              </div>
+              <label><span>时间窗口</span><select id="battleWindowSelect"><option value="1">近1小时</option><option value="24">近1天</option><option value="168">近7天</option><option value="2160" selected>近3个月</option><option value="0">全部历史</option></select></label>
+              <label><span>采购品类</span><select id="battleCategorySelect"><option value="">全部品类</option></select></label>
+              <label><span>运行模式</span><select id="battleModeSelect"><option value="live">实时态势</option><option value="replay">已验证回放</option></select></label>
+              <button id="battleMotionButton" class="ghost-button" type="button" aria-pressed="false">关闭动效</button>
+              <button id="battlePresentationButton" class="ghost-button" type="button" aria-pressed="false">大屏模式</button>
+            </div>
+
+            <div class="battle-layer-bar" role="group" aria-label="地图图层">
+              <strong>图层</strong>
+              <label><input type="checkbox" data-battle-layer="opportunity" checked /><span><i class="layer-opportunity"></i>商机</span></label>
+              <label><input type="checkbox" data-battle-layer="award" checked /><span><i class="layer-award"></i>成交</span></label>
+              <label><input type="checkbox" data-battle-layer="flow" checked /><span><i class="layer-flow"></i>交易流向</span></label>
+              <label><input type="checkbox" data-battle-layer="external" checked /><span><i class="layer-external"></i>外部事件</span></label>
+              <div class="battle-action-group">
+                <button id="battleSyncButton" class="ghost-button" type="button">刷新本地事件</button>
+                <button id="battleExternalButton" class="ghost-button" type="button">同步 USGS 官方事件</button>
+                <button id="battleReplayButton" class="primary-button" type="button">保存验证回放</button>
+              </div>
+            </div>
+
+            <div id="battleMetrics" class="battle-metrics empty-state">正在建立实时态势</div>
+
+            <div class="battle-timeline" aria-label="战情时间轴">
+              <button id="battlePlayButton" type="button" aria-pressed="false">▶ 播放</button>
+              <div>
+                <strong id="battleTimelineLabel">等待事件时间</strong>
+                <input id="battleTimelineRange" type="range" min="0" max="0" value="0" aria-label="选择战情时间点" />
+                <div id="battleTimelineTicks" class="battle-timeline-ticks"></div>
+              </div>
+              <aside id="battleTimelineCompare"><b>当前</b><span>等待数据</span></aside>
+            </div>
+
+            <div class="battle-stage">
+              <section class="battle-map-panel">
+                <div class="battle-panel-title">
+                  <div><strong>业务事件空间态势</strong><span>高频事件自动聚合；点击点、线或影响卡打开证据</span></div>
+                  <small id="battleMapMeta">同一查询驱动地图与列表</small>
+                </div>
+                <div id="battleMap" class="battle-map" role="application" aria-label="实时商机、成交、交易流向与外部事件地图" tabindex="0"></div>
+                <div class="battle-map-legend">
+                  <span><i class="layer-opportunity"></i>商机</span><span><i class="layer-award"></i>成交</span><span><i class="layer-flow"></i>流向</span><span><i class="layer-external"></i>外部事件</span><em>数字表示同位置聚合事件数</em>
+                </div>
+              </section>
+              <aside class="battle-impact-panel">
+                <div class="battle-panel-title"><div><strong>外部事件影响</strong><span>事件不等于影响，规则候选必须人工复核</span></div></div>
+                <div id="battleImpactList" class="battle-impact-list empty-state">当前窗口没有候选影响</div>
+              </aside>
+            </div>
+
+            <section class="battle-list-panel" aria-labelledby="battleListTitle">
+              <div class="battle-panel-title"><div><strong id="battleListTitle">无障碍事件列表</strong><span>关闭动效或无法使用地图时，所有证据与下钻能力仍完整</span></div><small id="battleListMeta">0 条</small></div>
+              <div id="battleEventList" class="battle-event-list empty-state" role="list">等待事件</div>
+            </section>
+
+            <footer class="battle-method-note">
+              <strong>判定口径</strong><span id="battleMethodNote">所有点和连线来自本地真实记录；外部事件只有地区或距离规则命中后才建立候选影响，并保留人工确认。</span>
+            </footer>
+          </section>
+
+          <dialog id="battleEvidenceDialog" class="battle-evidence-dialog" aria-labelledby="battleEvidenceTitle">
+            <div class="battle-evidence-head">
+              <div><span>EVENT EVIDENCE</span><h2 id="battleEvidenceTitle">事件证据</h2><small id="battleEvidenceMeta">正在读取</small></div>
+              <button id="battleEvidenceCloseButton" class="icon-close-button" type="button" aria-label="关闭事件证据">×</button>
+            </div>
+            <div id="battleEvidenceContent" class="battle-evidence-content"></div>
+          </dialog>
+        </section>
+
+        <section id="trainingView" class="view">
+          <section class="training-command" aria-labelledby="trainingTitle" data-visual-component="scenario-training">
+            <header class="training-command-head">
+              <div>
+                <span class="workspace-eyebrow">TENDERTRACE / TEAM READINESS LAB</span>
+                <h1 id="trainingTitle">情景训练与智能问答演练中心</h1>
+                <p>让主讲人、投标经理、销售、技术和法务在真实项目证据范围内接受连续追问，证明团队是否真正准备好了。</p>
+              </div>
+              <div class="training-readiness-state" aria-live="polite">
+                <span>TEAM READINESS</span><strong id="trainingHeaderState">等待选择场景</strong><small id="trainingHeaderMeta">文字版 · 规则评分 · 个人隔离</small>
+              </div>
+            </header>
+
+            <div class="training-trust-strip" aria-label="训练中心规则">
+              <span><b>REAL PROJECT</b> 真实项目脱敏场景</span>
+              <span><b>STATE MACHINE</b> 六阶段连续追问</span>
+              <span><b>RULE SCORE</b> 同版本可复算评分</span>
+              <span><b>PRIVATE RESULT</b> 个人结果权限隔离</span>
+            </div>
+
+            <div class="training-layout">
+              <aside class="training-setup-panel">
+                <div class="training-section-title"><div><strong>01 选择演练</strong><span>项目、目标、角色和模式</span></div><button id="trainingSeedButton" class="ghost-button" type="button">刷新场景</button></div>
+                <div id="trainingScenarioList" class="training-scenario-list empty-state">正在加载人工确认场景</div>
+                <form id="trainingSetupForm" class="training-setup-form">
+                  <input id="trainingScenarioId" name="scenario_id" type="hidden" />
+                  <label><span>训练模式</span><select id="trainingMode" name="mode"><option value="preparation">准备模式 · 不提前给答案</option><option value="learning">学习模式 · 分层提示</option></select></label>
+                  <label><span>扮演角色</span><select id="trainingRole" name="role"></select></label>
+                  <label><span>难度</span><select id="trainingDifficulty" name="difficulty"><option value="guided">引导</option><option value="standard" selected>标准</option><option value="pressure">压力追问</option></select></label>
+                  <label><span>学员称呼</span><input id="trainingParticipant" name="participant_display" value="现场主讲人" maxlength="80" /></label>
+                  <button id="trainingCreateButton" class="primary-button" type="submit">建立训练会话</button>
+                </form>
+                <div class="training-boundary-note"><b>训练隔离</b><span>模拟回答和场景变化不会写回正式公告、项目决策、能力确认或尽调结论。</span></div>
+              </aside>
+
+              <main class="training-stage-panel">
+                <div id="trainingPhaseRail" class="training-phase-rail" aria-label="训练阶段">
+                  <span data-training-phase="opening">开场</span><span data-training-phase="fundamentals">基础事实</span><span data-training-phase="evidence">证据追问</span><span data-training-phase="change">风险变化</span><span data-training-phase="action">行动计划</span><span data-training-phase="summary">总结</span>
+                </div>
+                <section id="trainingStage" class="training-stage empty-state" aria-live="polite">
+                  <div><b>从真实项目开始一次演练</b><span>先选择左侧场景，再建立会话并点击“我准备好了”。</span></div>
+                </section>
+                <section id="trainingReport" class="training-report" hidden></section>
+              </main>
+
+              <aside class="training-evidence-panel">
+                <div class="training-section-title"><div><strong>证据与规则</strong><span>只允许查看场景批准的资料</span></div></div>
+                <div id="trainingEvidenceList" class="training-evidence-list empty-state">选择场景后显示允许证据</div>
+                <div class="training-rule-card">
+                  <b>准备模式</b><p>先保存首次回答，不即时泄露完整参考答案。</p>
+                  <b>学习模式</b><p>允许逐层提示，并可打开原始证据。</p>
+                  <b>模型边界</b><p>模型评价仅作为候选；低置信度或与规则冲突时进入人工复核。</p>
+                </div>
+              </aside>
+            </div>
+
+            <div class="training-lower-grid">
+              <section>
+                <div class="training-section-title"><div><strong>团队共同薄弱点</strong><span>仅显示聚合结果，不作为绩效结论</span></div></div>
+                <div id="trainingTeamReadiness" class="training-team-readiness empty-state">暂无真人训练结果</div>
+              </section>
+              <section>
+                <div class="training-section-title"><div><strong>我的训练记录</strong><span>完整回放、评分版本和补强任务</span></div><button id="trainingHistoryButton" class="ghost-button" type="button">刷新</button></div>
+                <div id="trainingHistory" class="training-history empty-state">暂无训练记录</div>
+              </section>
+            </div>
+          </section>
+        </section>
+
         <section id="opportunityView" class="view">
           <section class="panel page-panel opportunity-panel">
             <div class="panel-heading">
@@ -386,6 +869,17 @@
               <button class="icon-close-button" type="button" aria-label="关闭招标数字档案" data-close-opportunity-detail>×</button>
             </div>
             <div id="opportunityDetailContent" class="opportunity-detail-content"></div>
+          </dialog>
+          <dialog id="evidenceMicroscopeDialog" class="evidence-microscope-dialog" aria-labelledby="evidenceMicroscopeTitle" data-visual-component="evidence-microscope">
+            <div class="evidence-microscope-heading">
+              <div>
+                <span>可审计证据链</span>
+                <h2 id="evidenceMicroscopeTitle">证据显微镜</h2>
+                <small id="evidenceMicroscopeMeta">正在读取判断依据…</small>
+              </div>
+              <button class="icon-close-button" type="button" aria-label="关闭证据显微镜" data-close-evidence-microscope>×</button>
+            </div>
+            <div id="evidenceMicroscopeContent" class="evidence-microscope-content"></div>
           </dialog>
           <dialog id="opportunityOwnerDialog" class="owner-assignment-dialog" aria-labelledby="opportunityOwnerTitle">
             <form id="opportunityOwnerForm" class="owner-assignment-form">
@@ -701,6 +1195,27 @@
               </div>
             </form>
           </dialog>
+          <dialog id="bidMemoryArchiveDialog" class="owner-assignment-dialog opportunity-outcome-dialog" aria-labelledby="bidMemoryArchiveTitle">
+            <form id="bidMemoryArchiveForm" class="owner-assignment-form">
+              <div class="owner-assignment-heading">
+                <div><span>组织经验归档</span><h2 id="bidMemoryArchiveTitle">沉淀到企业投标记忆体</h2><small id="bidMemoryArchiveProject">要求、任务、证据、决策和结果将自动归档</small></div>
+                <button id="closeBidMemoryArchiveButton" class="icon-close-button" type="button" aria-label="关闭企业投标记忆归档">×</button>
+              </div>
+              <div class="owner-assignment-body outcome-form-grid">
+                <label class="outcome-wide-field"><span>经验标签</span><input id="bidMemoryArchiveTags" maxlength="500" autocomplete="off" placeholder="例如：政务云、安全、北京（用逗号分隔）" /></label>
+                <label><span>可复用材料名称（可选）</span><input id="bidMemoryArchiveMaterialTitle" maxlength="240" autocomplete="off" placeholder="例如：安全响应模板" /></label>
+                <label><span>有效期（可选）</span><input id="bidMemoryArchiveValidUntil" type="date" /></label>
+                <label class="outcome-wide-field"><span>材料内容或适用范围（可选）</span><textarea id="bidMemoryArchiveMaterialContent" rows="4" maxlength="8000" placeholder="填写脱敏内容、复用条件和需要更新的字段"></textarea></label>
+                <label><span>权限范围</span><select id="bidMemoryArchivePermission"><option value="workspace">组织空间可见</option><option value="restricted">仅正式成员可见</option></select></label>
+                <label><span>敏感级别</span><select id="bidMemoryArchiveSensitivity"><option value="normal">普通</option><option value="sensitive">敏感</option></select></label>
+                <p id="bidMemoryArchiveStatus" class="owner-directory-status outcome-wide-field">系统会保留来源、版本、有效期和操作记录；过期材料不会被标记为可直接复用。</p>
+              </div>
+              <div class="owner-assignment-actions">
+                <button id="cancelBidMemoryArchiveButton" class="ghost-button" type="button">取消</button>
+                <button id="submitBidMemoryArchiveButton" class="primary-button" type="submit">确认归档</button>
+              </div>
+            </form>
+          </dialog>
         </section>
 
         <section id="historyView" class="view">
@@ -826,11 +1341,99 @@
           <section class="panel page-panel">
             <div class="panel-heading">
               <div>
-                <h1>Agent 评测</h1>
-                <span class="panel-meta">RAG、Agent、Harness、召回覆盖率与可追溯指标</span>
+                <h1>评测与业务价值</h1>
+                <span class="panel-meta">工程稳定性与真实业务收益分开验证、共同追踪</span>
               </div>
               <button id="refreshEvaluationButton" class="primary-lite-button" type="button">运行评测</button>
             </div>
+            <section id="businessMeasurementPanel" class="business-value-lab">
+              <div class="business-value-hero">
+                <div>
+                  <span class="business-value-kicker">BUSINESS VALUE LAB / 可复算实验</span>
+                  <h2>业务价值实验室</h2>
+                  <p>同一批公开文件分别进行人工处理与 TenderTrace 辅助处理。只汇总人工金标复核通过且证据完整的配对样本。</p>
+                </div>
+                <span id="businessMeasurementStatus" class="business-value-status">正在读取实验</span>
+              </div>
+              <div id="businessMeasurementMetrics" class="business-value-metrics empty-state">暂无完整配对实验</div>
+              <div class="business-value-two-column">
+                <section class="business-value-card">
+                  <div class="business-value-card-heading"><div><span>实验协议</span><strong>固定条件，减少熟练度偏差</strong></div><small>5-10份公开文件</small></div>
+                  <div id="businessMeasurementProtocol" class="business-value-protocol"></div>
+                </section>
+                <section class="business-value-card">
+                  <div class="business-value-card-heading"><div><span>价值链覆盖</span><strong>十二个提升方向统一进入实验口径</strong></div><small>实测 / 待实测</small></div>
+                  <div id="businessDirectionCoverage" class="business-direction-coverage"></div>
+                </section>
+              </div>
+              <section class="business-value-card">
+                <div class="business-value-card-heading"><div><span>配对结果</span><strong>中位数、范围和所有单个样本</strong></div><small>负值和异常值不隐藏</small></div>
+                <div id="businessMetricDetails" class="business-metric-details empty-state">等待有效样本</div>
+              </section>
+              <div class="business-value-two-column">
+                <section class="business-value-card">
+                  <div class="business-value-card-heading"><div><span>实验批次</span><strong>参与人、文件类型、条件与交叉顺序</strong></div><small>按版本保留</small></div>
+                  <div id="businessExperimentList" class="business-experiment-list empty-state">暂无实验批次</div>
+                </section>
+                <section class="business-value-card">
+                  <div class="business-value-card-heading"><div><span>复算公式</span><strong>分子、分母和样本量透明</strong></div><small>点击原始记录核对</small></div>
+                  <div id="businessFormulaList" class="business-formula-list empty-state">暂无可复算指标</div>
+                </section>
+              </div>
+              <section class="business-value-card">
+                <div class="business-value-card-heading"><div><span>原始样本</span><strong>失败样本、异常值与证据入口全部保留</strong></div><small id="businessSampleCount">0条</small></div>
+                <div id="businessMeasurementList" class="business-sample-table empty-state">暂无记录</div>
+              </section>
+              <details class="business-measurement-entry">
+                <summary><span>录入一组配对实验</span><small>身份与条件 → 时间 → 质量 → 人工金标</small></summary>
+                <form id="businessMeasurementForm" class="business-measurement-form">
+                  <fieldset>
+                    <legend>样本与实验条件</legend>
+                    <label><span>实验编号</span><input name="experiment_id" required maxlength="120" value="tendertrace-value-lab-v1" /></label>
+                    <label><span>实验版本</span><input name="experiment_version" required min="1" max="999" type="number" value="1" /></label>
+                    <label><span>任务类型</span><select name="task_type"><option value="opportunity_discovery">机会发现</option><option value="opportunity_verification">机会核验</option><option value="requirement_breakdown">招标要求拆解</option><option value="capability_matching">能力匹配</option><option value="change_review">公告变更复核</option><option value="expert_review">多角色会审</option><option value="decision_review">投标决策复核</option><option value="group_handoff">群内协作交接</option><option value="material_reuse">历史材料复用</option><option value="source_verification">跨来源核验</option><option value="live_challenge">现场检索挑战</option><option value="replay_reliability">演示回放校验</option><option value="user_experience">统一交互体验</option><option value="partner_due_diligence">合作方尽调</option><option value="external_event_response">外部事件响应</option><option value="scenario_training">情景训练演练</option></select></label>
+                    <label><span>样本编号</span><input name="sample_ref" required maxlength="160" placeholder="例如 PBC-067GSF2026091-拆标" /></label>
+                    <label><span>参与人</span><input name="participant" maxlength="80" placeholder="真实执行人员" /></label>
+                    <label><span>文件类型</span><input name="document_type" maxlength="80" placeholder="PDF招标文件 / 公告网页" /></label>
+                    <label><span>文件数量</span><input name="file_count" min="1" max="100" type="number" value="1" /></label>
+                    <label><span>交叉顺序</span><select name="sequence_order"><option value="manual_first">先人工后辅助</option><option value="assisted_first">先辅助后人工</option><option value="randomized">随机交叉顺序</option></select></label>
+                    <label class="business-field-wide"><span>实验条件</span><input name="conditions" maxlength="1000" placeholder="相同任务清单、相同文件、计时起止点、允许工具等" /></label>
+                    <label class="business-field-wide"><span>公开文件入口</span><input name="source_url" type="url" maxlength="2000" placeholder="https://..." /></label>
+                  </fieldset>
+                  <fieldset>
+                    <legend>配对时间记录</legend>
+                    <label><span>人工总耗时（分钟）</span><input name="baseline_minutes" required min="0.01" max="1440" step="0.01" type="number" /></label>
+                    <label><span>辅助总耗时（分钟）</span><input name="assisted_minutes" required min="0.01" max="1440" step="0.01" type="number" /></label>
+                    <label><span>人工有效时间</span><input name="baseline_active_minutes" min="0" max="1440" step="0.01" type="number" /></label>
+                    <label><span>辅助有效时间</span><input name="assisted_active_minutes" min="0" max="1440" step="0.01" type="number" /></label>
+                    <label><span>人工等待（秒）</span><input name="baseline_machine_wait_seconds" min="0" max="86400" step="0.01" type="number" value="0" /></label>
+                    <label><span>辅助等待（秒）</span><input name="assisted_machine_wait_seconds" min="0" max="86400" step="0.01" type="number" value="0" /></label>
+                  </fieldset>
+                  <fieldset>
+                    <legend>人工金标质量对照</legend>
+                    <label><span>人工遗漏</span><input name="baseline_omissions" min="0" type="number" value="0" /></label>
+                    <label><span>辅助遗漏</span><input name="assisted_omissions" min="0" type="number" value="0" /></label>
+                    <label><span>人工错误满足</span><input name="baseline_false_satisfied" min="0" type="number" value="0" /></label>
+                    <label><span>辅助错误满足</span><input name="assisted_false_satisfied" min="0" type="number" value="0" /></label>
+                    <label><span>人工返工</span><input name="baseline_rework_count" min="0" type="number" value="0" /></label>
+                    <label><span>辅助返工</span><input name="assisted_rework_count" min="0" type="number" value="0" /></label>
+                    <label><span>质量结果</span><select name="quality_status"><option value="not_reviewed">待质量复核</option><option value="passed">人工金标复核通过</option><option value="failed">人工金标复核未通过</option></select></label>
+                    <label><span>复核人</span><input name="reviewer" maxlength="80" placeholder="通过或未通过时必填" /></label>
+                    <label class="business-checkbox"><input name="is_outlier" type="checkbox" /><span>标记为异常值（仍计入并展示）</span></label>
+                    <label class="business-field-wide"><span>异常原因</span><input name="outlier_reason" maxlength="500" placeholder="例如文件异常大、网络阻断；勾选异常值时必填" /></label>
+                  </fieldset>
+                  <fieldset>
+                    <legend>复算与审计证据</legend>
+                    <label class="business-field-wide"><span>原始计时记录入口</span><input name="raw_record_url" maxlength="2000" placeholder="https://... 或 /outputs/..." /></label>
+                    <label class="business-field-wide"><span>人工金标入口</span><input name="gold_standard_url" maxlength="2000" placeholder="https://... 或 /outputs/..." /></label>
+                    <label><span>记录人</span><input name="recorded_by" required maxlength="80" value="admin" /></label>
+                    <label class="business-field-wide"><span>复核说明</span><input name="note" maxlength="1000" placeholder="任务范围、核验方法、失败原因或差异说明" /></label>
+                  </fieldset>
+                  <button class="primary-lite-button" type="submit">保存并重新复算</button>
+                </form>
+              </details>
+            </section>
+            <div class="engineering-evidence-divider"><span>工程稳定性证据</span><small>自动化测试证明系统是否稳定，不冒充业务收益</small></div>
             <div id="evaluationSummary" class="eval-summary empty-state">等待评测</div>
             <div class="eval-grid">
               <div id="ragMetrics" class="eval-card"></div>
@@ -852,27 +1455,6 @@
                 <div id="evaluationNotes" class="case-list empty-state">暂无说明</div>
               </div>
             </div>
-            <section id="businessMeasurementPanel" class="eval-card business-measurement-panel">
-              <div class="business-measurement-heading">
-                <div>
-                  <h2>业务价值实测</h2>
-                  <span>仅统计质量复核通过的同类任务对照，不用点击量推算节省时间。</span>
-                </div>
-              </div>
-              <div id="businessMeasurementMetrics" class="business-measurement-metrics empty-state">暂无实测任务</div>
-              <div id="businessMeasurementList" class="case-list empty-state">暂无记录</div>
-              <form id="businessMeasurementForm" class="business-measurement-form">
-                <label><span>任务类型</span><select name="task_type"><option value="opportunity_verification">机会核验</option><option value="capability_matching">能力匹配</option><option value="change_review">公告变更复核</option><option value="group_handoff">群内协作交接</option></select></label>
-                <label><span>样本编号</span><input name="sample_ref" required maxlength="160" placeholder="机会或试验样本编号" /></label>
-                <label><span>人工基线（分钟）</span><input name="baseline_minutes" required min="0.01" max="1440" step="0.01" type="number" /></label>
-                <label><span>系统辅助（分钟）</span><input name="assisted_minutes" required min="0.01" max="1440" step="0.01" type="number" /></label>
-                <label><span>质量结果</span><select name="quality_status"><option value="not_reviewed">待质量复核</option><option value="passed">质量复核通过</option><option value="failed">质量复核未通过</option></select></label>
-                <label><span>复核人</span><input name="reviewer" maxlength="80" placeholder="通过或未通过时必填" /></label>
-                <label><span>记录人</span><input name="recorded_by" required maxlength="80" value="admin" /></label>
-                <label class="business-measurement-note"><span>复核说明</span><input name="note" maxlength="1000" placeholder="同一任务范围、质量检查依据或差异说明" /></label>
-                <button class="primary-lite-button" type="submit">记录实测任务</button>
-              </form>
-            </section>
           </section>
           <dialog id="goldAnnotationDialog" class="owner-assignment-dialog gold-annotation-dialog" aria-labelledby="goldAnnotationTitle">
             <form id="goldAnnotationForm" class="owner-assignment-form">
@@ -900,6 +1482,68 @@
               </div>
             </form>
           </dialog>
+        </section>
+
+        <section id="partnerView" class="view">
+          <section class="panel page-panel partner-page">
+            <div class="panel-heading partner-heading">
+              <div>
+                <span class="section-kicker">PARTNER DUE DILIGENCE / 合作方全景尽调</span>
+                <h1>合作方风险雷达</h1>
+                <p>把历史项目、企业证据、关系和人工结论放在同一条可追溯链路中。</p>
+              </div>
+              <div class="partner-heading-actions">
+                <button id="partnerAggregateButton" class="ghost-button" type="button">聚合本地证据</button>
+                <button id="partnerEvaluateButton" class="ghost-button" type="button">重新评估</button>
+                <button id="partnerSnapshotButton" class="primary-button" type="button">保存核验快照</button>
+              </div>
+            </div>
+
+            <div class="partner-toolbar">
+              <label>组织空间<select id="partnerWorkspaceSelect"></select></label>
+              <label class="partner-search-field">搜索主体<input id="partnerSearchInput" type="search" placeholder="企业名称 / 统一社会信用代码" /></label>
+              <button id="partnerSearchButton" class="icon-button bordered-icon-button" type="button" aria-label="搜索合作方">搜索</button>
+            </div>
+
+            <div class="partner-layout">
+              <aside class="partner-directory">
+                <div class="subsection-heading"><div><span class="section-kicker">SUBJECTS</span><h2>合作方主体</h2></div><span id="partnerEntityCount">0 家</span></div>
+                <form id="partnerEntityForm" class="partner-entity-form">
+                  <input id="partnerEntityName" maxlength="180" placeholder="新增合作方全称" required />
+                  <input id="partnerEntityRegion" maxlength="80" placeholder="地区（可选）" />
+                  <button class="primary-light-button" type="submit">建立主体档案</button>
+                </form>
+                <div id="partnerEntityList" class="partner-entity-list empty-state">请选择组织空间</div>
+              </aside>
+
+              <main id="partnerProfile" class="partner-profile empty-state">
+                选择合作方后查看六维画像、风险证据和尽调任务。
+              </main>
+            </div>
+
+            <div class="partner-action-grid">
+              <form id="partnerQuestionForm" class="partner-action-card">
+                <span class="section-kicker">ASK WITH EVIDENCE</span>
+                <h2>证据追问</h2>
+                <label>问题<textarea id="partnerQuestionInput" rows="3" maxlength="1000" placeholder="例如：如果合作，合同里最需要约束什么？" required></textarea></label>
+                <button class="primary-light-button" type="submit">基于证据回答</button>
+                <div id="partnerQuestionAnswer" class="partner-answer empty-state">回答会同时列出证据 ID、信息缺口、最坏影响和缓释措施。</div>
+              </form>
+
+              <form id="partnerReviewForm" class="partner-action-card">
+                <span class="section-kicker">HUMAN DECISION</span>
+                <h2>人工合作结论</h2>
+                <div class="partner-form-row">
+                  <label>结论<select id="partnerReviewRecommendation"><option value="conditional">有条件合作</option><option value="cooperate">合作</option><option value="pause">暂停</option><option value="reject">拒绝</option></select></label>
+                  <label>有效期<input id="partnerReviewValidUntil" type="date" required /></label>
+                </div>
+                <label>理由<textarea id="partnerReviewReason" rows="3" maxlength="2000" required></textarea></label>
+                <label>前置条件（每行一项）<textarea id="partnerReviewConditions" rows="3" maxlength="2000"></textarea></label>
+                <button class="primary-light-button" type="submit">确认并留痕</button>
+                <div id="partnerReviewStatus" class="form-status" aria-live="polite"></div>
+              </form>
+            </div>
+          </section>
         </section>
 
         <section id="organizationView" class="view">
@@ -941,6 +1585,23 @@
               </button>
             </div>
             <div id="organizationSummary" class="organization-summary empty-state">请选择或创建协作空间</div>
+            <section class="bid-memory-cockpit" aria-labelledby="bidMemoryTitle">
+              <div class="bid-memory-heading">
+                <div>
+                  <span>ENTERPRISE BID MEMORY</span>
+                  <h2 id="bidMemoryTitle">企业投标记忆体</h2>
+                  <p>把项目、要求、材料、缺口、决策与结果连接成可追溯的组织经验网络</p>
+                </div>
+                <div class="bid-memory-target-control">
+                  <label>
+                    新机会 ID
+                    <input id="bidMemoryTargetNoticeId" maxlength="160" placeholder="输入机会 ID 查看相似经验" />
+                  </label>
+                  <button id="loadBidMemoryButton" class="primary-lite-button" type="button">生成记忆图谱</button>
+                </div>
+              </div>
+              <div id="bidMemoryDashboard" class="bid-memory-dashboard empty-state">选择协作空间后加载企业投标记忆体</div>
+            </section>
             <section id="organizationReportDelivery" class="organization-report-delivery" aria-labelledby="organizationReportDeliveryTitle"></section>
             <div class="organization-layout">
               <section class="organization-memory-stream" aria-labelledby="organizationMemoryTitle">
@@ -1158,7 +1819,7 @@
               <div class="section-heading">
                 <div>
                   <h2 id="feishuCenterTitle">飞书连接中心</h2>
-                  <span id="feishuCenterMeta">正在检查消息、报告、多维表格与智能体服务</span>
+                  <span id="feishuCenterMeta">正在检查消息、报告、多维表格与协作能力</span>
                 </div>
                 <div class="action-group">
                   <button id="configureFeishuReceiverButton" class="ghost-button" type="button">设置接收目标</button>
@@ -1195,6 +1856,6 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js" type="module"></script>
+    <script src="/app.js?v=20260929-finals-home" type="module"></script>
   </body>
 </html>

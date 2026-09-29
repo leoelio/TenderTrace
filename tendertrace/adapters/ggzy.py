@@ -222,6 +222,7 @@ class GgzyAdapter:
             timeout=timeout,
             max_retries=2,
             browser_fallback=True,
+            curl_fallback=True,
         )
         self.last_fetch_stats: dict[str, object] = {}
 

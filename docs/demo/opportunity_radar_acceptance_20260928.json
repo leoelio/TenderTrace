@@ -1,0 +1,220 @@
+{
+  "demo_url": "http://127.0.0.1:8000/?view=radarView&radar_scope=all&radar_days=0",
+  "generated_at": "2026-09-28T03:09:00+00:00",
+  "data_as_of": "2026-09-27 00:20:13",
+  "summary": {
+    "opportunity_count": 45,
+    "recent_7d_count": 15,
+    "location_count": 18,
+    "source_count": 16,
+    "healthy_source_count": 14,
+    "attention_source_count": 2,
+    "limited_source_count": 0,
+    "zero_result_source_count": 6
+  },
+  "domestic_opportunity_count": 33,
+  "international_opportunity_count": 12,
+  "locations": [
+    {
+      "name": "浙江",
+      "count": 8,
+      "reliability": "可信"
+    },
+    {
+      "name": "全国",
+      "count": 6,
+      "reliability": "可信"
+    },
+    {
+      "name": "上海",
+      "count": 5,
+      "reliability": "可信"
+    },
+    {
+      "name": "欧洲",
+      "count": 5,
+      "reliability": "可信"
+    },
+    {
+      "name": "四川",
+      "count": 4,
+      "reliability": "可信"
+    },
+    {
+      "name": "非洲",
+      "count": 3,
+      "reliability": "可信"
+    },
+    {
+      "name": "东南亚",
+      "count": 2,
+      "reliability": "可信"
+    },
+    {
+      "name": "山东",
+      "count": 2,
+      "reliability": "可信"
+    },
+    {
+      "name": "云南",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "北京",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "北美",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "广西",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "拉丁美洲",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "新疆",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "江苏",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "江西",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "河北",
+      "count": 1,
+      "reliability": "可信"
+    },
+    {
+      "name": "海南",
+      "count": 1,
+      "reliability": "需关注"
+    }
+  ],
+  "source_states": [
+    {
+      "site": "adb",
+      "availability": "fault",
+      "data": "zero_results",
+      "last_success_at": ""
+    },
+    {
+      "site": "ccgp",
+      "availability": "fault",
+      "data": "has_results",
+      "last_success_at": "2026-08-06 15:30:02"
+    },
+    {
+      "site": "afdb",
+      "availability": "healthy",
+      "data": "zero_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "canadabuys",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "contracts_finder",
+      "availability": "healthy",
+      "data": "zero_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "ebrd",
+      "availability": "healthy",
+      "data": "zero_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "find_tender",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "ggzy",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-28 01:00:00"
+    },
+    {
+      "site": "idb",
+      "availability": "healthy",
+      "data": "zero_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "pbc_procurement",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-28 01:00:00"
+    },
+    {
+      "site": "prozorro",
+      "availability": "healthy",
+      "data": "zero_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "qianlima",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-28 01:00:00"
+    },
+    {
+      "site": "ted",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "ungm",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "worldbank",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-24 17:26:51"
+    },
+    {
+      "site": "zzcg",
+      "availability": "healthy",
+      "data": "has_results",
+      "last_success_at": "2026-09-28 01:00:00"
+    }
+  ],
+  "proof": {
+    "local_index_only": true,
+    "no_random_points": true,
+    "map_count_matches_list": true,
+    "enough_visible_locations": true,
+    "domestic_and_international_present": true,
+    "sixteen_sources_visible": true,
+    "every_source_has_explicit_state": true,
+    "zero_results_separate_from_faults": true,
+    "every_point_opens_real_records": true,
+    "manual_snapshot_saved": true,
+    "motion_and_presentation_supported": true
+  }
+}

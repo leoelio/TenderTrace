@@ -17,6 +17,8 @@ ENV_KEYS = (
     "TENDERTRACE_MODEL_MODE",
     "TENDERTRACE_MODEL_ENHANCEMENT_ENABLED",
     "OPENAI_API_KEY",
+    "FEISHU_ENABLED",
+    "TENDERTRACE_FEISHU_TASK_SYNC_ENABLED",
 )
 
 
@@ -42,6 +44,8 @@ class SourcesApiTests(unittest.TestCase):
             os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
             os.environ["TENDERTRACE_MODEL_MODE"] = "local"
             os.environ["TENDERTRACE_MODEL_ENHANCEMENT_ENABLED"] = "false"
+            os.environ["FEISHU_ENABLED"] = "false"
+            os.environ["TENDERTRACE_FEISHU_TASK_SYNC_ENABLED"] = "false"
             vault = MagicMock()
             vault.status.return_value.to_dict.return_value = {
                 "site": "qianlima",
@@ -90,6 +94,8 @@ class SourcesApiTests(unittest.TestCase):
             os.environ["TENDERTRACE_SCHEDULER_ENABLED"] = "false"
             os.environ["TENDERTRACE_MODEL_MODE"] = "local"
             os.environ["TENDERTRACE_MODEL_ENHANCEMENT_ENABLED"] = "false"
+            os.environ["FEISHU_ENABLED"] = "false"
+            os.environ["TENDERTRACE_FEISHU_TASK_SYNC_ENABLED"] = "false"
             try:
                 client = TestClient(create_app())
                 response = client.get("/api/sources")

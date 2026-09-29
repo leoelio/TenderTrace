@@ -1,0 +1,43 @@
+{
+  "direction": "一键飞书投标战情室",
+  "date": "2026-09-28",
+  "software_acceptance": "passed",
+  "real_two_account_acceptance": "pending_on_tenant",
+  "tests": {
+    "passed": 506,
+    "subtests_passed": 552,
+    "failed": 0,
+    "duration_seconds": 87.94,
+    "warning": "Starlette TestClient deprecation warning only"
+  },
+  "runtime": {
+    "service_status": "ok",
+    "database_schema": 45,
+    "homepage_http": 200,
+    "frontend_script_http": 200,
+    "feishu_configured": true,
+    "feishu_listener": "running"
+  },
+  "demo": {
+    "notice_id": "demo-feishu-war-room",
+    "url": "http://127.0.0.1:8000/?opportunity=demo-feishu-war-room",
+    "journey_steps": 7,
+    "launch_count": 3,
+    "receipt_count": 6,
+    "failed_steps": 0,
+    "digital_twin_resources": 4,
+    "writeback_conflicts": 1,
+    "final_status": "archived"
+  },
+  "proof": {
+    "idempotent_three_launches": true,
+    "isolated_step_retry": true,
+    "failed_retry_receipt_persisted": true,
+    "human_state_protected": true,
+    "confirmed_changes_only": true,
+    "organization_memory_archived": true,
+    "no_product_direction_number": true,
+    "full_regression_passed": true
+  },
+  "boundary": "双脱敏身份自动化闭环已经通过；两个真人飞书账号在比赛租户中的现场协作仍需按报告步骤验收。"
+}

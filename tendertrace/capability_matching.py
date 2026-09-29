@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 import hashlib
 import json
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -14,10 +15,16 @@ from tendertrace.opportunity_requirements import OpportunityRequirement, list_re
 
 
 CAPABILITY_TYPE_LABELS = {
-    "product": "产品与方案",
-    "qualification": "资质与合规",
-    "delivery": "交付与服务",
-    "case": "项目案例",
+    "product_parameter": "产品参数",
+    "qualification_certificate": "资质证书",
+    "personnel_skill": "人员能力",
+    "delivery_service": "交付服务",
+    "project_case": "项目案例",
+    "partner_authorization": "合作伙伴授权",
+    "product": "产品参数（兼容）",
+    "qualification": "资质证书（兼容）",
+    "delivery": "交付服务（兼容）",
+    "case": "项目案例（兼容）",
 }
 VERIFICATION_STATUS_LABELS = {
     "draft": "待核验",
@@ -25,9 +32,11 @@ VERIFICATION_STATUS_LABELS = {
     "expired": "已失效",
 }
 MATCH_VERDICT_LABELS = {
-    "supported": "证据可支撑",
-    "gap": "存在缺口",
-    "needs_evidence": "需补充证据",
+    "supported": "有据满足",
+    "gap": "明确缺口",
+    "needs_evidence": "证据不足",
+    "conflict": "存在冲突",
+    "pending": "待人工确认",
 }
 MATCH_STATUS_LABELS = {
     "proposed": "AI 建议待确认",
@@ -51,12 +60,25 @@ class EnterpriseCapability:
     verification_status_label: str
     owner: str
     valid_until: str
+    workspace_id: str
+    applicable_entity: str
+    product_model: str
+    regions: tuple[str, ...]
+    authorization_scope: str
+    source_file_name: str
+    valid_from: str
+    industry: str
+    sample_redacted: bool
+    content_hash: str
+    version_number: int
     created_by: str
     created_at: str
     updated_at: str
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        value = asdict(self)
+        value["regions"] = list(self.regions)
+        return value
 
 
 @dataclass(frozen=True)
@@ -72,6 +94,15 @@ class RequirementCapabilityMatch:
     capability_evidence_text: str
     capability_source_url: str
     capability_source_locator: str
+    capability_applicable_entity: str
+    capability_product_model: str
+    capability_regions: tuple[str, ...]
+    capability_authorization_scope: str
+    capability_valid_until: str
+    capability_version_id: str
+    project_snapshot_id: str
+    rule_details: dict[str, object]
+    conflict_code: str
     verdict: str
     verdict_label: str
     confidence: int
@@ -100,6 +131,15 @@ def upsert_capability(
     verification_status: str = "draft",
     owner: str = "",
     valid_until: str = "",
+    workspace_id: str = "default",
+    applicable_entity: str = "",
+    product_model: str = "",
+    regions: list[str] | tuple[str, ...] | None = None,
+    authorization_scope: str = "",
+    source_file_name: str = "",
+    valid_from: str = "",
+    industry: str = "",
+    sample_redacted: bool = False,
     actor: str = "admin",
 ) -> EnterpriseCapability:
     init_db(settings)
@@ -113,17 +153,46 @@ def upsert_capability(
         "verification_status": verification_status.strip(),
         "owner": owner.strip(),
         "valid_until": valid_until.strip(),
+        "workspace_id": workspace_id.strip() or "default",
+        "applicable_entity": applicable_entity.strip(),
+        "product_model": product_model.strip(),
+        "authorization_scope": authorization_scope.strip(),
+        "source_file_name": source_file_name.strip(),
+        "valid_from": valid_from.strip(),
+        "industry": industry.strip(),
         "actor": actor.strip() or "admin",
     }
     _validate_capability(values)
+    normalized_regions = tuple(dict.fromkeys(str(item).strip() for item in (regions or ()) if str(item).strip()))
     capability_id = _capability_id(values["capability_key"])
+    snapshot = {
+        **{key: values[key] for key in (
+            "capability_key", "title", "capability_type", "evidence_text", "source_url",
+            "source_locator", "verification_status", "owner", "valid_until", "workspace_id",
+            "applicable_entity", "product_model", "authorization_scope", "source_file_name",
+            "valid_from", "industry",
+        )},
+        "regions": list(normalized_regions),
+        "sample_redacted": bool(sample_redacted),
+    }
+    content_hash = hashlib.sha256(json.dumps(snapshot, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     with connection(settings) as conn:
+        previous = conn.execute(
+            "SELECT content_hash, version_number FROM enterprise_capabilities WHERE id = ?",
+            (capability_id,),
+        ).fetchone()
+        version_number = int(previous["version_number"] or 1) if previous else 1
+        if previous and str(previous["content_hash"] or "") != content_hash:
+            version_number += 1
         conn.execute(
             """
             INSERT INTO enterprise_capabilities(
                 id, capability_key, title, capability_type, evidence_text, source_url,
-                source_locator, verification_status, owner, valid_until, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_locator, verification_status, owner, valid_until, created_by,
+                workspace_id, applicable_entity, product_model, regions_json,
+                authorization_scope, source_file_name, valid_from, industry,
+                sample_redacted, content_hash, version_number
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(capability_key) DO UPDATE SET
                 title = excluded.title,
                 capability_type = excluded.capability_type,
@@ -133,6 +202,17 @@ def upsert_capability(
                 verification_status = excluded.verification_status,
                 owner = excluded.owner,
                 valid_until = excluded.valid_until,
+                workspace_id = excluded.workspace_id,
+                applicable_entity = excluded.applicable_entity,
+                product_model = excluded.product_model,
+                regions_json = excluded.regions_json,
+                authorization_scope = excluded.authorization_scope,
+                source_file_name = excluded.source_file_name,
+                valid_from = excluded.valid_from,
+                industry = excluded.industry,
+                sample_redacted = excluded.sample_redacted,
+                content_hash = excluded.content_hash,
+                version_number = excluded.version_number,
                 created_by = excluded.created_by,
                 updated_at = datetime('now')
             """,
@@ -148,24 +228,64 @@ def upsert_capability(
                 values["owner"],
                 values["valid_until"] or None,
                 values["actor"],
+                values["workspace_id"],
+                values["applicable_entity"],
+                values["product_model"],
+                json.dumps(normalized_regions, ensure_ascii=False),
+                values["authorization_scope"],
+                values["source_file_name"],
+                values["valid_from"] or None,
+                values["industry"],
+                int(bool(sample_redacted)),
+                content_hash,
+                version_number,
             ),
+        )
+        version_id = hashlib.sha256(f"{capability_id}|{content_hash}".encode()).hexdigest()[:24]
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO capability_versions(
+                id, capability_id, version_number, content_hash, snapshot_json, actor
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (version_id, capability_id, version_number, content_hash, json.dumps(snapshot, ensure_ascii=False, sort_keys=True), values["actor"]),
+        )
+        if previous and str(previous["content_hash"] or "") != content_hash:
+            conn.execute(
+                "UPDATE requirement_capability_matches SET status = 'recheck', updated_at = datetime('now') WHERE capability_id = ? AND status = 'confirmed'",
+                (capability_id,),
+            )
+        conn.execute(
+            """
+            INSERT INTO capability_audit_events(
+                id, workspace_id, capability_id, action, actor, payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (str(uuid4()), values["workspace_id"], capability_id, "capability_created" if previous is None else "capability_updated", values["actor"], json.dumps({"version_number": version_number, "content_hash": content_hash}, ensure_ascii=False, sort_keys=True)),
         )
         row = conn.execute("SELECT * FROM enterprise_capabilities WHERE id = ?", (capability_id,)).fetchone()
     assert row is not None
     return _capability_from_row(row)
 
 
-def list_capabilities(settings: Settings, *, verified_only: bool = False) -> list[EnterpriseCapability]:
+def list_capabilities(
+    settings: Settings,
+    *,
+    verified_only: bool = False,
+    workspace_id: str = "default",
+) -> list[EnterpriseCapability]:
     init_db(settings)
     where = (
-        "WHERE verification_status = 'verified' "
+        "WHERE workspace_id = ? AND verification_status = 'verified' "
+        "AND (COALESCE(valid_from, '') = '' OR date(valid_from) <= date('now')) "
         "AND (COALESCE(valid_until, '') = '' OR date(valid_until) >= date('now'))"
         if verified_only
-        else ""
+        else "WHERE workspace_id = ?"
     )
     with connection(settings) as conn:
         rows = conn.execute(
-            f"SELECT * FROM enterprise_capabilities {where} ORDER BY verification_status, capability_type, title, rowid"
+            f"SELECT * FROM enterprise_capabilities {where} ORDER BY verification_status, capability_type, title, rowid",
+            (workspace_id.strip() or "default",),
         ).fetchall()
     return [_capability_from_row(row) for row in rows]
 
@@ -182,7 +302,12 @@ def list_requirement_capability_matches(
                    capability.title AS capability_title, capability.capability_type,
                    capability.evidence_text AS capability_evidence_text,
                    capability.source_url AS capability_source_url,
-                   capability.source_locator AS capability_source_locator
+                   capability.source_locator AS capability_source_locator,
+                   capability.applicable_entity AS capability_applicable_entity,
+                   capability.product_model AS capability_product_model,
+                   capability.regions_json AS capability_regions_json,
+                   capability.authorization_scope AS capability_authorization_scope,
+                   capability.valid_until AS capability_valid_until
             FROM requirement_capability_matches matched
             JOIN opportunity_requirements requirement ON requirement.id = matched.requirement_id
             LEFT JOIN enterprise_capabilities capability ON capability.id = matched.capability_id
@@ -203,7 +328,81 @@ def capability_match_summary(settings: Settings, notice_id: str) -> dict[str, ob
         "needs_evidence_count": sum(item.verdict == "needs_evidence" for item in items),
         "recheck_count": sum(item.status == "recheck" for item in items),
         "confirmed_count": sum(item.status == "confirmed" for item in items),
+        "conflict_count": sum(item.verdict == "conflict" for item in items),
+        "pending_count": sum(item.verdict == "pending" or item.status == "proposed" for item in items),
     }
+
+
+def bind_capability_workspace(
+    settings: Settings,
+    notice_id: str,
+    workspace_id: str,
+    *,
+    actor: str,
+) -> None:
+    selected = workspace_id.strip() or "default"
+    with connection(settings) as conn:
+        if conn.execute("SELECT 1 FROM notices WHERE id = ?", (notice_id,)).fetchone() is None:
+            raise LookupError("opportunity notice not found")
+        if selected != "default" and conn.execute(
+            "SELECT 1 FROM organization_workspaces WHERE id = ? AND status = 'active'",
+            (selected,),
+        ).fetchone() is None:
+            raise LookupError("organization workspace not found")
+        conn.execute(
+            """
+            INSERT INTO opportunity_capability_scopes(notice_id, workspace_id, bound_by)
+            VALUES (?, ?, ?)
+            ON CONFLICT(notice_id) DO UPDATE SET
+                workspace_id = excluded.workspace_id,
+                bound_by = excluded.bound_by,
+                updated_at = datetime('now')
+            """,
+            (notice_id, selected, actor.strip() or "admin"),
+        )
+
+
+def capability_workspace_id(settings: Settings, notice_id: str) -> str:
+    with connection(settings) as conn:
+        row = conn.execute(
+            "SELECT workspace_id FROM opportunity_capability_scopes WHERE notice_id = ?",
+            (notice_id,),
+        ).fetchone()
+    return str(row["workspace_id"] or "default") if row else "default"
+
+
+def refresh_capability_validity(settings: Settings, *, workspace_id: str = "default") -> dict[str, int]:
+    """Expire credentials by date and put their human-confirmed matches back into review."""
+    init_db(settings)
+    with connection(settings) as conn:
+        expired_ids = [
+            str(row["id"])
+            for row in conn.execute(
+                """
+                SELECT id FROM enterprise_capabilities
+                WHERE workspace_id = ? AND verification_status = 'verified'
+                  AND COALESCE(valid_until, '') <> '' AND date(valid_until) < date('now')
+                """,
+                (workspace_id.strip() or "default",),
+            ).fetchall()
+        ]
+        if not expired_ids:
+            return {"expired_count": 0, "recheck_count": 0}
+        placeholders = ",".join("?" for _ in expired_ids)
+        conn.execute(
+            f"UPDATE enterprise_capabilities SET verification_status = 'expired', updated_at = datetime('now') WHERE id IN ({placeholders})",
+            expired_ids,
+        )
+        cursor = conn.execute(
+            f"UPDATE requirement_capability_matches SET status = 'recheck', conflict_code = 'expired', updated_at = datetime('now') WHERE capability_id IN ({placeholders}) AND status = 'confirmed'",
+            expired_ids,
+        )
+        for capability_id in expired_ids:
+            conn.execute(
+                "INSERT INTO capability_audit_events(id, workspace_id, capability_id, action, actor, payload_json) VALUES (?, ?, ?, 'capability_expired', 'system:validity', '{}')",
+                (str(uuid4()), workspace_id.strip() or "default", capability_id),
+            )
+        return {"expired_count": len(expired_ids), "recheck_count": cursor.rowcount}
 
 
 def analyze_capability_matches(
@@ -211,6 +410,7 @@ def analyze_capability_matches(
     notice_id: str,
     *,
     gateway: ModelGateway | None = None,
+    workspace_id: str = "",
 ) -> dict[str, object]:
     """Create advisory matches using only verified, source-linked capabilities.
 
@@ -218,10 +418,20 @@ def analyze_capability_matches(
     unless it cites one of the capability identifiers provided in the prompt.
     """
     init_db(settings)
-    requirements = list_requirements(settings, notice_id)
+    selected_workspace = workspace_id.strip() or capability_workspace_id(settings, notice_id)
+    bind_capability_workspace(settings, notice_id, selected_workspace, actor="system:matching")
+    refresh_capability_validity(settings, workspace_id=selected_workspace)
+    requirements = [
+        item
+        for item in list_requirements(settings, notice_id)
+        if item.status in {"confirmed", "assigned", "in_progress", "review", "completed"}
+    ]
     if not requirements:
-        raise LookupError("opportunity requirements not found; extract requirements first")
-    capabilities = list_capabilities(settings, verified_only=True)
+        raise LookupError("confirmed opportunity requirements not found; confirm requirements first")
+    capabilities = list_capabilities(settings, verified_only=True, workspace_id=selected_workspace)
+    with connection(settings) as conn:
+        notice = conn.execute("SELECT region FROM notices WHERE id = ?", (notice_id,)).fetchone()
+    notice_region = str(notice["region"] or "") if notice else ""
     model_gateway = gateway or ModelGateway(settings)
     status = model_status(settings)
     model_enabled = (
@@ -241,15 +451,22 @@ def analyze_capability_matches(
             proposals = _normalize_model_matches(result.parsed, capabilities) if result.status == "ok" else []
             model_used = model_used or bool(proposals)
         if not proposals:
-            proposals = _evidence_only_proposals(capabilities)
+            proposals = _evidence_only_proposals(requirement, capabilities, notice_region=notice_region)
         for proposal in proposals:
-            _persist_match(settings, notice_id, requirement, proposal)
+            guarded = _apply_structured_guardrails(
+                requirement,
+                next((item for item in capabilities if item.id == proposal.get("capability_id")), None),
+                proposal,
+                notice_region=notice_region,
+            )
+            _persist_match(settings, notice_id, requirement, guarded, workspace_id=selected_workspace)
             persisted_count += 1
     return {
         "status": "finished",
         "mode": "ai_assisted" if model_used else "evidence_only",
         "scanned_requirement_count": len(requirements),
         "verified_capability_count": len(capabilities),
+        "workspace_id": selected_workspace,
         "proposal_count": persisted_count,
         "items": [item.to_dict() for item in list_requirement_capability_matches(settings, notice_id)],
         "summary": capability_match_summary(settings, notice_id),
@@ -277,6 +494,12 @@ def decide_capability_match(
         ).fetchone()
         if row is None:
             raise LookupError("capability match not found")
+        if verdict == "supported" and (
+            not str(row["capability_id"] or "")
+            or not str(row["capability_version_id"] or "")
+            or not str(row["project_snapshot_id"] or "")
+        ):
+            raise ValueError("supported match requires linked enterprise evidence and a project snapshot")
         conn.execute(
             """
             UPDATE requirement_capability_matches
@@ -292,6 +515,30 @@ def decide_capability_match(
             action="capability_match_decided",
             payload={"match_id": match_id, "verdict": verdict, "accepted": accept, "note": note.strip()},
             actor=actor.strip(),
+        )
+        if accept and str(row["project_snapshot_id"] or ""):
+            conn.execute(
+                """
+                UPDATE capability_project_snapshots
+                SET confirmation_status = 'confirmed', confirmed_by = ?, confirmed_at = datetime('now')
+                WHERE id = ?
+                """,
+                (actor.strip(), row["project_snapshot_id"]),
+            )
+        conn.execute(
+            """
+            INSERT INTO capability_audit_events(
+                id, workspace_id, capability_id, notice_id, action, actor, payload_json
+            ) VALUES (?, ?, ?, ?, 'match_decided', ?, ?)
+            """,
+            (
+                str(uuid4()),
+                str(row["workspace_id"] or "default"),
+                str(row["capability_id"] or "") or None,
+                notice_id,
+                actor.strip(),
+                json.dumps({"match_id": match_id, "verdict": verdict, "accepted": accept, "note": note.strip()}, ensure_ascii=False, sort_keys=True),
+            ),
         )
     return next(item for item in list_requirement_capability_matches(settings, notice_id) if item.id == match_id)
 
@@ -326,15 +573,39 @@ def _persist_match(
     notice_id: str,
     requirement: OpportunityRequirement,
     proposal: dict[str, object],
+    *,
+    workspace_id: str,
 ) -> None:
     capability_id = str(proposal.get("capability_id") or "")
     match_id = _match_id(requirement.id, capability_id)
     with connection(settings) as conn:
+        capability_version_id = ""
+        project_snapshot_id = ""
+        if capability_id:
+            version = conn.execute(
+                "SELECT id FROM capability_versions WHERE capability_id = ? ORDER BY version_number DESC LIMIT 1",
+                (capability_id,),
+            ).fetchone()
+            capability_version_id = str(version["id"] or "") if version else ""
+            if capability_version_id:
+                project_snapshot_id = hashlib.sha256(
+                    f"{notice_id}|{capability_id}|{capability_version_id}".encode()
+                ).hexdigest()[:24]
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO capability_project_snapshots(
+                        id, notice_id, workspace_id, capability_id, capability_version_id
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (project_snapshot_id, notice_id, workspace_id, capability_id, capability_version_id),
+                )
         conn.execute(
             """
             INSERT INTO requirement_capability_matches(
-                id, notice_id, requirement_id, capability_id, verdict, confidence, rationale, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'proposed')
+                id, notice_id, requirement_id, capability_id, verdict, confidence, rationale, status,
+                workspace_id, capability_version_id, project_snapshot_id,
+                rule_details_json, conflict_code
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?)
             ON CONFLICT(requirement_id, capability_id) DO UPDATE SET
                 verdict = CASE
                     WHEN requirement_capability_matches.status = 'confirmed'
@@ -356,6 +627,19 @@ def _persist_match(
                     THEN requirement_capability_matches.status
                     ELSE 'proposed'
                 END,
+                workspace_id = excluded.workspace_id,
+                capability_version_id = excluded.capability_version_id,
+                project_snapshot_id = excluded.project_snapshot_id,
+                rule_details_json = CASE
+                    WHEN requirement_capability_matches.status = 'confirmed'
+                    THEN requirement_capability_matches.rule_details_json
+                    ELSE excluded.rule_details_json
+                END,
+                conflict_code = CASE
+                    WHEN requirement_capability_matches.status = 'confirmed'
+                    THEN requirement_capability_matches.conflict_code
+                    ELSE excluded.conflict_code
+                END,
                 updated_at = datetime('now')
             """,
             (
@@ -366,22 +650,43 @@ def _persist_match(
                 str(proposal["verdict"]),
                 int(proposal["confidence"]),
                 str(proposal["rationale"]),
+                workspace_id,
+                capability_version_id,
+                project_snapshot_id,
+                json.dumps(proposal.get("rule_details") or {}, ensure_ascii=False, sort_keys=True),
+                str(proposal.get("conflict_code") or ""),
             ),
         )
 
 
-def _evidence_only_proposals(capabilities: list[EnterpriseCapability]) -> list[dict[str, object]]:
+def _evidence_only_proposals(
+    requirement: OpportunityRequirement,
+    capabilities: list[EnterpriseCapability],
+    *,
+    notice_region: str,
+) -> list[dict[str, object]]:
     if not capabilities:
         return [{"capability_id": "", "verdict": "needs_evidence", "confidence": 0, "rationale": "暂无已核验的企业能力证据，不能判断该要求是否可满足。"}]
+    ranked = sorted(
+        capabilities,
+        key=lambda capability: _capability_relevance(requirement, capability),
+        reverse=True,
+    )
     return [
-        {
-            "capability_id": capability.id,
-            "verdict": "needs_evidence",
-            "confidence": 0,
-            "rationale": "已发现可供比对的已核验证据，需人工或模型逐条确认与该要求的对应关系。",
-        }
-        for capability in capabilities
-    ]
+        _apply_structured_guardrails(
+            requirement,
+            capability,
+            {
+                "capability_id": capability.id,
+                "verdict": "pending",
+                "confidence": min(85, 35 + _capability_relevance(requirement, capability) * 10),
+                "rationale": "确定字段已完成初步核验，语义对应关系仍需人工确认。",
+            },
+            notice_region=notice_region,
+        )
+        for capability in ranked
+        if _capability_relevance(requirement, capability) > 0
+    ] or [{"capability_id": "", "verdict": "needs_evidence", "confidence": 0, "rationale": "没有找到同类企业能力证据，请补充材料或建立缺口行动。"}]
 
 
 def _normalize_model_matches(
@@ -410,10 +715,107 @@ def _normalize_model_matches(
     return normalized
 
 
+def _apply_structured_guardrails(
+    requirement: OpportunityRequirement,
+    capability: EnterpriseCapability | None,
+    proposal: dict[str, object],
+    *,
+    notice_region: str,
+) -> dict[str, object]:
+    if capability is None:
+        return {**proposal, "rule_details": {"evidence_linked": False}, "conflict_code": ""}
+    details: dict[str, object] = {
+        "evidence_linked": True,
+        "type_compatible": _type_compatible(requirement.requirement_type, capability.capability_type),
+        "entity": capability.applicable_entity or "待确认",
+        "model": capability.product_model or "未限定",
+        "regions": list(capability.regions),
+        "authorization_scope": capability.authorization_scope or "待确认",
+        "valid_until": capability.valid_until or "长期/待确认",
+    }
+    verdict = str(proposal.get("verdict") or "pending")
+    rationale = str(proposal.get("rationale") or "")
+    confidence = _confidence(proposal.get("confidence"))
+    conflict_code = ""
+    if capability.verification_status == "expired" or _is_expired(capability.valid_until):
+        verdict, confidence, conflict_code = "conflict", 100, "expired"
+        rationale = "企业证据已经到期，不能作为当前项目的有效能力依据。"
+    elif notice_region and capability.regions and not any(
+        region in notice_region or notice_region in region for region in capability.regions
+    ):
+        verdict, confidence, conflict_code = "gap", 96, "region_out_of_scope"
+        rationale = f"项目地区为{notice_region}，证据授权地区仅为{'、'.join(capability.regions)}。"
+    else:
+        required_models = _requirement_models(requirement.evidence_text)
+        if required_models and capability.product_model and capability.product_model.casefold() not in {
+            item.casefold() for item in required_models
+        }:
+            verdict, confidence, conflict_code = "conflict", 98, "model_mismatch"
+            rationale = f"要求型号为{'、'.join(required_models)}，企业证据型号为{capability.product_model}，禁止相近型号自动拼接。"
+        elif capability.capability_type in {"partner_authorization"} and not capability.authorization_scope:
+            verdict, confidence, conflict_code = "needs_evidence", 92, "authorization_scope_missing"
+            rationale = "合作伙伴材料没有明确授权范围，不能确认覆盖本项目。"
+        elif not details["type_compatible"]:
+            verdict, confidence, conflict_code = "needs_evidence", min(confidence, 30), "type_mismatch"
+            rationale = "证据类别与要求类型不直接对应，需要人工说明关联关系。"
+        elif capability.product_model and capability.product_model.casefold() in requirement.evidence_text.casefold():
+            verdict, confidence = "supported", max(confidence, 92)
+            rationale = f"要求原文与企业证据均明确指向型号 {capability.product_model}；仍需人员确认适用主体和授权范围。"
+    return {
+        **proposal,
+        "verdict": verdict,
+        "confidence": confidence,
+        "rationale": rationale,
+        "rule_details": details,
+        "conflict_code": conflict_code,
+    }
+
+
+def _capability_relevance(
+    requirement: OpportunityRequirement,
+    capability: EnterpriseCapability,
+) -> int:
+    score = 2 if _type_compatible(requirement.requirement_type, capability.capability_type) else 0
+    haystack = f"{capability.title} {capability.evidence_text} {capability.product_model}".casefold()
+    for token in _meaningful_tokens(f"{requirement.title} {requirement.evidence_text}"):
+        if token.casefold() in haystack:
+            score += 1
+    return score
+
+
+def _meaningful_tokens(value: str) -> set[str]:
+    words = set(re.findall(r"[A-Za-z][A-Za-z0-9._-]{2,}|[\u4e00-\u9fff]{2,6}", value or ""))
+    stop = {"投标人", "供应商", "招标文件", "采购项目", "必须", "应当", "提供", "要求"}
+    return {word for word in words if word not in stop}
+
+
+def _requirement_models(value: str) -> list[str]:
+    return list(dict.fromkeys(re.findall(r"(?:型号|规格)\s*[:：]?\s*([A-Za-z][A-Za-z0-9._-]{2,})", value or "", re.I)))
+
+
+def _type_compatible(requirement_type: str, capability_type: str) -> bool:
+    normalized = {
+        "product": "product_parameter",
+        "qualification": "qualification_certificate",
+        "delivery": "delivery_service",
+        "case": "project_case",
+    }.get(capability_type, capability_type)
+    allowed = {
+        "qualification": {"qualification_certificate", "personnel_skill", "partner_authorization"},
+        "technical": {"product_parameter", "delivery_service", "project_case", "partner_authorization"},
+        "commercial": {"delivery_service", "project_case", "partner_authorization"},
+        "deadline": {"delivery_service", "project_case"},
+        "scoring": {"qualification_certificate", "personnel_skill", "project_case", "product_parameter"},
+        "disqualification": {"qualification_certificate", "partner_authorization"},
+        "attachment": {"qualification_certificate", "personnel_skill", "project_case", "product_parameter", "partner_authorization"},
+    }
+    return normalized in allowed.get(requirement_type, set())
+
+
 def _matching_system_prompt() -> str:
     return (
         "You assess tender requirements against an enterprise evidence library. Return strict JSON only: "
-        '{"matches":[{"capability_id":"","verdict":"supported|gap|needs_evidence","confidence":0,"rationale":""}]}. '
+        '{"matches":[{"capability_id":"","verdict":"supported|gap|needs_evidence|conflict|pending","confidence":0,"rationale":""}]}. '
         "Use only supplied evidence. A supported verdict requires a cited capability_id. "
         "When evidence is insufficient, use needs_evidence. Do not invent qualifications, products, cases, or URLs."
     )
@@ -437,6 +839,13 @@ def _matching_prompt(requirement: OpportunityRequirement, capabilities: list[Ent
                     "evidence_text": item.evidence_text,
                     "source_locator": item.source_locator,
                     "source_url": item.source_url,
+                    "applicable_entity": item.applicable_entity,
+                    "product_model": item.product_model,
+                    "regions": list(item.regions),
+                    "authorization_scope": item.authorization_scope,
+                    "valid_from": item.valid_from,
+                    "valid_until": item.valid_until,
+                    "version_number": item.version_number,
                 }
                 for item in capabilities
             ],
@@ -454,11 +863,14 @@ def _validate_capability(values: dict[str, str]) -> None:
         raise ValueError(f"unsupported capability_type: {values['capability_type']}")
     if values["verification_status"] not in VERIFICATION_STATUS_LABELS:
         raise ValueError(f"unsupported verification_status: {values['verification_status']}")
-    if values["valid_until"]:
-        try:
-            date.fromisoformat(values["valid_until"])
-        except ValueError as exc:
-            raise ValueError("valid_until must use YYYY-MM-DD") from exc
+    for field in ("valid_from", "valid_until"):
+        if values[field]:
+            try:
+                date.fromisoformat(values[field])
+            except ValueError as exc:
+                raise ValueError(f"{field} must use YYYY-MM-DD") from exc
+    if values["valid_from"] and values["valid_until"] and values["valid_from"] > values["valid_until"]:
+        raise ValueError("valid_from cannot be later than valid_until")
 
 
 def _capability_from_row(row: Any) -> EnterpriseCapability:
@@ -480,6 +892,17 @@ def _capability_from_row(row: Any) -> EnterpriseCapability:
         verification_status_label=VERIFICATION_STATUS_LABELS.get(verification_status, verification_status),
         owner=str(row["owner"] or ""),
         valid_until=valid_until,
+        workspace_id=str(row["workspace_id"] or "default"),
+        applicable_entity=str(row["applicable_entity"] or ""),
+        product_model=str(row["product_model"] or ""),
+        regions=tuple(_json_list(row["regions_json"])),
+        authorization_scope=str(row["authorization_scope"] or ""),
+        source_file_name=str(row["source_file_name"] or ""),
+        valid_from=str(row["valid_from"] or ""),
+        industry=str(row["industry"] or ""),
+        sample_redacted=bool(row["sample_redacted"]),
+        content_hash=str(row["content_hash"] or ""),
+        version_number=int(row["version_number"] or 1),
         created_by=str(row["created_by"] or ""),
         created_at=str(row["created_at"] or ""),
         updated_at=str(row["updated_at"] or ""),
@@ -501,6 +924,15 @@ def _match_from_row(row: Any) -> RequirementCapabilityMatch:
         capability_evidence_text=str(row["capability_evidence_text"] or ""),
         capability_source_url=str(row["capability_source_url"] or ""),
         capability_source_locator=str(row["capability_source_locator"] or ""),
+        capability_applicable_entity=str(row["capability_applicable_entity"] or ""),
+        capability_product_model=str(row["capability_product_model"] or ""),
+        capability_regions=tuple(_json_list(row["capability_regions_json"])),
+        capability_authorization_scope=str(row["capability_authorization_scope"] or ""),
+        capability_valid_until=str(row["capability_valid_until"] or ""),
+        capability_version_id=str(row["capability_version_id"] or ""),
+        project_snapshot_id=str(row["project_snapshot_id"] or ""),
+        rule_details=_json_dict(row["rule_details_json"]),
+        conflict_code=str(row["conflict_code"] or ""),
         verdict=verdict,
         verdict_label=MATCH_VERDICT_LABELS.get(verdict, verdict),
         confidence=int(row["confidence"] or 0),
@@ -537,6 +969,22 @@ def _is_expired(value: str) -> bool:
         return date.fromisoformat(value) < date.today()
     except ValueError:
         return True
+
+
+def _json_list(value: object) -> list[str]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return [str(item) for item in parsed] if isinstance(parsed, list) else []
+
+
+def _json_dict(value: object) -> dict[str, object]:
+    try:
+        parsed = json.loads(str(value or "{}"))
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _record_event(conn, *, notice_id: str, action: str, payload: dict[str, object], actor: str) -> None:

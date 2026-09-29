@@ -321,6 +321,7 @@ def parse_region(query: str) -> RegionMatch:
                 },
                 matched_text=alias,
             )
+    nationwide = "全国" if "全国" in query else ""
     return RegionMatch(
         value={
             "province": None,
@@ -329,13 +330,13 @@ def parse_region(query: str) -> RegionMatch:
             "adcode": None,
             "city_adcode": None,
             "district_adcode": None,
-            "aliases": [],
+            "aliases": [nationwide] if nationwide else [],
             "city_aliases": [],
             "district_aliases": [],
             "scope": "domestic",
-            "origin": "missing",
+            "origin": "rule" if nationwide else "missing",
         },
-        matched_text="",
+        matched_text=nationwide,
     )
 
 

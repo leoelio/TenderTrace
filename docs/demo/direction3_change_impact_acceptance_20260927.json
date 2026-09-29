@@ -1,0 +1,65 @@
+{
+  "generated_at": "2026-09-27",
+  "direction": "3",
+  "case": {
+    "notice_id": "ccgp:direction3-hainan-monitor-correction",
+    "title": "海南省农垦加来高级中学校园监控采购项目（二次）",
+    "project_no": "[HNBS001]20250500001[GK]-1",
+    "source_url": "https://www.ccgp.gov.cn/cggg/dfgg/gzgg/202508/t20250812_25149498.htm"
+  },
+  "impact": {
+    "round_count": 1,
+    "revision_id": "0453bac7-9384-4556-830c-4b80f1cca941",
+    "change_types": [
+      "deadline",
+      "technical"
+    ],
+    "event_count": 3,
+    "counts": {
+      "unaffected": 1,
+      "suggested_review": 0,
+      "mandatory_review": 9,
+      "confirmed": 0,
+      "affected": 9,
+      "all": 10,
+      "relations": 24
+    },
+    "action_count": 9,
+    "graph_nodes": 36,
+    "graph_edges": 33,
+    "query_elapsed_ms": 28.36
+  },
+  "database": {
+    "schema_version": 40,
+    "all_counts": {
+      "change_impact_rounds": 1,
+      "change_impact_events": 3,
+      "change_impact_items": 24,
+      "change_impact_actions": 9,
+      "change_impact_audit_events": 1
+    },
+    "demo_counts": {
+      "change_impact_rounds": 1,
+      "change_impact_events": 3,
+      "change_impact_items": 24,
+      "change_impact_actions": 9,
+      "change_impact_audit_events": 1
+    }
+  },
+  "verification": {
+    "pytest": "480 passed",
+    "subtests": "528 passed",
+    "direction3_tests": "3 passed",
+    "ruff": "passed",
+    "javascript_syntax": "passed",
+    "acceptance_check": "34 passed, 0 warning, 0 failed",
+    "health_http": 200,
+    "impact_http": 200,
+    "static_assets_http": 200,
+    "browser_visual_automation": "blocked: local browser-control kernel assets path missing"
+  },
+  "notes": [
+    "Live Feishu message was not sent during acceptance. Failure/retry and idempotency were verified with a deterministic fake client.",
+    "Direction 1 and direction 2 reports were not modified."
+  ]
+}

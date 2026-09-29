@@ -1,0 +1,546 @@
+{
+  "direction": 14,
+  "name": "演示可靠性与真实回放控制台",
+  "verified_at": "2026-09-28T22:20:52+08:00",
+  "base_url": "http://127.0.0.1:8000",
+  "direct_url": "http://127.0.0.1:8000/?view=demoConsoleView",
+  "cases": [
+    {
+      "role": "main",
+      "label": "成方金融科技有限公司成方金科2026年ARM服务器采购项目招标公告",
+      "source_type": "opportunity",
+      "source_id": "pbc_procurement:04b40d52-b636-11f1-88d4-b4055dfb2cc6",
+      "source_version": "27e6ea80e5e1e4e21b74b62a6574058f7a80efe3f99a6af3b996260fd7badd9a",
+      "data_as_of": "2026-09-26 00:44:12",
+      "evidence_kind": "public_record",
+      "snapshot_verified": true,
+      "replay_verified": true
+    },
+    {
+      "role": "backup",
+      "label": "全球服务器机会现场检索",
+      "source_type": "live_challenge",
+      "source_id": "659f81b7-aa0c-4590-80fd-7019a3c0064b",
+      "source_version": "828c4601c07d63e7b46f921e703f3fd2195079eadb46958a7db4e37150022c9d",
+      "data_as_of": "2026-09-28 10:01:03",
+      "evidence_kind": "public_record",
+      "snapshot_verified": true,
+      "replay_verified": true
+    },
+    {
+      "role": "replay",
+      "label": "飞书战情室受控演练回放（明确标识）",
+      "source_type": "opportunity",
+      "source_id": "demo-feishu-war-room",
+      "source_version": "b9ba1055099c9dbc32d455378e8f861689afa2071b9ceed9c181f9796358d733",
+      "data_as_of": "2026-09-27 18:46:15",
+      "evidence_kind": "controlled_fixture",
+      "snapshot_verified": true,
+      "replay_verified": true
+    }
+  ],
+  "rehearsals": [
+    {
+      "id": "823b7351-7537-4c20-b8ab-2064a6720d4f",
+      "case_id": "demo-reliability-main",
+      "requested_mode": "live",
+      "actual_mode": "live",
+      "switch_reason": "",
+      "scenario": "main-live",
+      "status": "passed",
+      "browser_online": true,
+      "viewport_width": 1440,
+      "viewport_height": 900,
+      "opened_in_ms": 1475,
+      "actor": "direction14-verifier",
+      "started_at": "2026-09-28 14:20:49",
+      "completed_at": "2026-09-28 14:20:51",
+      "events": [
+        {
+          "seq": 1,
+          "step_key": "environment",
+          "label": "环境预检",
+          "status": "passed",
+          "duration_ms": 64,
+          "detail": "核心检查 通过；外部依赖异常时可降级到本地回放",
+          "receipt": {
+            "checks": [
+              {
+                "key": "service",
+                "label": "本地服务",
+                "status": "ready",
+                "detail": "API运行中，静态页面可由当前进程提供"
+              },
+              {
+                "key": "database",
+                "label": "SQLite数据库",
+                "status": "ready",
+                "detail": "quick_check=ok"
+              },
+              {
+                "key": "local_index",
+                "label": "本地证据索引",
+                "status": "ready",
+                "detail": "57 条公告 · 最近索引 2026-09-28 04:22:31"
+              },
+              {
+                "key": "sources",
+                "label": "公开数据源",
+                "status": "ready",
+                "detail": "健康 15 · 降级 1 · 异常 1 · 未观测 0"
+              },
+              {
+                "key": "feishu",
+                "label": "飞书连接",
+                "status": "ready",
+                "detail": "消息应用与长连接运行中"
+              },
+              {
+                "key": "browser",
+                "label": "浏览器网络",
+                "status": "ready",
+                "detail": "在线，可执行实时动作"
+              }
+            ]
+          }
+        },
+        {
+          "seq": 2,
+          "step_key": "integrity",
+          "label": "案例与回放完整性",
+          "status": "passed",
+          "duration_ms": 25,
+          "detail": "冻结快照与同版本真实回放可验证",
+          "receipt": {
+            "snapshot_verified": true,
+            "replay_verified": true
+          }
+        },
+        {
+          "seq": 3,
+          "step_key": "mode",
+          "label": "模式选择与故障切换",
+          "status": "passed",
+          "duration_ms": 1319,
+          "detail": "已打开live",
+          "receipt": {
+            "requested_mode": "live",
+            "actual_mode": "live",
+            "switch_reason": "",
+            "data_as_of": "2026-09-26 00:44:12"
+          }
+        },
+        {
+          "seq": 4,
+          "step_key": "actions",
+          "label": "关键动作入口",
+          "status": "passed",
+          "duration_ms": 0,
+          "detail": "2 个可重复入口可用",
+          "receipt": {
+            "links": [
+              {
+                "key": "digital_twin",
+                "label": "打开项目数字档案",
+                "url": "/?view=opportunityView&opportunity=pbc_procurement:04b40d52-b636-11f1-88d4-b4055dfb2cc6"
+              },
+              {
+                "key": "source",
+                "label": "打开公告原文",
+                "url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg"
+              }
+            ]
+          }
+        },
+        {
+          "seq": 5,
+          "step_key": "projection",
+          "label": "投屏规格",
+          "status": "passed",
+          "duration_ms": 0,
+          "detail": "目标投屏 1440×900 · projector_1440",
+          "receipt": {
+            "profile": "projector_1440",
+            "width": 1440,
+            "height": 900
+          }
+        }
+      ]
+    },
+    {
+      "id": "b73af736-5d23-4edf-a4dc-b72cd540b24b",
+      "case_id": "demo-reliability-backup",
+      "requested_mode": "verified_history",
+      "actual_mode": "verified_history",
+      "switch_reason": "",
+      "scenario": "backup-history",
+      "status": "passed",
+      "browser_online": true,
+      "viewport_width": 1920,
+      "viewport_height": 1080,
+      "opened_in_ms": 172,
+      "actor": "direction14-verifier",
+      "started_at": "2026-09-28 14:20:51",
+      "completed_at": "2026-09-28 14:20:51",
+      "events": [
+        {
+          "seq": 1,
+          "step_key": "environment",
+          "label": "环境预检",
+          "status": "passed",
+          "duration_ms": 72,
+          "detail": "核心检查 通过；外部依赖异常时可降级到本地回放",
+          "receipt": {
+            "checks": [
+              {
+                "key": "service",
+                "label": "本地服务",
+                "status": "ready",
+                "detail": "API运行中，静态页面可由当前进程提供"
+              },
+              {
+                "key": "database",
+                "label": "SQLite数据库",
+                "status": "ready",
+                "detail": "quick_check=ok"
+              },
+              {
+                "key": "local_index",
+                "label": "本地证据索引",
+                "status": "ready",
+                "detail": "57 条公告 · 最近索引 2026-09-28 04:22:31"
+              },
+              {
+                "key": "sources",
+                "label": "公开数据源",
+                "status": "ready",
+                "detail": "健康 15 · 降级 1 · 异常 1 · 未观测 0"
+              },
+              {
+                "key": "feishu",
+                "label": "飞书连接",
+                "status": "ready",
+                "detail": "消息应用与长连接运行中"
+              },
+              {
+                "key": "browser",
+                "label": "浏览器网络",
+                "status": "ready",
+                "detail": "在线，可执行实时动作"
+              }
+            ]
+          }
+        },
+        {
+          "seq": 2,
+          "step_key": "integrity",
+          "label": "案例与回放完整性",
+          "status": "passed",
+          "duration_ms": 10,
+          "detail": "冻结快照与同版本真实回放可验证",
+          "receipt": {
+            "snapshot_verified": true,
+            "replay_verified": true
+          }
+        },
+        {
+          "seq": 3,
+          "step_key": "mode",
+          "label": "模式选择与故障切换",
+          "status": "passed",
+          "duration_ms": 7,
+          "detail": "已打开verified_history",
+          "receipt": {
+            "requested_mode": "verified_history",
+            "actual_mode": "verified_history",
+            "switch_reason": "",
+            "data_as_of": "2026-09-28 10:01:03"
+          }
+        },
+        {
+          "seq": 4,
+          "step_key": "actions",
+          "label": "关键动作入口",
+          "status": "passed",
+          "duration_ms": 0,
+          "detail": "6 个可重复入口可用",
+          "receipt": {
+            "links": [
+              {
+                "key": "challenge",
+                "label": "打开评委挑战",
+                "url": "/?view=challengeView"
+              },
+              {
+                "key": "source_1",
+                "label": "原文 1",
+                "url": "https://ted.europa.eu/en/notice/587451-2026/html"
+              },
+              {
+                "key": "source_2",
+                "label": "原文 2",
+                "url": "https://ted.europa.eu/en/notice/587558-2026/html"
+              },
+              {
+                "key": "source_3",
+                "label": "原文 3",
+                "url": "https://ted.europa.eu/en/notice/587513-2026/html"
+              },
+              {
+                "key": "source_4",
+                "label": "原文 4",
+                "url": "https://www.ungm.org/Public/Notice/315258"
+              },
+              {
+                "key": "source_5",
+                "label": "原文 5",
+                "url": "https://www.find-tender.service.gov.uk/Notice/087834-2026"
+              }
+            ]
+          }
+        },
+        {
+          "seq": 5,
+          "step_key": "projection",
+          "label": "投屏规格",
+          "status": "passed",
+          "duration_ms": 0,
+          "detail": "目标投屏 1920×1080 · full_hd_1920",
+          "receipt": {
+            "profile": "full_hd_1920",
+            "width": 1920,
+            "height": 1080
+          }
+        }
+      ]
+    },
+    {
+      "id": "77afa897-e9fb-4266-b9ad-fbc28fe1a6c7",
+      "case_id": "demo-reliability-replay",
+      "requested_mode": "live",
+      "actual_mode": "replay",
+      "switch_reason": "浏览器离线，已切换到同版本真实回放",
+      "scenario": "offline-replay",
+      "status": "passed",
+      "browser_online": false,
+      "viewport_width": 1440,
+      "viewport_height": 900,
+      "opened_in_ms": 143,
+      "actor": "direction14-verifier",
+      "started_at": "2026-09-28 14:20:51",
+      "completed_at": "2026-09-28 14:20:51",
+      "events": [
+        {
+          "seq": 1,
+          "step_key": "environment",
+          "label": "环境预检",
+          "status": "passed",
+          "duration_ms": 58,
+          "detail": "核心检查 通过；外部依赖异常时可降级到本地回放",
+          "receipt": {
+            "checks": [
+              {
+                "key": "service",
+                "label": "本地服务",
+                "status": "ready",
+                "detail": "API运行中，静态页面可由当前进程提供"
+              },
+              {
+                "key": "database",
+                "label": "SQLite数据库",
+                "status": "ready",
+                "detail": "quick_check=ok"
+              },
+              {
+                "key": "local_index",
+                "label": "本地证据索引",
+                "status": "ready",
+                "detail": "57 条公告 · 最近索引 2026-09-28 04:22:31"
+              },
+              {
+                "key": "sources",
+                "label": "公开数据源",
+                "status": "ready",
+                "detail": "健康 15 · 降级 1 · 异常 1 · 未观测 0"
+              },
+              {
+                "key": "feishu",
+                "label": "飞书连接",
+                "status": "ready",
+                "detail": "消息应用与长连接运行中"
+              },
+              {
+                "key": "browser",
+                "label": "浏览器网络",
+                "status": "attention",
+                "detail": "离线，将使用同版本真实回放"
+              }
+            ]
+          }
+        },
+        {
+          "seq": 2,
+          "step_key": "integrity",
+          "label": "案例与回放完整性",
+          "status": "passed",
+          "duration_ms": 16,
+          "detail": "冻结快照与同版本真实回放可验证",
+          "receipt": {
+            "snapshot_verified": true,
+            "replay_verified": true
+          }
+        },
+        {
+          "seq": 3,
+          "step_key": "mode",
+          "label": "模式选择与故障切换",
+          "status": "passed",
+          "duration_ms": 10,
+          "detail": "浏览器离线，已切换到同版本真实回放",
+          "receipt": {
+            "requested_mode": "live",
+            "actual_mode": "replay",
+            "switch_reason": "浏览器离线，已切换到同版本真实回放",
+            "data_as_of": "2026-09-27 18:46:15"
+          }
+        },
+        {
+          "seq": 4,
+          "step_key": "actions",
+          "label": "关键动作入口",
+          "status": "passed",
+          "duration_ms": 0,
+          "detail": "2 个可重复入口可用",
+          "receipt": {
+            "links": [
+              {
+                "key": "digital_twin",
+                "label": "打开项目数字档案",
+                "url": "/?view=opportunityView&opportunity=demo-feishu-war-room"
+              },
+              {
+                "key": "source",
+                "label": "打开公告原文",
+                "url": "https://example.com/feishu-war-room"
+              }
+            ]
+          }
+        },
+        {
+          "seq": 5,
+          "step_key": "projection",
+          "label": "投屏规格",
+          "status": "passed",
+          "duration_ms": 0,
+          "detail": "目标投屏 1440×900 · projector_1440",
+          "receipt": {
+            "profile": "projector_1440",
+            "width": 1440,
+            "height": 900
+          }
+        }
+      ]
+    }
+  ],
+  "layout_audits": [
+    {
+      "profile": "projector_1440",
+      "viewport_width": 1440,
+      "viewport_height": 900,
+      "status": "passed",
+      "scroll_width": 1425,
+      "critical_overflows": [],
+      "measurement": "same_origin_browser_dom",
+      "user_agent_present": true,
+      "created_at": "2026-09-28 14:15:33"
+    },
+    {
+      "profile": "full_hd_1920",
+      "viewport_width": 1920,
+      "viewport_height": 1080,
+      "status": "passed",
+      "scroll_width": 1920,
+      "critical_overflows": [],
+      "measurement": "same_origin_browser_dom",
+      "user_agent_present": true,
+      "created_at": "2026-09-28 14:15:34"
+    }
+  ],
+  "environment": {
+    "status": "ready",
+    "critical_ready": true,
+    "checks": [
+      {
+        "key": "service",
+        "label": "本地服务",
+        "status": "ready",
+        "detail": "API运行中，静态页面可由当前进程提供"
+      },
+      {
+        "key": "database",
+        "label": "SQLite数据库",
+        "status": "ready",
+        "detail": "quick_check=ok"
+      },
+      {
+        "key": "local_index",
+        "label": "本地证据索引",
+        "status": "ready",
+        "detail": "57 条公告 · 最近索引 2026-09-28 04:22:31"
+      },
+      {
+        "key": "sources",
+        "label": "公开数据源",
+        "status": "ready",
+        "detail": "健康 15 · 降级 1 · 异常 1 · 未观测 0"
+      },
+      {
+        "key": "feishu",
+        "label": "飞书连接",
+        "status": "ready",
+        "detail": "消息应用与长连接运行中"
+      },
+      {
+        "key": "browser",
+        "label": "浏览器网络",
+        "status": "client_check",
+        "detail": "等待浏览器上报在线状态"
+      }
+    ],
+    "summary": "核心检查 通过；外部依赖异常时可降级到本地回放",
+    "source_health_counts": {
+      "healthy": 15,
+      "degraded": 1,
+      "unhealthy": 1,
+      "unknown": 0
+    },
+    "checked_at": "2026-09-28T22:20:52+08:00"
+  },
+  "checks": {
+    "service_healthy": true,
+    "schema_version_51_active": true,
+    "direct_page_http_200": true,
+    "console_is_present": true,
+    "three_frozen_cases": true,
+    "all_snapshots_verified": true,
+    "all_same_version_replays_verified": true,
+    "main_and_backup_are_public_records": true,
+    "controlled_fixture_is_explicit": true,
+    "three_rehearsals_passed": true,
+    "all_rehearsals_under_10_seconds": true,
+    "five_receipted_steps_per_run": true,
+    "offline_fails_over_to_same_version_replay": true,
+    "latest_three_are_consecutive_passes": true,
+    "two_real_browser_layout_profiles_passed": true,
+    "critical_local_environment_ready": true,
+    "feishu_connection_ready": true,
+    "source_health_is_reported_without_hiding_failures": true
+  },
+  "passed": true,
+  "notes": [
+    "主案例与备案例取自本地数据库中已经采集的公开记录；回放案例若使用演练记录，会明确标识为受控夹具。",
+    "回放只读取此前保存的请求、结果与回执，并校验同一数据版本和快照哈希。",
+    "外部来源健康状态是动态实测值；降级和异常会保留显示，不会被验收脚本改写为健康。",
+    "布局证据来自同源浏览器 iframe 的真实 DOM 尺寸与溢出测量，不是手工填写。"
+  ]
+}

@@ -287,6 +287,46 @@ class SourceObservabilityTests(unittest.TestCase):
         self.assertEqual(qianlima["health"]["last_success_at"], "2026-08-16 08:00:00")
         self.assertEqual(qianlima["health"]["last_error"], "")
 
+    def test_latest_success_moves_previously_unhealthy_source_to_degraded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Settings.load(Path(tmp))
+            init_db(settings)
+            record_source_observations(
+                settings,
+                [
+                    {
+                        "source": "adb",
+                        "status": "failed",
+                        "error": "HTTP 403",
+                        "fetch_stats": {"requests": 1, "failed": 1, "blocked": 1},
+                    },
+                    {
+                        "source": "adb",
+                        "status": "finished",
+                        "count": 9,
+                        "fetch_stats": {
+                            "requests": 1,
+                            "succeeded": 1,
+                            "avg_elapsed_ms": 9000,
+                        },
+                    },
+                ],
+            )
+            with connection(settings) as conn:
+                conn.execute(
+                    "UPDATE source_observations SET observed_at = '2026-09-24 08:00:00' "
+                    "WHERE status = 'failed'"
+                )
+                conn.execute(
+                    "UPDATE source_observations SET observed_at = '2026-09-29 08:00:00' "
+                    "WHERE status = 'finished'"
+                )
+
+            health = source_health(settings)["adb"]
+
+        self.assertLess(health["reliability_score"], 0.6)
+        self.assertEqual(health["health_status"], "degraded")
+
     def test_newly_saved_storage_state_reenables_a_session_after_expiry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

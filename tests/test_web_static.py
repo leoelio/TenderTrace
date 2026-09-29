@@ -3,6 +3,59 @@ import unittest
 
 
 class WebStaticTests(unittest.TestCase):
+    def test_demo_reliability_console_exposes_live_history_replay_and_layout_audit(self) -> None:
+        root = Path("web/dist")
+        html = (root / "index.html").read_text(encoding="utf-8")
+        js = (root / "app.js").read_text(encoding="utf-8")
+        css = (root / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn('data-view="demoConsoleView">演示控制台', html)
+        self.assertIn('id="demoConsoleView"', html)
+        self.assertIn("实时动作", html)
+        self.assertIn("已验证历史", html)
+        self.assertIn("同版本真实回放", html)
+        self.assertIn('id="demoEnvironmentChecks"', html)
+        self.assertIn('id="demoCaseGrid"', html)
+        self.assertIn('id="demoLayoutAuditButton"', html)
+        self.assertIn('id="demoRehearsalLog"', html)
+        self.assertIn("/api/demo-reliability", js)
+        self.assertIn("runThreeDemoRehearsals", js)
+        self.assertIn("runDemoLayoutAuditProfile", js)
+        self.assertIn('frame.style.width = `${width}px`', js)
+        self.assertIn('frame.style.height = `${height}px`', js)
+        self.assertIn("critical_overflows", js)
+        self.assertIn("data-demo-case-id", js)
+        self.assertIn("demo-console-shell", css)
+        self.assertIn("demo-mode-badge", css)
+        self.assertIn("demo-event-row", css)
+        self.assertIn("@media (max-width: 1100px)", css)
+        self.assertIn("@media (max-width: 760px)", css)
+
+    def test_judge_live_challenge_has_a_direct_auditable_entry(self) -> None:
+        root = Path("web/dist")
+        html = (root / "index.html").read_text(encoding="utf-8")
+        js = (root / "app.js").read_text(encoding="utf-8")
+        css = (root / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn('data-view="challengeView">评委挑战', html)
+        self.assertIn('id="challengeView"', html)
+        self.assertIn('id="challengeForm"', html)
+        self.assertIn('id="challengeCategory"', html)
+        self.assertIn('id="challengeRegion"', html)
+        self.assertIn('id="challengeTimeWindow"', html)
+        self.assertIn('id="challengeKeyword"', html)
+        self.assertIn("本地索引优先", html)
+        self.assertIn("联网状态不隐瞒", html)
+        self.assertIn("全程自动留痕", html)
+        self.assertIn("/api/live-challenges", js)
+        self.assertIn("/supplement`,", js)
+        self.assertIn("/cancel`,", js)
+        self.assertIn("?view=challengeView", js)
+        self.assertIn("data-challenge-opportunity", js)
+        self.assertIn("challenge-source-state", css)
+        self.assertIn("challenge-result-card", css)
+        self.assertIn("@media (max-width: 640px)", css)
+
     def test_workspace_presentation_layer_is_loaded_after_component_styles(self) -> None:
         root = Path("web/dist")
         html = (root / "index.html").read_text(encoding="utf-8")
@@ -67,6 +120,10 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("bitableCheck.record_count", js)
         self.assertIn('query.set("topic", topic)', js)
         self.assertIn("openOpportunityDetail", js)
+        self.assertIn("/digital-twin", js)
+        self.assertIn("投标数字孪生 · 动态项目档案", js)
+        self.assertIn("为什么是", js)
+        self.assertIn("scheduleDigitalTwinRefresh", js)
         self.assertIn("招标数字档案", html)
         self.assertIn("数字档案", js)
         self.assertIn("loadOpportunityRevisionHistory", js)
@@ -88,6 +145,11 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("/requirements`,", js)
         self.assertIn("extractOpportunityRequirements", js)
         self.assertIn("/requirements/extract", js)
+        self.assertIn("/bid-workplan/build", js)
+        self.assertIn("data-bid-workplan", js)
+        self.assertIn("RACI 责任矩阵", js)
+        self.assertIn("缺口泳道", js)
+        self.assertIn("报价计划", js)
         self.assertIn("opportunity-requirement-impact", js)
         self.assertIn("impactsByRequirementId", js)
         self.assertIn("review_status_label ||", js)
@@ -95,6 +157,12 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("/war-room${workspaceQuery}", js)
         self.assertIn("data-launch-war-room", js)
         self.assertIn("/war-room/launch", js)
+        self.assertIn("一键投标战情室", js)
+        self.assertIn("war-room-journey", js)
+        self.assertIn("data-retry-war-room-step", js)
+        self.assertIn("/war-room/sync-back", js)
+        self.assertIn("/war-room/dispatch-changes", js)
+        self.assertIn("/war-room/archive", js)
         self.assertIn("loadOpportunityCollaborationNotes", js)
         self.assertIn("/collaboration-notes", js)
         self.assertIn("loadOpportunityReviewBoard", js)
@@ -104,6 +172,18 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("data-sync-review-board", js)
         self.assertIn("data-run-review-agents", js)
         self.assertIn("runOpportunityReviewAgents", js)
+        self.assertIn("可质询多角色会审", js)
+        self.assertIn("专业对手盘", js)
+        self.assertIn("投标决策沙盘", js)
+        self.assertIn("基准与模拟双舱", js)
+        self.assertIn("不输出中标概率", js)
+        self.assertIn("data-decision-sandbox-form", js)
+        self.assertIn("data-compare-decision-scenarios", js)
+        self.assertIn("/decision-sandbox", js)
+        self.assertIn("data-retry-review-agent", js)
+        self.assertIn("reviewAgentOpinionCard", js)
+        self.assertIn("review-agent-evidence-ids", css)
+        self.assertIn("review-agent-runs", css)
         self.assertIn("guarded_case_count", js)
         self.assertIn("证据安全门禁", js)
         self.assertIn("is-evidence-guarded", css)
@@ -165,7 +245,23 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("/api/traces/", js)
         self.assertIn("/api/checkpoints/", js)
         self.assertIn('href="/logo.svg"', html)
-        self.assertIn("Agent评测", html)
+        self.assertIn("评测与价值", html)
+        self.assertIn("业务价值实验室", html)
+        self.assertIn("同一批公开文件", html)
+        self.assertIn("辅助等待（秒）", html)
+        self.assertIn("人工金标入口", html)
+        self.assertIn("价值链覆盖", html)
+        self.assertIn("现场检索挑战", html)
+        self.assertIn("合作方尽调", html)
+        self.assertIn("情景训练演练", html)
+        self.assertIn("businessDirectionCoverage", js)
+        self.assertIn("businessMetricCard", js)
+        self.assertIn("businessValuePercent", js)
+        self.assertIn("baseline_omissions", js)
+        self.assertIn("gold_standard_url", js)
+        self.assertIn("business-value-lab", css)
+        self.assertIn("business-direction-item", css)
+        self.assertIn("business-sample-row", css)
         self.assertIn("用户记忆", html)
         self.assertIn('id="runHistoryBody"', html)
         self.assertIn('id="subscriptionPageBody"', html)
@@ -184,6 +280,27 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn('id="organizationGroupDialog"', html)
         self.assertIn('id="organizationConvertDialog"', html)
         self.assertIn('id="organizationReportDelivery"', html)
+        self.assertIn("企业投标记忆体", html)
+        self.assertIn('id="bidMemoryDashboard"', html)
+        self.assertIn("renderBidMemoryGraph", js)
+        self.assertIn("相似项目与经验推荐", js)
+        self.assertIn("永不生成伪胜率", js)
+        self.assertIn("data-archive-bid-memory", js)
+        self.assertIn("/bid-memory/archive", js)
+        self.assertIn("/bid-memory/assets/", js)
+        self.assertIn(".bid-memory-cockpit", css)
+        self.assertIn(".bid-memory-node.type-target", css)
+        self.assertIn('id="radarView"', html)
+        self.assertIn("全国与全球机会雷达", html)
+        self.assertIn('id="radarMap"', html)
+        self.assertIn("数据源可信度地图", html)
+        self.assertIn("renderOpportunityRadar", js)
+        self.assertIn("radarWorldBackground", js)
+        self.assertIn("radarChinaBackground", js)
+        self.assertIn("/api/opportunity-radar", js)
+        self.assertIn("data-radar-query-location", js)
+        self.assertIn("radar-motion-off", css)
+        self.assertIn("radar-presentation", css)
         self.assertNotIn('id="memoryDigest"', html)
         self.assertIn('id="memoryProfile"', html)
         self.assertIn('id="memoryGeneratedAdvice"', html)
@@ -328,6 +445,30 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn(".organization-convert-grid", css)
         self.assertIn(".smart-card", css)
         self.assertIn(".opportunity-detail-dialog", css)
+        self.assertIn(".digital-twin-cockpit", css)
+        self.assertIn(".digital-twin-score-grid", css)
+        self.assertIn(".digital-twin-flow", css)
+        self.assertIn("来源可信关系", js)
+        self.assertIn("/source-relations", js)
+        self.assertIn("renderSourceRelationGraph", js)
+        self.assertIn("data-source-relation-decision", js)
+        self.assertIn("拆分并锁定", js)
+        self.assertIn(".source-relation-shell", css)
+        self.assertIn(".source-relation-graph", css)
+        self.assertIn(".source-relation-conflicts", css)
+        self.assertIn(".decision-sandbox-shell", css)
+        self.assertIn(".sandbox-dual-cockpit", css)
+        self.assertIn(".decision-sandbox-impact-grid", css)
+        self.assertIn('id="evidenceMicroscopeDialog"', html)
+        self.assertIn("/evidence-microscope", js)
+        self.assertIn("data-open-evidence-microscope", js)
+        self.assertIn("renderEvidenceMicroscope", js)
+        self.assertIn("renderHighlightedEvidence", js)
+        self.assertIn("为什么不同意", js)
+        self.assertIn("规则证据审阅", js)
+        self.assertIn(".evidence-microscope-dialog", css)
+        self.assertIn(".evidence-chain-visual", css)
+        self.assertIn(".evidence-split-view", css)
         self.assertIn(".opportunity-outcome-dialog", css)
         self.assertIn(".opportunity-facts-form", css)
         self.assertIn(".opportunity-requirement-ledger", css)
@@ -337,6 +478,10 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn(".opportunity-revision-history", css)
         self.assertIn(".change-impact-grid", css)
         self.assertIn(".war-room-plan", css)
+        self.assertIn(".war-room-command-head", css)
+        self.assertIn(".war-room-journey", css)
+        self.assertIn(".war-room-resource-grid", css)
+        self.assertIn(".war-room-receipt-list", css)
         self.assertIn(".collaboration-note-form", css)
         self.assertIn(".requirement-review-board", css)
         self.assertIn(".review-agent-panel", css)
@@ -368,6 +513,118 @@ class WebStaticTests(unittest.TestCase):
         self.assertIn("white-space: normal", css)
         self.assertIn("overflow-y: auto", css)
         self.assertIn("grid-template-rows: minmax(280px, 42vh) auto", css)
+
+    def test_direction_fifteen_visual_system_has_runtime_acceptance_contract(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "web" / "dist" / "index.html").read_text(encoding="utf-8")
+        js = (root / "web" / "dist" / "app.js").read_text(encoding="utf-8")
+        css = (root / "web" / "dist" / "styles.css").read_text(encoding="utf-8")
+
+        for token in (
+            "--tt-verified", "--tt-review", "--tt-gap", "--tt-system", "--tt-human",
+            "--tt-font-status", "--tt-motion-productive", "--tt-motion-expressive",
+        ):
+            self.assertIn(token, css)
+        self.assertIn('id="motionToggleButton"', html)
+        self.assertIn('id="presentationModeButton"', html)
+        self.assertIn('id="visualAuditButton"', html)
+        self.assertIn('id="visualAuditResults"', html)
+        self.assertIn("semanticStateTag", js)
+        self.assertIn("renderVisualIdentityStrip", js)
+        self.assertIn("runVisualSystemAuditProfile", js)
+        self.assertIn("/api/visual-system/audits", js)
+        self.assertIn("getComputedStyle", js)
+        self.assertIn("critical_overflows", js)
+        self.assertIn("min_status_font_px", js)
+        self.assertIn("autoVisualAudit", js)
+        self.assertIn('"projector_1440", 1440, 900', js)
+        self.assertIn('"full_hd_1920", 1920, 1080', js)
+        self.assertIn(":focus-visible", css)
+        self.assertIn(".presentation-mode", css)
+        self.assertIn("@media (min-width: 1600px)", css)
+        self.assertIn("@media (max-width: 1500px)", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
+        self.assertIn(".motion-disabled *", css)
+        self.assertIn(".radar-rings i,", css)
+        self.assertIn("animation: none", css)
+
+    def test_direction_eighteen_training_center_has_auditable_contract(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "web" / "dist" / "index.html").read_text(encoding="utf-8")
+        js = (root / "web" / "dist" / "app.js").read_text(encoding="utf-8")
+        css = (root / "web" / "dist" / "styles.css").read_text(encoding="utf-8")
+
+        for token in (
+            'data-view="trainingView">训练',
+            'id="trainingView"',
+            'id="trainingScenarioList"',
+            'id="trainingSetupForm"',
+            'id="trainingPhaseRail"',
+            'id="trainingStage"',
+            'id="trainingReport"',
+            'id="trainingEvidenceList"',
+            'id="trainingTeamReadiness"',
+            'id="trainingHistory"',
+        ):
+            self.assertIn(token, html)
+        for phase in ("开场", "基础事实", "证据追问", "风险变化", "行动计划", "总结"):
+            self.assertIn(phase, html)
+        self.assertIn("准备模式 · 不提前给答案", html)
+        self.assertIn("学习模式 · 分层提示", html)
+        self.assertIn("模拟回答和场景变化不会写回正式公告", html)
+        for endpoint in (
+            "/api/training/scenarios",
+            "/api/training/sessions",
+            "/api/training/team-readiness",
+            "/recompute",
+            "/sync-feishu",
+        ):
+            self.assertIn(endpoint, js)
+        self.assertIn("FIVE-DIMENSION REPORT", js)
+        self.assertIn("展开完整训练回放", js)
+        self.assertIn("正式项目写入", js)
+        self.assertIn("state.trainingSession = null", js)
+        self.assertIn(".training-command", css)
+        self.assertIn(".training-phase-rail", css)
+        self.assertIn(".training-replay", css)
+        self.assertIn("@media (max-width: 1250px)", css)
+        self.assertIn("@media (max-width: 900px)", css)
+        self.assertIn("@media (max-width: 560px)", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
+
+    def test_national_finals_home_connects_the_product_story_without_hiding_tools(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "web" / "dist" / "index.html").read_text(encoding="utf-8")
+        js = (root / "web" / "dist" / "app.js").read_text(encoding="utf-8")
+        css = (root / "web" / "dist" / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="finalsHomeView" class="view active"', html)
+        self.assertIn("从公开机会，到可执行的投标决策", html)
+        for label in ("机会", "项目", "企业", "战情图", "训练", "协作"):
+            self.assertIn(f">{label}</button>", html)
+        self.assertIn("<summary>更多工具</summary>", html)
+        for tool in ("检索工作台", "评委挑战", "演示控制台", "数据源", "评测与价值", "设置"):
+            self.assertIn(tool, html)
+        for section in ("发现机会", "判断局面", "进入行动", "四层架构", "7-MINUTE ROUTE", "DATA FEASIBILITY"):
+            self.assertIn(section, html)
+        for identifier in (
+            "finalsHomeIntentForm",
+            "finalsHomeOpportunityCount",
+            "finalsHomeScoreGrid",
+            "finalsHomeActions",
+            "finalsHomeSourceBoundary",
+        ):
+            self.assertIn(f'id="{identifier}"', html)
+        self.assertIn("refreshFinalsHome", js)
+        self.assertIn("/api/demo-reliability?compact=true", js)
+        self.assertIn("routeFinalsIntent", js)
+        self.assertIn("openFinalsPrimaryCase", js)
+        self.assertIn(".finals-home-shell", css)
+        self.assertIn(".finals-architecture-flow", css)
+        self.assertIn(".finals-roadshow-route", css)
+        self.assertIn("@media (max-width: 980px)", css)
+        self.assertIn("@media (max-width: 620px)", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
 
 
 if __name__ == "__main__":

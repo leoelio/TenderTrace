@@ -1,16 +1,16 @@
 {
   "status": "pass",
-  "generated_at": "2026-09-05T14:34:00",
+  "generated_at": "2026-09-29T14:56:37",
   "counts": {
     "pass": 9,
-    "warn": 1,
+    "warn": 2,
     "fail": 0
   },
   "checks": [
     {
       "name": "model_doctor",
       "status": "pass",
-      "detail": "mode=cloud/openai/gpt-5.5"
+      "detail": "mode=local/ollama/qwen3:8b"
     },
     {
       "name": "sources",
@@ -20,22 +20,27 @@
     {
       "name": "finished_runs",
       "status": "pass",
-      "detail": "108 finished runs, 34 distinct queries"
+      "detail": "25 finished runs, 9 distinct queries"
     },
     {
       "name": "word_outbox",
       "status": "warn",
-      "detail": "最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051432.docx missing visible terms: 标题, 发布时间, 来源链接, 核心内容"
+      "detail": "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609280900.docx missing visible terms: 标题, 发布时间, 来源链接, 核心内容"
     },
     {
       "name": "trace_flow",
       "status": "pass",
-      "detail": "required trace tools present in run 2b4e6015-8635-4455-93fd-9526bafa000f; optional=['llm.intent_enhancer', 'pipeline.attachment_extract']"
+      "detail": "required trace tools present in run 4f3cea56-caad-4685-8532-c27b8468cd9a; optional=['llm.intent_enhancer', 'pipeline.attachment_extract']"
+    },
+    {
+      "name": "gold_recall",
+      "status": "warn",
+      "detail": "Gold Recall@K requires human annotation: 0/10 cases ready"
     },
     {
       "name": "subscription_incremental",
       "status": "pass",
-      "detail": "4 active subscriptions, 43 sent_history records"
+      "detail": "1 active subscriptions, 5 sent_history records"
     },
     {
       "name": "demo_video_file",
@@ -45,7 +50,7 @@
     {
       "name": "submission_package",
       "status": "pass",
-      "detail": "TenderTrace_submission_202608161330.zip passed package safety scan"
+      "detail": "TenderTrace_submission_202609250033.zip passed package safety scan"
     },
     {
       "name": "ci_config",
@@ -60,168 +65,88 @@
   ],
   "evidence": {
     "outputs_docx": [
-      "上海服务器市场价格与竞争情报专项报告_202608150417.docx",
-      "最近10天全国设备招标信息都有哪些_202607061138.docx",
-      "最近10天全国设备招标信息都有哪些_202607061153.docx",
-      "最近10天全国设备招标信息都有哪些_202607061156.docx",
-      "最近10天全国设备招标信息都有哪些_202607061830.docx",
-      "最近10天全国设备招标信息都有哪些_202607061910.docx",
-      "最近10天的全国区域内的招标信息都有哪些_202607062227.docx",
-      "最近10天的宁夏区域内的招标信息都有哪些_202607062230.docx",
-      "最近1个月 EBRD water_202608161200.docx",
-      "最近1个月 EBRD water_202608161205.docx",
-      "最近1个月 EBRD water_202608161210.docx",
-      "最近1个月上海服务器采购信息_202608160552.docx",
-      "最近1个月全球服务器招标信息都有哪些_202608150541.docx",
-      "最近1个月联合国采购服务器信息_202608160536.docx",
-      "最近2个月亚洲开发银行 security 招标信息_202608160846.docx",
-      "最近2个月非洲开发银行 security 招标信息_202608160903.docx",
-      "最近30天美洲开发银行 angiografos 招标信息_202608160718.docx",
-      "最近30天英国服务器采购信息_202608160736.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607061048.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607061049.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607070900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607110900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607130900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202608150900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202608160900.docx",
-      "最近36个月北京和上海的空调投标信息都有哪些_202607082111.docx",
-      "最近36个月宁波市的空调或者服务器投标信息都有哪些_202608162215.docx",
-      "最近36个月杭州市的全部投标信息都有哪些_202607062302.docx",
-      "最近36个月杭州市的全部投标信息都有哪些_202607062307.docx",
-      "最近36个月杭州市的服务器投标信息都有哪些_202607062247.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062302.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062305.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062307.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062313.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062325.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062341.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607070900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607110900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607130900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608150900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608160900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608162104.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608162227.docx",
-      "最近36个月浙江省的全部投标信息都有哪些_202607062303.docx",
-      "最近36个月浙江省的全部投标信息都有哪些_202607062305.docx",
-      "最近36个月浙江省的投标信息都有哪些_202607071058.docx",
-      "最近36个月浙江省的服务器投标信息都有哪些_202607062303.docx",
-      "最近36个月的上海区域内的设备招标信息都有哪些_202607061000.docx",
-      "最近36个月的上海区域内的设备招标信息都有哪些_202607061030.docx",
-      "最近36个月的上海区域内的设备招标信息都有哪些_202607061031.docx",
-      "最近36个月的全国区域内的服务器设备招标信息都有哪些_202607062214.docx",
-      "最近36个月的杭州区域内的服务器设备招标信息都有哪些_202607062214.docx",
-      "最近36个月的杭州区域内的空调设备招标信息都有哪些_202607062212.docx",
-      "最近3个月上海市服务器招标信息有哪些_202608150331.docx",
-      "最近3个月上海市服务器招标信息有哪些_202608150333.docx",
-      "最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051431.docx",
-      "最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051432.docx",
-      "最近3个月北京的全部投标信息都有哪些_202607090146.docx",
-      "最近3个月浙江省的投标信息都有哪些_202607080359.docx",
-      "最近3个月浙江省的投标信息都有哪些_202607080403.docx",
-      "最近3个月浙省的投标信息都有哪些_202607080405.docx",
-      "最近3个月湖北省的投标信息都有哪些_202607080413.docx",
-      "最近3个月湖南省的投标信息都有哪些_202607080415.docx",
-      "最近3个月湖省的投标信息都有哪些_202607080407.docx",
-      "最近7天全国服务器招标信息都有哪些_202607061255.docx",
-      "最近7天全国设备招标信息都有哪些_202607061241.docx"
+      "最近12个月全国服务器招标信息都有哪些_202608061526.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608061618.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062300.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062312.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062316.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062329.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062330.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061404.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061452.docx",
+      "最近30天全国服务器采购招标_202609250127.docx",
+      "最近30天全球服务器采购招标_202609250126.docx",
+      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608061253.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061455.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061456.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609240058.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609240900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609250900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609260900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609270900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609280900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609290900.docx",
+      "最近7天全国服务器招标信息_202609250056.docx",
+      "最近三个月全国服务器招标信息_202609231040.docx",
+      "最近的信息_202609250033.docx",
+      "最近的信息_202609250034.docx",
+      "最近的信息_202609260844.docx"
     ],
     "outbox_docx": [
-      "上海服务器市场价格与竞争情报专项报告_202608150417.docx",
-      "最近10天全国设备招标信息都有哪些_202607061138.docx",
-      "最近10天全国设备招标信息都有哪些_202607061153.docx",
-      "最近10天全国设备招标信息都有哪些_202607061156.docx",
-      "最近10天全国设备招标信息都有哪些_202607061830.docx",
-      "最近10天全国设备招标信息都有哪些_202607061910.docx",
-      "最近10天的全国区域内的招标信息都有哪些_202607062227.docx",
-      "最近10天的宁夏区域内的招标信息都有哪些_202607062230.docx",
-      "最近1个月 EBRD water_202608161200.docx",
-      "最近1个月 EBRD water_202608161205.docx",
-      "最近1个月 EBRD water_202608161210.docx",
-      "最近1个月上海服务器采购信息_202608160552.docx",
-      "最近1个月全球服务器招标信息都有哪些_202608150541.docx",
-      "最近1个月联合国采购服务器信息_202608160536.docx",
-      "最近2个月亚洲开发银行 security 招标信息_202608160846.docx",
-      "最近2个月非洲开发银行 security 招标信息_202608160903.docx",
-      "最近30天美洲开发银行 angiografos 招标信息_202608160718.docx",
-      "最近30天英国服务器采购信息_202608160736.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607061048.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607061049.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607070900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607110900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202607130900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202608150900.docx",
-      "最近36个月上海设备招标信息，每天9_00发送给我_202608160900.docx",
-      "最近36个月北京和上海的空调投标信息都有哪些_202607082111.docx",
-      "最近36个月宁波市的空调或者服务器投标信息都有哪些_202608162215.docx",
-      "最近36个月杭州市的全部投标信息都有哪些_202607062302.docx",
-      "最近36个月杭州市的全部投标信息都有哪些_202607062307.docx",
-      "最近36个月杭州市的服务器投标信息都有哪些_202607062247.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062302.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062305.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062307.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062313.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062325.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607062341.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607070900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607110900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202607130900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608150900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608160900.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608162104.docx",
-      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608162227.docx",
-      "最近36个月浙江省的全部投标信息都有哪些_202607062303.docx",
-      "最近36个月浙江省的全部投标信息都有哪些_202607062305.docx",
-      "最近36个月浙江省的投标信息都有哪些_202607071058.docx",
-      "最近36个月浙江省的服务器投标信息都有哪些_202607062303.docx",
-      "最近36个月的上海区域内的设备招标信息都有哪些_202607061000.docx",
-      "最近36个月的上海区域内的设备招标信息都有哪些_202607061030.docx",
-      "最近36个月的上海区域内的设备招标信息都有哪些_202607061031.docx",
-      "最近36个月的全国区域内的服务器设备招标信息都有哪些_202607062214.docx",
-      "最近36个月的杭州区域内的服务器设备招标信息都有哪些_202607062214.docx",
-      "最近36个月的杭州区域内的空调设备招标信息都有哪些_202607062212.docx",
-      "最近3个月上海市服务器招标信息有哪些_202608150331.docx",
-      "最近3个月上海市服务器招标信息有哪些_202608150333.docx",
-      "最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051431.docx",
-      "最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051432.docx",
-      "最近3个月北京的全部投标信息都有哪些_202607090146.docx",
-      "最近3个月浙江省的投标信息都有哪些_202607080359.docx",
-      "最近3个月浙江省的投标信息都有哪些_202607080403.docx",
-      "最近3个月浙省的投标信息都有哪些_202607080405.docx",
-      "最近3个月湖北省的投标信息都有哪些_202607080413.docx",
-      "最近3个月湖南省的投标信息都有哪些_202607080415.docx",
-      "最近3个月湖省的投标信息都有哪些_202607080407.docx",
-      "最近7天全国服务器招标信息都有哪些_202607061255.docx",
-      "最近7天全国设备招标信息都有哪些_202607061241.docx"
+      "最近12个月全国服务器招标信息都有哪些_202608061526.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608061618.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062300.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062312.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062316.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062329.docx",
+      "最近12个月全国服务器招标信息都有哪些_202608062330.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061404.docx",
+      "最近1个月的上海服务器招标信息都有哪些_202608061452.docx",
+      "最近30天全国服务器采购招标_202609250127.docx",
+      "最近30天全球服务器采购招标_202609250126.docx",
+      "最近36个月杭州市的空调或者服务器投标信息都有哪些_202608061253.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061455.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202608061456.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609240058.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609240900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609250900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609260900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609270900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609280900.docx",
+      "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609290900.docx",
+      "最近7天全国服务器招标信息_202609250056.docx",
+      "最近三个月全国服务器招标信息_202609231040.docx",
+      "最近的信息_202609250033.docx",
+      "最近的信息_202609250034.docx",
+      "最近的信息_202609260844.docx"
     ],
     "video_files": [
       "docs\\demo\\demo演示视频.mp4"
     ],
-    "finished_run_count": 108,
-    "distinct_finished_queries": 34,
-    "active_subscription_count": 4,
-    "sent_history_count": 43,
-    "outbox_message_count": 107,
+    "finished_run_count": 25,
+    "distinct_finished_queries": 9,
+    "active_subscription_count": 1,
+    "sent_history_count": 5,
+    "outbox_message_count": 26,
     "latest_finished_run": {
-      "id": "2b4e6015-8635-4455-93fd-9526bafa000f",
-      "subscription_id": "306ff6d7-264c-4bd3-b74c-ca746b638e4b",
-      "original_query": "最近3个月上海服务器招标信息都有哪些，每天9:00发送给我",
+      "id": "4f3cea56-caad-4685-8532-c27b8468cd9a",
+      "subscription_id": "be3fb983-da7f-4eac-96a6-e60cfe6b000e",
+      "original_query": "最近3个月上海服务器招标信息都有哪些，请汇总后每天9:00发送给我",
       "status": "finished",
-      "output_docx_path": "D:\\比赛\\超聚变\\outputs\\最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051432.docx",
+      "output_docx_path": "E:\\tt\\outputs\\最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609280900.docx",
       "stats": {
         "notice_count": 0,
         "trace_events": 33,
-        "collected": 6,
+        "collected": 2,
         "local_retrieved": 0,
-        "source_collected": 3,
+        "source_collected": 1,
         "deduped": 0,
         "source_sites": [],
         "source_stats": [
           {
             "source": "local_fts5",
             "status": "finished",
-            "count": 3,
+            "count": 1,
             "relaxed_city": false,
             "engine": "fts5",
             "vector_status": "disabled",
@@ -317,40 +242,40 @@
           },
           {
             "source": "ccgp",
-            "status": "finished",
+            "status": "failed",
             "count": 0,
-            "error": null,
+            "error": "FetchError: TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.ccgp.gov.cn/cggg/zygg/gkzb/\", waiting until \"domcontentloaded\"\n",
             "relaxed_city": false,
             "fetch_stats": {
-              "requests": 4,
-              "succeeded": 4,
-              "failed": 0,
-              "blocked": 0,
-              "retries": 0,
+              "requests": 1,
+              "succeeded": 0,
+              "failed": 1,
+              "blocked": 1,
+              "retries": 2,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 101,
+              "avg_elapsed_ms": 79,
               "status_codes": {
-                "200": 4
+                "403": 1
               },
-              "last_error": ""
+              "last_error": "TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.ccgp.gov.cn/cggg/zygg/gkzb/\", waiting until \"domcontentloaded\"\n"
             }
           },
           {
             "source": "ggzy",
             "status": "finished",
-            "count": 3,
+            "count": 1,
             "error": null,
             "relaxed_city": false,
             "fetch_stats": {
-              "requests": 7,
-              "succeeded": 7,
+              "requests": 3,
+              "succeeded": 3,
               "failed": 0,
               "blocked": 0,
               "retries": 0,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 126,
+              "avg_elapsed_ms": 525,
               "status_codes": {
-                "200": 7
+                "200": 3
               },
               "last_error": ""
             }
@@ -368,7 +293,7 @@
               "blocked": 0,
               "retries": 0,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 552,
+              "avg_elapsed_ms": 1322,
               "status_codes": {
                 "200": 3
               },
@@ -388,7 +313,7 @@
               "blocked": 0,
               "retries": 0,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 226,
+              "avg_elapsed_ms": 729,
               "status_codes": {
                 "200": 4
               },
@@ -397,34 +322,34 @@
           },
           {
             "source": "qianlima",
-            "status": "failed",
-            "count": 0,
-            "error": "RuntimeError: qianlima login session expired; run login-qianlima again",
+            "status": "finished",
+            "count": 1,
+            "error": null,
             "relaxed_city": false,
             "fetch_stats": {
-              "requests": 1,
-              "succeeded": 0,
-              "failed": 1,
-              "blocked": 1,
+              "requests": 3,
+              "succeeded": 3,
+              "failed": 0,
+              "blocked": 0,
               "retries": 0,
-              "browser_fallbacks": 1,
-              "avg_elapsed_ms": 2407,
+              "browser_fallbacks": 3,
+              "avg_elapsed_ms": 26083,
               "status_codes": {
-                "200": 1
+                "200": 3
               },
-              "last_error": "qianlima member APIs rejected saved session"
+              "last_error": ""
             }
           }
         ],
         "region_scope": {},
         "retrieval_engine": "fts5",
-        "pre_skipped_sent": 5,
+        "pre_skipped_sent": 2,
         "raw_count": 0,
         "cleaned_count": 0,
         "cluster_count": 0,
         "duplicates_removed": 0,
         "new": 0,
-        "skipped_sent": 5,
+        "skipped_sent": 2,
         "repair_rounds": 1,
         "attachments_seen": 0,
         "attachments_attempted": 0,
@@ -492,13 +417,18 @@
           "created_count": 0,
           "updated_count": 0,
           "message": "no notices to sync",
-          "table_id": "tblVrStqFndFEh9n",
+          "table_id": "[redacted]",
           "app_token_configured": true
         },
         "feishu_message_delivery": {
-          "status": "skipped",
-          "file_name": "最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051432.docx",
-          "reason": "feishu channel not selected"
+          "status": "sent",
+          "file_name": "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609280900.docx",
+          "attempt_id": "681e038b-91aa-4109-a7cf-3663e2b74c80",
+          "message_id": "om_x100b64af821954a4b4a4ccbd69381d7",
+          "error": null,
+          "digest_status": "sent",
+          "digest_message_id": "om_x100b64af822e38b0b1acad6215032e3",
+          "digest_error": null
         }
       }
     },
@@ -525,24 +455,24 @@
       "delivery.feishu_message"
     ],
     "trace_evidence_run": {
-      "id": "2b4e6015-8635-4455-93fd-9526bafa000f",
-      "subscription_id": "306ff6d7-264c-4bd3-b74c-ca746b638e4b",
-      "original_query": "最近3个月上海服务器招标信息都有哪些，每天9:00发送给我",
+      "id": "4f3cea56-caad-4685-8532-c27b8468cd9a",
+      "subscription_id": "be3fb983-da7f-4eac-96a6-e60cfe6b000e",
+      "original_query": "最近3个月上海服务器招标信息都有哪些，请汇总后每天9:00发送给我",
       "status": "finished",
-      "output_docx_path": "D:\\比赛\\超聚变\\outputs\\最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051432.docx",
+      "output_docx_path": "E:\\tt\\outputs\\最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609280900.docx",
       "stats": {
         "notice_count": 0,
         "trace_events": 33,
-        "collected": 6,
+        "collected": 2,
         "local_retrieved": 0,
-        "source_collected": 3,
+        "source_collected": 1,
         "deduped": 0,
         "source_sites": [],
         "source_stats": [
           {
             "source": "local_fts5",
             "status": "finished",
-            "count": 3,
+            "count": 1,
             "relaxed_city": false,
             "engine": "fts5",
             "vector_status": "disabled",
@@ -638,40 +568,40 @@
           },
           {
             "source": "ccgp",
-            "status": "finished",
+            "status": "failed",
             "count": 0,
-            "error": null,
+            "error": "FetchError: TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.ccgp.gov.cn/cggg/zygg/gkzb/\", waiting until \"domcontentloaded\"\n",
             "relaxed_city": false,
             "fetch_stats": {
-              "requests": 4,
-              "succeeded": 4,
-              "failed": 0,
-              "blocked": 0,
-              "retries": 0,
+              "requests": 1,
+              "succeeded": 0,
+              "failed": 1,
+              "blocked": 1,
+              "retries": 2,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 101,
+              "avg_elapsed_ms": 79,
               "status_codes": {
-                "200": 4
+                "403": 1
               },
-              "last_error": ""
+              "last_error": "TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.ccgp.gov.cn/cggg/zygg/gkzb/\", waiting until \"domcontentloaded\"\n"
             }
           },
           {
             "source": "ggzy",
             "status": "finished",
-            "count": 3,
+            "count": 1,
             "error": null,
             "relaxed_city": false,
             "fetch_stats": {
-              "requests": 7,
-              "succeeded": 7,
+              "requests": 3,
+              "succeeded": 3,
               "failed": 0,
               "blocked": 0,
               "retries": 0,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 126,
+              "avg_elapsed_ms": 525,
               "status_codes": {
-                "200": 7
+                "200": 3
               },
               "last_error": ""
             }
@@ -689,7 +619,7 @@
               "blocked": 0,
               "retries": 0,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 552,
+              "avg_elapsed_ms": 1322,
               "status_codes": {
                 "200": 3
               },
@@ -709,7 +639,7 @@
               "blocked": 0,
               "retries": 0,
               "browser_fallbacks": 0,
-              "avg_elapsed_ms": 226,
+              "avg_elapsed_ms": 729,
               "status_codes": {
                 "200": 4
               },
@@ -718,34 +648,34 @@
           },
           {
             "source": "qianlima",
-            "status": "failed",
-            "count": 0,
-            "error": "RuntimeError: qianlima login session expired; run login-qianlima again",
+            "status": "finished",
+            "count": 1,
+            "error": null,
             "relaxed_city": false,
             "fetch_stats": {
-              "requests": 1,
-              "succeeded": 0,
-              "failed": 1,
-              "blocked": 1,
+              "requests": 3,
+              "succeeded": 3,
+              "failed": 0,
+              "blocked": 0,
               "retries": 0,
-              "browser_fallbacks": 1,
-              "avg_elapsed_ms": 2407,
+              "browser_fallbacks": 3,
+              "avg_elapsed_ms": 26083,
               "status_codes": {
-                "200": 1
+                "200": 3
               },
-              "last_error": "qianlima member APIs rejected saved session"
+              "last_error": ""
             }
           }
         ],
         "region_scope": {},
         "retrieval_engine": "fts5",
-        "pre_skipped_sent": 5,
+        "pre_skipped_sent": 2,
         "raw_count": 0,
         "cleaned_count": 0,
         "cluster_count": 0,
         "duplicates_removed": 0,
         "new": 0,
-        "skipped_sent": 5,
+        "skipped_sent": 2,
         "repair_rounds": 1,
         "attachments_seen": 0,
         "attachments_attempted": 0,
@@ -813,13 +743,18 @@
           "created_count": 0,
           "updated_count": 0,
           "message": "no notices to sync",
-          "table_id": "tblVrStqFndFEh9n",
+          "table_id": "[redacted]",
           "app_token_configured": true
         },
         "feishu_message_delivery": {
-          "status": "skipped",
-          "file_name": "最近3个月上海服务器招标信息都有哪些，每天9_00发送给我_202609051432.docx",
-          "reason": "feishu channel not selected"
+          "status": "sent",
+          "file_name": "最近3个月上海服务器招标信息都有哪些，请汇总后每天9_00发送给我_202609280900.docx",
+          "attempt_id": "681e038b-91aa-4109-a7cf-3663e2b74c80",
+          "message_id": "om_x100b64af821954a4b4a4ccbd69381d7",
+          "error": null,
+          "digest_status": "sent",
+          "digest_message_id": "om_x100b64af822e38b0b1acad6215032e3",
+          "digest_error": null
         }
       }
     },
@@ -849,25 +784,25 @@
       "status": "pass",
       "live": false,
       "counts": {
-        "pass": 3,
-        "warn": 0,
+        "pass": 2,
+        "warn": 1,
         "fail": 0
       },
       "checks": [
         {
           "name": "provider",
           "status": "pass",
-          "detail": "cloud/openai/gpt-5.5"
+          "detail": "local/ollama/qwen3:8b"
         },
         {
           "name": "local_dependency",
           "status": "pass",
-          "detail": "Ollama is not required while TENDERTRACE_MODEL_MODE=cloud"
+          "detail": "Ollama is required only when local enhancement is enabled and invoked"
         },
         {
           "name": "enhancement",
-          "status": "pass",
-          "detail": "model enhancement is enabled"
+          "status": "warn",
+          "detail": "model enhancement is disabled; runs will use deterministic rule parsing"
         }
       ]
     },
@@ -882,28 +817,101 @@
       },
       {
         "site": "qianlima",
-        "storage_state_path": "D:\\比赛\\超聚变\\secrets\\qianlima_storage_state.json",
+        "storage_state_path": "E:\\tt\\secrets\\qianlima_storage_state.json",
         "exists": true,
-        "size": 7828,
-        "modified_at": "2026-07-06T21:51:45",
+        "size": 8272,
+        "modified_at": "2026-09-25T00:55:00",
         "validation": "ready",
         "detail": "qianlima storage_state structure is ready",
         "ready": true,
-        "cookie_count": 29,
+        "cookie_count": 31,
         "origin_count": 2,
-        "qianlima_cookie_count": 28,
-        "qianlima_origin_count": 2
+        "qianlima_cookie_count": 30,
+        "qianlima_origin_count": 2,
+        "health_status": "healthy"
       }
     ],
+    "gold_coverage": {
+      "available": false,
+      "complete": false,
+      "gold_path": "E:\\tt\\docs\\evaluation\\gold_benchmark.json",
+      "case_count": 10,
+      "annotated_case_count": 0,
+      "empty_case_count": 10,
+      "expected_total": 0,
+      "annotation_completion": 0.0,
+      "cases": [
+        {
+          "id": "gold-001",
+          "query": "最近1个月上海充电桩招标信息有哪些",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-002",
+          "query": "2026年3月份上海充电设施招标信息都有哪些",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-003",
+          "query": "最近3个月苏州服务器采购招标公告",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-004",
+          "query": "最近6个月成都医疗设备招标信息有哪些",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-005",
+          "query": "最近36个月杭州市的空调或者服务器投标信息都有哪些",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-006",
+          "query": "最近2个月安徽省信创服务器招标信息有哪些",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-007",
+          "query": "2026年4月份北京新能源充电站相关招标信息有哪些",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-008",
+          "query": "最近1个月广州电梯维保招标公告",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-009",
+          "query": "最近90天深圳网络设备采购项目招标信息",
+          "status": "needs_annotation",
+          "expected_count": 0
+        },
+        {
+          "id": "gold-010",
+          "query": "最近1个月郑州消防设备招标信息有哪些",
+          "status": "needs_annotation",
+          "expected_count": 0
+        }
+      ]
+    },
     "submission_package": {
       "status": "scanned",
-      "path": "D:\\比赛\\超聚变\\dist\\TenderTrace_submission_202608161330.zip",
+      "path": "E:\\tt\\dist\\TenderTrace_submission_202609250033.zip",
       "forbidden_entry_count": 0,
       "secret_hit_count": 0,
       "secret_findings": []
     },
     "ci_config": {
-      "path": "D:\\比赛\\超聚变\\.github\\workflows\\ci.yml",
+      "path": "E:\\tt\\.github\\workflows\\ci.yml",
       "exists": true
     },
     "api_security": {

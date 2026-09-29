@@ -6,6 +6,7 @@ from tendertrace.adapters.ungm import (
     UngmAdapter,
     build_search_body,
     enrich_from_detail,
+    parse_request_verification_token,
     parse_search_results,
 )
 
@@ -36,6 +37,11 @@ DETAIL_HTML = """
 
 
 class UngmAdapterTests(unittest.TestCase):
+    def test_parse_request_verification_token(self) -> None:
+        html = '<input name="__RequestVerificationToken" type="hidden" value="token-123" />'
+
+        self.assertEqual(parse_request_verification_token(html), "token-123")
+
     def test_build_search_body_uses_term_window_and_page(self) -> None:
         body = build_search_body(
             {

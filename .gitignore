@@ -25,6 +25,7 @@ outbox/
 snapshots/
 traces/
 logs/
+/tmp/
 /dist/
 *.zip
 *.rar

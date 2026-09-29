@@ -136,6 +136,34 @@ class FeishuWarRoomTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertFalse(called)
 
+    def test_operational_api_routes_forward_actor_and_return_receipts(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            _insert_notice(settings)
+            payload = {"status": "finished", "session": {"status": "started"}}
+            with (
+                patch.object(api_module.Settings, "load", return_value=settings),
+                patch.object(api_module, "retry_war_room_step", return_value=payload) as retry,
+                patch.object(api_module, "sync_war_room_back", return_value=payload) as sync,
+                patch.object(api_module, "dispatch_war_room_changes", return_value=payload) as dispatch,
+                patch.object(api_module, "archive_war_room", return_value=payload) as archive,
+            ):
+                client = TestClient(api_module.create_app())
+                responses = [
+                    client.post("/api/opportunities/notice-1/war-room/steps/group_card/retry", json={"actor": "李经理"}),
+                    client.post("/api/opportunities/notice-1/war-room/sync-back", json={"actor": "李经理"}),
+                    client.post("/api/opportunities/notice-1/war-room/dispatch-changes", json={"actor": "李经理"}),
+                    client.post("/api/opportunities/notice-1/war-room/archive", json={"actor": "李经理"}),
+                ]
+
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        retry.assert_called_once_with(settings, "notice-1", "group_card", actor="李经理")
+        sync.assert_called_once_with(settings, "notice-1", actor="李经理")
+        dispatch.assert_called_once_with(settings, "notice-1", actor="李经理")
+        archive.assert_called_once_with(settings, "notice-1", actor="李经理")
+
 
 def _settings(root: Path) -> Settings:
     (root / ".env.local").write_text(

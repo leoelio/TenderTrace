@@ -1,0 +1,20 @@
+{
+  "notice_id": "demo-direction5-capability-passport",
+  "title": "政务云企业能力护照与逐项匹配矩阵",
+  "passport_count": 13,
+  "verified_passport_count": 11,
+  "supported_count": 3,
+  "conflict_count": 1,
+  "recheck_count": 1,
+  "alert_count": 11,
+  "open_gap_action_count": 1,
+  "similar_case_count": 3,
+  "digital_twin_passport_count": 13,
+  "proof": {
+    "exact_model_supported": true,
+    "near_model_conflict": true,
+    "expired_certificate_recheck": true,
+    "gap_action_in_workplan": true,
+    "six_evidence_classes": true
+  }
+}

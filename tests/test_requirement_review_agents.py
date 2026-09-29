@@ -227,7 +227,7 @@ class RequirementReviewAgentsTests(unittest.TestCase):
                 settings,
                 capability_key="CAP-SERVER-01",
                 title="服务器规格书",
-                capability_type="product",
+                capability_type="qualification_certificate",
                 evidence_text="规格书列明服务器配置与性能参数。",
                 source_url="https://example.com/cap-server",
                 source_locator="规格书第 2 页",
@@ -380,6 +380,7 @@ def _requirement(settings: Settings):
         source_locator="招标文件第 3 页",
         mandatory=False,
         confidence=55,
+        status="confirmed",
         actor="测试",
     )
 

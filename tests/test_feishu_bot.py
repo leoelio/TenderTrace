@@ -153,6 +153,57 @@ class FeishuBotTests(unittest.TestCase):
         self.assertIn("register_p2_im_message_receive_v1", source)
         self.assertIn("register_p2_card_action_trigger", source)
 
+    def test_overview_accepts_long_connection_for_card_callbacks(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from tendertrace.app import api as api_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = {
+                "TENDERTRACE_DB_PATH": str(root / "data" / "db.sqlite3"),
+                "TENDERTRACE_OUTPUTS_DIR": str(root / "outputs"),
+                "TENDERTRACE_OUTBOX_DIR": str(root / "outbox"),
+                "TENDERTRACE_SNAPSHOTS_DIR": str(root / "snapshots"),
+                "TENDERTRACE_TRACES_DIR": str(root / "traces"),
+                "TENDERTRACE_SECRETS_DIR": str(root / "secrets"),
+                "TENDERTRACE_SCHEDULER_ENABLED": "false",
+                "FEISHU_ENABLED": "true",
+                "FEISHU_APP_ID": "test-app-id",
+                "FEISHU_APP_SECRET": "test-app-secret",
+            }
+            previous = {key: os.environ.get(key) for key in values}
+            os.environ.update(values)
+            try:
+                with patch.object(
+                    api_module,
+                    "feishu_listener_status",
+                    return_value={
+                        "status": "running",
+                        "running": True,
+                        "detail": "飞书官方长连接监听中",
+                        "started_at": "2026-09-24 00:00:00",
+                        "heartbeat_at": "2026-09-24 00:00:30",
+                        "stopped_at": "",
+                        "age_seconds": 1,
+                    },
+                ):
+                    with TestClient(api_module.create_app()) as client:
+                        response = client.get("/api/integrations/feishu/overview")
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["features"]["card_callback"]["ready"])
+        self.assertTrue(response.json()["features"]["agent_service"]["ready"])
+        self.assertTrue(response.json()["features"]["agent_service"]["optional"])
+        self.assertFalse(response.json()["features"]["agent_service"]["enabled"])
+        self.assertNotIn("agent", {item["code"] for item in response.json()["issues"]})
+
     def test_accepts_text_event_removes_mention_and_deduplicates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = Settings.load(Path(tmp))

@@ -13,10 +13,11 @@ from tendertrace.fetching import FetchPolicy, ManagedFetcher
 
 
 ADB_NOTICES_URL = "https://www.adb.org/business/institutional-procurement/notices"
+ADB_READER_URL = f"https://r.jina.ai/{ADB_NOTICES_URL}"
 ADB_AUTHORITY = "Asian Development Bank"
 
 
-def parse_notices(html: str) -> list[Notice]:
+def parse_notices(html: str, *, retrieval_via: str = "direct") -> list[Notice]:
     notices: list[Notice] = []
     for row in HTMLParser(html).css("table tbody tr"):
         cells = row.css("td")
@@ -61,6 +62,48 @@ def parse_notices(html: str) -> list[Notice]:
                     "document_url": document_url,
                     "landing_page": ADB_NOTICES_URL,
                     "authority": ADB_AUTHORITY,
+                    "retrieval_via": retrieval_via,
+                },
+            )
+        )
+    if notices:
+        return notices
+    for match in re.finditer(
+        r"^\|\s*\[(?P<title>[^\]]+)\]\((?P<url>https://www\.adb\.org/[^)]+)\).*?"
+        r"\|\s*(?P<start>\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*"
+        r"\|\s*(?P<deadline>.*?)\s*\|$",
+        html,
+        flags=re.MULTILINE,
+    ):
+        title = _clean_spaces(match.group("title"))
+        document_url = match.group("url").strip()
+        start_date = _iso_date(match.group("start"))
+        deadline_text = _clean_spaces(match.group("deadline"))
+        notice_id = _notice_id(document_url)
+        if not notice_id or not title or not start_date:
+            continue
+        content = f"{title} | Published: {start_date} | Deadline: {deadline_text}"
+        notices.append(
+            Notice(
+                id=notice_id,
+                source_site="adb",
+                title=title,
+                publish_time=start_date,
+                region="Asia-Pacific",
+                purchaser=ADB_AUTHORITY,
+                source_url=document_url,
+                content_text=content,
+                core_content=content[:600],
+                attachments=[Attachment(name=title, url=document_url)],
+                fields={
+                    "cluster_key": f"adb:{notice_id}",
+                    "notice_type": title.partition(":")[0],
+                    "deadline": _iso_date(deadline_text),
+                    "deadline_text": deadline_text,
+                    "document_url": document_url,
+                    "landing_page": ADB_NOTICES_URL,
+                    "authority": ADB_AUTHORITY,
+                    "retrieval_via": retrieval_via,
                 },
             )
         )
@@ -76,10 +119,14 @@ class AdbAdapter:
         )
         self.policy = FetchPolicy(
             headers={
-                "User-Agent": "TenderTrace/0.1 (+procurement-intelligence)",
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "en-US,en;q=0.9",
             },
             timeout=timeout,
-            max_retries=2,
+            max_retries=0,
             blocked_markers=blocked_markers,
         )
         self.last_fetch_stats: dict[str, object] = {}
@@ -100,17 +147,46 @@ class AdbAdapter:
         if not terms:
             return []
         with ManagedFetcher(self.policy) as fetcher:
+            response = fetcher.get(ADB_NOTICES_URL)
+            direct_status = response.status_code
+            direct_blocked = response.blocked
+            retrieval_via = "direct"
+            if not response.ok:
+                response = fetcher.get(
+                    ADB_READER_URL,
+                    headers={
+                        "User-Agent": "TenderTrace/0.1 (+public-page-reader)",
+                        "Accept": "text/plain",
+                    },
+                )
+                retrieval_via = "r.jina.ai"
             try:
-                response = fetcher.get(ADB_NOTICES_URL)
                 response.raise_for_status()
-                return [
+                notices = [
                     notice
-                    for notice in parse_notices(response.text)
+                    for notice in parse_notices(response.text, retrieval_via=retrieval_via)
                     if _in_window(notice.publish_time, bidql)
                     and _matches_terms(notice, terms)
                 ][:max_results]
-            finally:
+            except Exception:
                 self.last_fetch_stats = fetcher.stats.to_dict()
+                raise
+            self.last_fetch_stats = fetcher.stats.to_dict()
+            if retrieval_via != "direct":
+                self.last_fetch_stats.update(
+                    {
+                        "requests": 1,
+                        "succeeded": 1,
+                        "failed": 0,
+                        "blocked": 0,
+                        "retries": 0,
+                        "last_error": "",
+                        "reader_fallbacks": 1,
+                        "direct_status_code": direct_status,
+                        "direct_blocked": direct_blocked,
+                    }
+                )
+            return notices
 
 
 def _notice_id(document_url: str) -> str:

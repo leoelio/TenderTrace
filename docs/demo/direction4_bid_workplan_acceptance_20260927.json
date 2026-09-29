@@ -1,0 +1,90 @@
+{
+  "evaluated_at": "2026-09-27",
+  "fixture": "docs/demo/direction4_requirement_gold_cases.json",
+  "case_count": 3,
+  "scope": [
+    "qualification",
+    "deadline",
+    "scoring",
+    "disqualification",
+    "attachment"
+  ],
+  "by_type": {
+    "qualification": {
+      "gold": 4,
+      "predicted": 4,
+      "matched": 4,
+      "precision": 1.0,
+      "recall": 1.0,
+      "human_correction_count": 0
+    },
+    "deadline": {
+      "gold": 2,
+      "predicted": 2,
+      "matched": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "human_correction_count": 0
+    },
+    "scoring": {
+      "gold": 2,
+      "predicted": 2,
+      "matched": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "human_correction_count": 0
+    },
+    "disqualification": {
+      "gold": 4,
+      "predicted": 4,
+      "matched": 4,
+      "precision": 1.0,
+      "recall": 1.0,
+      "human_correction_count": 0
+    },
+    "attachment": {
+      "gold": 5,
+      "predicted": 5,
+      "matched": 5,
+      "precision": 1.0,
+      "recall": 1.0,
+      "human_correction_count": 0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "ccgp-hainan-monitor-correction-20250812",
+      "source_url": "https://www.ccgp.gov.cn/cggg/dfgg/gzgg/202508/t20250812_25149498.htm",
+      "gold_count": 7,
+      "predicted_count": 7,
+      "matched_count": 7,
+      "human_correction_count": 0,
+      "unmatched_gold": [],
+      "extra_predictions": []
+    },
+    {
+      "case_id": "ccgp-nju-air-conditioner-correction-20250325",
+      "source_url": "https://www.ccgp.gov.cn/cggg/zygg/gzgg/202503/t20250325_24351013.htm",
+      "gold_count": 4,
+      "predicted_count": 4,
+      "matched_count": 4,
+      "human_correction_count": 0,
+      "unmatched_gold": [],
+      "extra_predictions": []
+    },
+    {
+      "case_id": "ccgp-health-medical-equipment-20260529",
+      "source_url": "https://www.ccgp.gov.cn/cggg/zygg/gkzb/202605/t20260529_26657419.htm",
+      "gold_count": 6,
+      "predicted_count": 6,
+      "matched_count": 6,
+      "human_correction_count": 0,
+      "unmatched_gold": [],
+      "extra_predictions": []
+    }
+  ],
+  "guardrails": {
+    "deadline_and_disqualification_require_human_confirmation": true,
+    "no_text_fallback": "ocr_or_manual_required; no structured requirements are fabricated"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "notice_id": "demo-decision-sandbox",
+  "title": "政务云投标决策沙盘",
+  "scenario_ids": [
+    "baaf807d-b784-4458-ac10-46d2c021dc23",
+    "36884cae-86f9-41f8-bd48-5e77bd54cb65"
+  ],
+  "pending_suggestion_id": "e60144d856cface85f81c235",
+  "accepted_suggestion_id": "6cf0c0ae252755a5e76f1cd1",
+  "accepted_task_ids": [
+    "f47895e22673f0610fadbed1"
+  ],
+  "comparison": [
+    "企业匹配：联合伙伴补齐材料 相对 截止提前三天 +23 分。",
+    "投标准备：联合伙伴补齐材料 相对 截止提前三天 +22 分。",
+    "风险项：截止提前三天 1 项，联合伙伴补齐材料 0 项。",
+    "比较结果只说明条件变化，不代表中标概率或最终决策。"
+  ],
+  "proof": {
+    "simulation_kept_formal_state": true,
+    "pending_suggestion_kept_formal_state": true,
+    "human_acceptance_changed_formal_state": true,
+    "same_parameters_recompute_identically": true,
+    "baseline_was_current_during_recompute": true,
+    "two_saved_scenarios": true,
+    "no_win_probability": true,
+    "all_changes_explainable": true,
+    "responsible_confirmation_required": true
+  },
+  "formal_hashes": {
+    "before": "8899f2bb88dd7319833982c730dd7bc8f324039782ffd779bea0b50f2e46a883",
+    "after_simulation": "8899f2bb88dd7319833982c730dd7bc8f324039782ffd779bea0b50f2e46a883",
+    "after_pending": "8899f2bb88dd7319833982c730dd7bc8f324039782ffd779bea0b50f2e46a883",
+    "after_accept": "8b12f6434c2573275859b199450fdcee884de898cb4a4ea761a206c457e045a2"
+  }
+}

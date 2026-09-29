@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-09-29T12:44:58+08:00",
+  "duration_ms": 2021.4,
+  "summary": {
+    "project_count": 4,
+    "scenario_count": 4,
+    "scenario_type_count": 4,
+    "approved_question_count": 24,
+    "benchmark_sample_count": 5,
+    "human_participant_count": 0,
+    "pre_average": 54,
+    "post_average": 98,
+    "average_improvement": 44
+  },
+  "proof": {
+    "three_real_anonymized_projects": true,
+    "four_approved_scenario_types": true,
+    "six_phase_state_machine": true,
+    "deterministic_recompute": true,
+    "formal_project_unchanged": true,
+    "five_approved_pre_post_transcripts": true,
+    "post_scores_improve": true,
+    "model_candidate_does_not_change_rule_score": true,
+    "preparation_hides_reference_answer": true,
+    "voice_is_deferred": true
+  },
+  "failed": [],
+  "status": "passed_with_human_validation_pending",
+  "samples": [
+    {
+      "participant": "样本01",
+      "sample_kind": "approved_transcript",
+      "pre_score": 54,
+      "post_score": 98,
+      "improvement": 44,
+      "pre_result_id": "1da7d9cb1b8be25976a9eda5",
+      "post_result_id": "a7551666743ac0a132b49f18",
+      "pre_recomputed": true,
+      "post_recomputed": true
+    },
+    {
+      "participant": "样本02",
+      "sample_kind": "approved_transcript",
+      "pre_score": 54,
+      "post_score": 98,
+      "improvement": 44,
+      "pre_result_id": "c89a7b61ccf9a0bade7f9220",
+      "post_result_id": "f070dd2a9c90f7762e56c82a",
+      "pre_recomputed": true,
+      "post_recomputed": true
+    },
+    {
+      "participant": "样本03",
+      "sample_kind": "approved_transcript",
+      "pre_score": 54,
+      "post_score": 98,
+      "improvement": 44,
+      "pre_result_id": "26f9ce0f9de6a8fa1528c0da",
+      "post_result_id": "1aed4ae699c06fd43f2ce2d3",
+      "pre_recomputed": true,
+      "post_recomputed": true
+    },
+    {
+      "participant": "样本04",
+      "sample_kind": "approved_transcript",
+      "pre_score": 54,
+      "post_score": 98,
+      "improvement": 44,
+      "pre_result_id": "3f298ff0e31dde402e9a541b",
+      "post_result_id": "dcceae1959bd94123033c417",
+      "pre_recomputed": true,
+      "post_recomputed": true
+    },
+    {
+      "participant": "样本05",
+      "sample_kind": "approved_transcript",
+      "pre_score": 54,
+      "post_score": 98,
+      "improvement": 44,
+      "pre_result_id": "66c4e8cfc43767bb987ae732",
+      "post_result_id": "eee72577a03031b9b180e3ef",
+      "pre_recomputed": true,
+      "post_recomputed": true
+    }
+  ],
+  "demo_url": "http://127.0.0.1:8000/?view=trainingView",
+  "validation_limit": "五份前后测为人工批准的脱敏基准答题文本，用于证明评分稳定和前后可比；它们不是真人用户实验，不能据此宣称真实学习效果。比赛前仍需至少5名真实成员使用同一量表完成前后测。"
+}

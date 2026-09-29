@@ -115,6 +115,7 @@ class AfdbAdapter:
             timeout=timeout,
             max_retries=2,
             blocked_markers=blocked_markers,
+            browser_fallback=True,
         )
         self.last_fetch_stats: dict[str, object] = {}
 

@@ -1,0 +1,116 @@
+{
+  "demo_url": "http://127.0.0.1:8000/?view=trainingView",
+  "seeded": {
+    "created_or_updated": 4,
+    "scenario_count": 4,
+    "project_count": 4,
+    "scenario_types": [
+      "roadshow_pitch",
+      "technical_clarification",
+      "correction_response",
+      "partner_negotiation"
+    ],
+    "scoring_version": "training-rubric-v1"
+  },
+  "summary": {
+    "scenario_count": 4,
+    "project_count": 4,
+    "scenario_type_count": 4,
+    "question_count": 24,
+    "scoring_version": "training-rubric-v1"
+  },
+  "scenarios": [
+    {
+      "id": "9000dca22fb7e8acf7a04a79",
+      "title": "更正公告应急",
+      "project_alias": "全国·采购项目（脱敏）·更正公告应急",
+      "scenario_type": "correction_response",
+      "notice_id": "pbc_procurement:d6378ae8-b730-11f1-88d4-b4055dfb2cc6",
+      "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/2f89bcc881ee411ba1e659d0fba69d7f.html?noticeId=d6378ae8-b730-11f1-88d4-b4055dfb2cc6&noticeType=001031&Type=jzcggg",
+      "roles": [
+        "投标经理",
+        "法务",
+        "项目负责人"
+      ],
+      "question_count": 6,
+      "approved_by": "direction18-curator",
+      "real_notice": true,
+      "anonymized_for_training": true
+    },
+    {
+      "id": "2baa471ce06161f935169e4e",
+      "title": "合作方风险谈判",
+      "project_alias": "四川省·服务器项目（脱敏）·合作方风险谈判",
+      "scenario_type": "partner_negotiation",
+      "notice_id": "ggzy:0051eddfc588cedd4da698903cec566821e7",
+      "source_url": "https://www.ggzy.gov.cn/information/deal/html/a/510000/0203/20260804/0051eddfc588cedd4da698903cec566821e7.html",
+      "roles": [
+        "销售",
+        "法务",
+        "合作负责人"
+      ],
+      "question_count": 6,
+      "approved_by": "direction18-curator",
+      "real_notice": true,
+      "anonymized_for_training": true
+    },
+    {
+      "id": "9b17de535e0c0247126a6feb",
+      "title": "七分钟脱稿答辩",
+      "project_alias": "北京·服务器项目（脱敏）·七分钟脱稿答辩",
+      "scenario_type": "roadshow_pitch",
+      "notice_id": "pbc_procurement:04b40d52-b636-11f1-88d4-b4055dfb2cc6",
+      "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+      "roles": [
+        "主讲人",
+        "项目负责人",
+        "管理者"
+      ],
+      "question_count": 6,
+      "approved_by": "direction18-curator",
+      "real_notice": true,
+      "anonymized_for_training": true
+    },
+    {
+      "id": "f1eb475011f19b074612ffa4",
+      "title": "技术标澄清",
+      "project_alias": "全国·服务器项目（脱敏）·技术标澄清",
+      "scenario_type": "technical_clarification",
+      "notice_id": "pbc_procurement:5e3fd78f-b64c-11f1-88d4-b4055dfb2cc6",
+      "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/2ed7cd579bd2481d8fe218bf9c07b791.html?noticeId=5e3fd78f-b64c-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+      "roles": [
+        "技术负责人",
+        "投标经理",
+        "交付负责人"
+      ],
+      "question_count": 6,
+      "approved_by": "direction18-curator",
+      "real_notice": true,
+      "anonymized_for_training": true
+    }
+  ],
+  "rules": {
+    "scoring_version": "training-rubric-v1",
+    "state_machine": [
+      "opening",
+      "fundamentals",
+      "evidence",
+      "change",
+      "action",
+      "summary"
+    ],
+    "dimensions": {
+      "fact_accuracy": "事实准确",
+      "evidence_citation": "证据引用",
+      "risk_awareness": "风险意识",
+      "action_completeness": "行动完整",
+      "expression_clarity": "表达清晰"
+    },
+    "formal_project_read_only": true,
+    "model_score_affects_result": false,
+    "low_confidence_requires_human_review": true,
+    "preparation_hides_reference_answer": true,
+    "voice_mode": "planned_after_hardware_validation"
+  },
+  "interpretation_boundary": "训练场景读取真实公告快照；模拟变化、回答和评分只写训练对象，不会写回正式项目、人工决策、能力确认或合作方结论。"
+}

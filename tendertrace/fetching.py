@@ -5,9 +5,13 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
 import json
+import os
+import shutil
+import subprocess
 from threading import Lock
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -38,6 +42,7 @@ class FetchPolicy:
         "请登录",
     )
     browser_fallback: bool = False
+    curl_fallback: bool = False
     browser_timeout_ms: int = 30000
     browser_network_idle_timeout_ms: int = 5000
     browser_block_resource_types: tuple[str, ...] = ("image", "media", "font")
@@ -158,6 +163,10 @@ class ManagedFetcher:
         if self._client is None:
             raise RuntimeError("ManagedFetcher must be used as a context manager")
         result = self._request_http(method, url, **kwargs)
+        if self.policy.curl_fallback and _should_try_curl(result):
+            curl_result = self._request_curl(method, url, result.attempt_count, **kwargs)
+            if curl_result.ok or curl_result.status_code:
+                result = curl_result
         if self._should_try_browser(method, result):
             browser_result = self._request_browser(url, attempt_count=result.attempt_count)
             if browser_result.ok:
@@ -239,6 +248,80 @@ class ManagedFetcher:
             error="request was not attempted",
         )
 
+    def _request_curl(
+        self,
+        method: str,
+        url: str,
+        attempt_count: int,
+        **kwargs: Any,
+    ) -> FetchResult:
+        executable = shutil.which("curl.exe" if os.name == "nt" else "curl")
+        if not executable:
+            return _curl_error(method, url, attempt_count, "curl executable was not found")
+        headers = {**self.policy.headers, **dict(kwargs.get("headers") or {})}
+        marker = b"\n__TENDERTRACE_CURL__:"
+        command = [
+            executable,
+            "--silent",
+            "--show-error",
+            "--location",
+            "--max-time",
+            str(max(1, int(self.policy.timeout))),
+            "--request",
+            method.upper(),
+        ]
+        for key, value in headers.items():
+            command.extend(("--header", f"{key}: {value}"))
+        if kwargs.get("json") is not None:
+            command.extend(("--header", "Content-Type: application/json"))
+            command.extend(("--data", json.dumps(kwargs["json"], ensure_ascii=False)))
+        elif kwargs.get("data") is not None:
+            data = kwargs["data"]
+            encoded = urlencode(data, doseq=True) if isinstance(data, dict) else str(data)
+            command.extend(("--data", encoded))
+        command.extend(
+            (
+                "--write-out",
+                "\n__TENDERTRACE_CURL__:%{http_code}\t%{url_effective}\t%{content_type}",
+                url,
+            )
+        )
+        started = time.monotonic()
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=self.policy.timeout + 5,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return _curl_error(method, url, attempt_count, f"{type(exc).__name__}: {exc}")
+        elapsed_ms = _elapsed_ms(started)
+        if completed.returncode != 0:
+            detail = completed.stderr.decode("utf-8", errors="replace").strip()
+            return _curl_error(method, url, attempt_count, f"curl: {detail}", elapsed_ms)
+        body, separator, metadata = completed.stdout.rpartition(marker)
+        if not separator:
+            return _curl_error(method, url, attempt_count, "curl response metadata is missing")
+        status_raw, final_url, content_type = metadata.decode(
+            "utf-8", errors="replace"
+        ).split("\t", 2)
+        status = int(status_raw)
+        text = httpx.Response(status, content=body, headers={"content-type": content_type}).text
+        return FetchResult(
+            url=url,
+            final_url=final_url or url,
+            method=method.upper(),
+            status_code=status,
+            text=text,
+            content_type=content_type,
+            fetched_at=_now_iso(),
+            elapsed_ms=elapsed_ms,
+            attempt_count=attempt_count + 1,
+            fetcher="curl",
+            blocked=_is_blocked(status, text, self.policy),
+        )
+
     def _should_try_browser(self, method: str, result: FetchResult) -> bool:
         if not self.policy.browser_fallback or method.upper() != "GET":
             return False
@@ -270,9 +353,16 @@ class ManagedFetcher:
                     )
                 response = page.goto(
                     url,
-                    wait_until="domcontentloaded",
+                    wait_until="commit",
                     timeout=self.policy.browser_timeout_ms,
                 )
+                try:
+                    page.wait_for_load_state(
+                        "domcontentloaded",
+                        timeout=self.policy.browser_network_idle_timeout_ms,
+                    )
+                except PlaywrightTimeoutError:
+                    pass
                 try:
                     page.wait_for_load_state(
                         "networkidle",
@@ -343,6 +433,33 @@ def _browser_error(url: str, started: float, attempt_count: int, exc: Exception)
         attempt_count=attempt_count + 1,
         fetcher="playwright",
         error=f"{type(exc).__name__}: {exc}",
+    )
+
+
+def _should_try_curl(result: FetchResult) -> bool:
+    error = result.error.casefold()
+    return "ssl" in error and "eof" in error
+
+
+def _curl_error(
+    method: str,
+    url: str,
+    attempt_count: int,
+    error: str,
+    elapsed_ms: int = 0,
+) -> FetchResult:
+    return FetchResult(
+        url=url,
+        final_url=url,
+        method=method.upper(),
+        status_code=0,
+        text="",
+        content_type="",
+        fetched_at=_now_iso(),
+        elapsed_ms=elapsed_ms,
+        attempt_count=attempt_count + 1,
+        fetcher="curl",
+        error=error,
     )
 
 

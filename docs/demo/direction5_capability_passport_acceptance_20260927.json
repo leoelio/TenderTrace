@@ -1,0 +1,51 @@
+{
+  "direction": "提升方向五：企业能力护照与匹配矩阵",
+  "date": "2026-09-27",
+  "status": "passed",
+  "schema_version": 42,
+  "automated_tests": {
+    "pytest_passed": 491,
+    "pytest_subtests_passed": 534,
+    "warnings": 1,
+    "elapsed_seconds": 131.93,
+    "direction5_tests_passed": 4
+  },
+  "runtime": {
+    "base_url": "http://127.0.0.1:8000/",
+    "health": "ok",
+    "passport_api": "ok",
+    "digital_twin_api": "ok"
+  },
+  "acceptance": {
+    "entity_model_expiry_isolation": true,
+    "supported_has_requirement_and_enterprise_evidence": true,
+    "supported_has_version_snapshot": true,
+    "gap_action_enters_workplan_and_flows_back": true,
+    "human_confirmation_overrides_model_and_is_audited": true,
+    "qualification_technical_case_main_examples": true,
+    "six_evidence_classes": true,
+    "near_model_conflict": true,
+    "expired_certificate_recheck": true
+  },
+  "demo": {
+    "notice_id": "demo-direction5-capability-passport",
+    "title": "方向五｜政务云能力护照与逐项匹配矩阵",
+    "passport_count": 11,
+    "verified_passport_count": 10,
+    "supported_count": 3,
+    "conflict_count": 1,
+    "recheck_count": 1,
+    "alert_count": 10,
+    "open_gap_action_count": 1,
+    "similar_case_count": 3,
+    "digital_twin_passport_count": 11,
+    "proof": {
+      "exact_model_supported": true,
+      "near_model_conflict": true,
+      "expired_certificate_recheck": true,
+      "gap_action_in_workplan": true,
+      "six_evidence_classes": true
+    }
+  },
+  "known_limit": "当前 Codex 内置浏览器控制组件路径缺失，无法生成自动页面截图；已完成静态入口、JavaScript、HTTP/API 与真实服务验证。"
+}

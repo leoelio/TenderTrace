@@ -1,0 +1,30 @@
+{
+  "case_notice_id": "pbc_procurement:d6378ae8-b730-11f1-88d4-b4055dfb2cc6",
+  "before_notice_count": 45,
+  "after_notice_count": 45,
+  "notice_count_unchanged": true,
+  "real_public_urls": [
+    "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/d0a8656e551c463f86d04bea9e2163a4.html?Type=jzcggg&noticeId=f935b668-adb8-11f1-88d4-b4055dfb2cc6&noticeType=001011",
+    "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/2f89bcc881ee411ba1e659d0fba69d7f.html?noticeId=d6378ae8-b730-11f1-88d4-b4055dfb2cc6&noticeType=001031&Type=jzcggg",
+    "https://www.qianlima.com/bid-634121337.html"
+  ],
+  "summary": {
+    "related_count": 2,
+    "confirmed_count": 2,
+    "candidate_count": 0,
+    "rejected_count": 0,
+    "blocked_false_merge_count": 1,
+    "conflict_count": 0,
+    "source_count": 2,
+    "timeline_item_count": 3
+  },
+  "proofs": {
+    "two_sources": true,
+    "two_notice_types": true,
+    "explainable_edges": true,
+    "manual_lock_persisted": true,
+    "split_lock_persisted": true,
+    "timeline_deduplicated": true,
+    "no_network_fetch": true
+  }
+}

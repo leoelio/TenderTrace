@@ -1,0 +1,198 @@
+{
+  "generated_at": "2026-09-29T13:26:51+08:00",
+  "project": "TenderTrace",
+  "current_sources": {
+    "count": 16,
+    "health_counts": {
+      "healthy": 14,
+      "degraded": 1,
+      "unhealthy": 1
+    },
+    "sources": [
+      {
+        "site": "ccgp",
+        "status": "degraded",
+        "last_success_at": "2026-08-06 15:30:02",
+        "last_error": "TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.ccgp.gov.cn/cggg/zygg/gkzb/\", waiting until \"domcontentloaded\"\n",
+        "notices": 0
+      },
+      {
+        "site": "ggzy",
+        "status": "healthy",
+        "last_success_at": "2026-09-28 01:00:00",
+        "last_error": "",
+        "notices": 47
+      },
+      {
+        "site": "pbc_procurement",
+        "status": "healthy",
+        "last_success_at": "2026-09-28 01:00:00",
+        "last_error": "",
+        "notices": 17
+      },
+      {
+        "site": "zzcg",
+        "status": "healthy",
+        "last_success_at": "2026-09-28 01:00:00",
+        "last_error": "",
+        "notices": 9
+      },
+      {
+        "site": "ted",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 12
+      },
+      {
+        "site": "ungm",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 10
+      },
+      {
+        "site": "worldbank",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 8
+      },
+      {
+        "site": "idb",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 0
+      },
+      {
+        "site": "adb",
+        "status": "unhealthy",
+        "last_success_at": "",
+        "last_error": "HTTP 403",
+        "notices": 0
+      },
+      {
+        "site": "afdb",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 0
+      },
+      {
+        "site": "ebrd",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 0
+      },
+      {
+        "site": "contracts_finder",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 0
+      },
+      {
+        "site": "find_tender",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 2
+      },
+      {
+        "site": "canadabuys",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 1
+      },
+      {
+        "site": "prozorro",
+        "status": "healthy",
+        "last_success_at": "2026-09-24 17:26:51",
+        "last_error": "",
+        "notices": 0
+      },
+      {
+        "site": "qianlima",
+        "status": "healthy",
+        "last_success_at": "2026-09-28 01:00:00",
+        "last_error": "",
+        "notices": 5
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "id": "usgs",
+      "classification": "integrated_ready",
+      "probe": {
+        "reachable": true,
+        "status_code": 200,
+        "feature_count": 511,
+        "generated_epoch_ms": 1790659598000
+      },
+      "implementation": "tendertrace/battle_map.py",
+      "decision": "保留正式接入；外部事件只生成待人工复核的业务影响候选"
+    },
+    {
+      "id": "gsxt",
+      "classification": "manual_or_authorized_only",
+      "probe": {
+        "name": "GSXT official portal",
+        "url": "https://bt.gsxt.gov.cn/",
+        "reachable": false,
+        "status_code": 412,
+        "elapsed_ms": 1214,
+        "error": "Response status code does not indicate success: 412 (Precondition Failed)."
+      },
+      "configured": false,
+      "decision": "可用于官方主体人工核验；当前 412 和无公开稳定 API，不做自动抓取"
+    },
+    {
+      "id": "reliefweb",
+      "classification": "feasible_requires_approval",
+      "probe": {
+        "name": "ReliefWeb API documentation",
+        "url": "https://apidoc.reliefweb.int/",
+        "reachable": true,
+        "status_code": 200,
+        "elapsed_ms": 360,
+        "error": ""
+      },
+      "configured": false,
+      "decision": "官方 API 可行；先申请获批 appname 并设置限流、缓存、署名，再开发适配器"
+    },
+    {
+      "id": "wto",
+      "classification": "feasible_requires_key_and_mapping",
+      "probe": {
+        "name": "WTO API developer portal",
+        "url": "https://apiportal.wto.org/",
+        "reachable": true,
+        "status_code": 200,
+        "elapsed_ms": 1088,
+        "error": ""
+      },
+      "configured": false,
+      "decision": "官方数据和 API 可行；先取得 API key，完成 HS 编码与项目品类映射，再开发影响规则"
+    }
+  ],
+  "conclusion": {
+    "integrated_ready": [
+      "现有 16 个采购来源中的 14 个健康",
+      "USGS GeoJSON 已接入且本次 HTTP 200"
+    ],
+    "integrated_attention": [
+      "ccgp 当前 degraded",
+      "adb 当前 unhealthy"
+    ],
+    "not_integrated": [
+      "GSXT 自动采集",
+      "ReliefWeb",
+      "WTO tariff/trade API"
+    ],
+    "safe_demo_rule": "现场只把已接入且有时间戳/来源的内容说成系统数据；候选来源只展示可行性和接入前置条件"
+  }
+}

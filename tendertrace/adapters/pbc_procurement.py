@@ -159,6 +159,7 @@ class PbcProcurementAdapter:
             },
             timeout=timeout,
             max_retries=2,
+            curl_fallback=True,
         )
         self.transport = transport
         self.last_fetch_stats: dict[str, object] = {}

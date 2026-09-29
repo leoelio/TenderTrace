@@ -1,0 +1,97 @@
+{
+  "workspace_id": "1e94a69f-cac1-58da-951a-3d6825716292",
+  "target_notice_id": "demo-bid-memory-target",
+  "demo_url": "http://127.0.0.1:8000/?workspace=1e94a69f-cac1-58da-951a-3d6825716292&memory_notice=demo-bid-memory-target",
+  "summary": {
+    "project_count": 3,
+    "asset_count": 20,
+    "reusable_count": 11,
+    "update_needed_count": 0,
+    "reference_count": 7,
+    "expired_count": 1,
+    "invalid_count": 1,
+    "won_count": 2,
+    "lost_count": 1,
+    "hidden_sensitive_count": 0,
+    "recommendation_count": 3
+  },
+  "sample": {
+    "count": 3,
+    "won_count": 2,
+    "lost_count": 1,
+    "reliable": true,
+    "label": "经验样本可供交叉参考",
+    "message": "已找到 3 个相似历史项目（中标 2、未中标 1）；只提供可追溯参考，不生成胜率。",
+    "probability_output": false
+  },
+  "recommendations": [
+    {
+      "source_notice_id": "demo-bid-memory-won-security",
+      "result": "won",
+      "similarity_score": 93.2,
+      "reasons": [
+        "同地区：北京",
+        "同一采购主体",
+        "同品类：政务云",
+        "标题/内容共同词：中心、京市、北京、北京市、双活"
+      ],
+      "reusable_assets": [
+        "政务云安全响应模板（脱敏）",
+        "完成安全与容灾响应章节复核",
+        "政务云双活容灾与安全响应",
+        "项目复盘经验"
+      ],
+      "warnings": []
+    },
+    {
+      "source_notice_id": "demo-bid-memory-lost-auth",
+      "result": "lost",
+      "similarity_score": 81.8,
+      "reasons": [
+        "同地区：北京",
+        "同一采购主体",
+        "同品类：政务云",
+        "标题/内容共同词：中心、京市、北京、北京市、政务"
+      ],
+      "reusable_assets": [
+        "完成安全与容灾响应章节复核",
+        "政务云双活容灾与安全响应",
+        "项目复盘经验"
+      ],
+      "warnings": [
+        "原厂专项授权缺口",
+        "历史原厂授权函"
+      ]
+    },
+    {
+      "source_notice_id": "demo-bid-memory-won-migration",
+      "result": "won",
+      "similarity_score": 60.7,
+      "reasons": [
+        "同地区：北京",
+        "同品类：政务云",
+        "标题/内容共同词：中心、京市、北京、北京市、安全"
+      ],
+      "reusable_assets": [
+        "政务云迁移核对清单",
+        "完成安全与容灾响应章节复核",
+        "政务云双活容灾与安全响应",
+        "项目复盘经验"
+      ],
+      "warnings": []
+    }
+  ],
+  "proof": {
+    "three_similar_projects": true,
+    "wins_and_losses_together": true,
+    "sources_and_reasons_present": true,
+    "human_audit_present": true,
+    "expired_never_reusable": true,
+    "observer_cannot_see_sensitive": true,
+    "outsider_denied": true,
+    "workspace_isolated": true,
+    "graph_covers_core_relations": true,
+    "no_probability_output": true,
+    "corrected_asset_versioned": true
+  }
+}

@@ -15,6 +15,7 @@ ROOT_FILES = (
     ".gitignore",
     "README.md",
     "pyproject.toml",
+    "标迹TenderTrace报名补充材料.md",
     "TenderTrace_implementation_plan.md",
     "TenderTrace_implementation_plan.docx",
 )

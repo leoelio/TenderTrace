@@ -1,0 +1,498 @@
+{
+  "dataset_kind": "controlled_acceptance_fixture",
+  "business_claim_allowed": false,
+  "warning": "本数据仅验证复算、异常值、失败样本和审计逻辑，不是实际人员效率结论。",
+  "summary": {
+    "status": "measured",
+    "record_count": 7,
+    "eligible_sample_count": 6,
+    "quality_failed_count": 1,
+    "outlier_count": 1,
+    "participant_count": 2,
+    "document_types": [
+      "公开公告网页",
+      "公开招标PDF"
+    ],
+    "baseline_minutes": 250.0,
+    "assisted_minutes": 129.0,
+    "saved_minutes": 121.0,
+    "time_saving_rate": 0.484
+  },
+  "metrics": {
+    "total_time": {
+      "sample_count": 6,
+      "unit": "分钟",
+      "baseline_sum": 250.0,
+      "assisted_sum": 129.0,
+      "delta_sum": 121.0,
+      "reduction_rate": 0.484,
+      "baseline_median": 40.0,
+      "assisted_median": 22.5,
+      "median_delta": 23.5,
+      "baseline_range": {
+        "min": 21.0,
+        "max": 68.0
+      },
+      "assisted_range": {
+        "min": 12.0,
+        "max": 31.0
+      },
+      "delta_range": {
+        "min": -6.0,
+        "max": 37.0
+      },
+      "paired_values": [
+        {
+          "sample_ref": "ggzy-outlier-001",
+          "baseline": 21.0,
+          "assisted": 27.0,
+          "delta": -6.0,
+          "is_outlier": true
+        },
+        {
+          "sample_ref": "pbc-change-001",
+          "baseline": 29.0,
+          "assisted": 12.0,
+          "delta": 17.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "canadabuys-001",
+          "baseline": 52.0,
+          "assisted": 27.0,
+          "delta": 25.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ggzy-00314",
+          "baseline": 68.0,
+          "assisted": 31.0,
+          "delta": 37.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "pbc-067GSF2026091",
+          "baseline": 44.0,
+          "assisted": 18.0,
+          "delta": 26.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ccgp-001",
+          "baseline": 36.0,
+          "assisted": 14.0,
+          "delta": 22.0,
+          "is_outlier": false
+        }
+      ]
+    },
+    "active_time": {
+      "sample_count": 6,
+      "unit": "分钟",
+      "baseline_sum": 238.0,
+      "assisted_sum": 105.0,
+      "delta_sum": 133.0,
+      "reduction_rate": 0.5588,
+      "baseline_median": 38.0,
+      "assisted_median": 18.5,
+      "median_delta": 25.5,
+      "baseline_range": {
+        "min": 19.0,
+        "max": 66.0
+      },
+      "assisted_range": {
+        "min": 8.0,
+        "max": 27.0
+      },
+      "delta_range": {
+        "min": -4.0,
+        "max": 39.0
+      },
+      "paired_values": [
+        {
+          "sample_ref": "ggzy-outlier-001",
+          "baseline": 19.0,
+          "assisted": 23.0,
+          "delta": -4.0,
+          "is_outlier": true
+        },
+        {
+          "sample_ref": "pbc-change-001",
+          "baseline": 27.0,
+          "assisted": 8.0,
+          "delta": 19.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "canadabuys-001",
+          "baseline": 50.0,
+          "assisted": 23.0,
+          "delta": 27.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ggzy-00314",
+          "baseline": 66.0,
+          "assisted": 27.0,
+          "delta": 39.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "pbc-067GSF2026091",
+          "baseline": 42.0,
+          "assisted": 14.0,
+          "delta": 28.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ccgp-001",
+          "baseline": 34.0,
+          "assisted": 10.0,
+          "delta": 24.0,
+          "is_outlier": false
+        }
+      ]
+    },
+    "machine_wait": {
+      "sample_count": 6,
+      "unit": "秒",
+      "baseline_sum": 0.0,
+      "assisted_sum": 231.0,
+      "delta_sum": -231.0,
+      "reduction_rate": null,
+      "baseline_median": 0.0,
+      "assisted_median": 38.5,
+      "median_delta": -38.5,
+      "baseline_range": {
+        "min": 0.0,
+        "max": 0.0
+      },
+      "assisted_range": {
+        "min": 36.0,
+        "max": 41.0
+      },
+      "delta_range": {
+        "min": -41.0,
+        "max": -36.0
+      },
+      "paired_values": [
+        {
+          "sample_ref": "ggzy-outlier-001",
+          "baseline": 0.0,
+          "assisted": 41.0,
+          "delta": -41.0,
+          "is_outlier": true
+        },
+        {
+          "sample_ref": "pbc-change-001",
+          "baseline": 0.0,
+          "assisted": 40.0,
+          "delta": -40.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "canadabuys-001",
+          "baseline": 0.0,
+          "assisted": 39.0,
+          "delta": -39.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ggzy-00314",
+          "baseline": 0.0,
+          "assisted": 38.0,
+          "delta": -38.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "pbc-067GSF2026091",
+          "baseline": 0.0,
+          "assisted": 37.0,
+          "delta": -37.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ccgp-001",
+          "baseline": 0.0,
+          "assisted": 36.0,
+          "delta": -36.0,
+          "is_outlier": false
+        }
+      ]
+    },
+    "omissions": {
+      "sample_count": 6,
+      "unit": "项",
+      "baseline_sum": 20.0,
+      "assisted_sum": 6.0,
+      "delta_sum": 14.0,
+      "reduction_rate": 0.7,
+      "baseline_median": 3.0,
+      "assisted_median": 1.0,
+      "median_delta": 2.5,
+      "baseline_range": {
+        "min": 2.0,
+        "max": 6.0
+      },
+      "assisted_range": {
+        "min": 0.0,
+        "max": 3.0
+      },
+      "delta_range": {
+        "min": -1.0,
+        "max": 5.0
+      },
+      "paired_values": [
+        {
+          "sample_ref": "ggzy-outlier-001",
+          "baseline": 2.0,
+          "assisted": 3.0,
+          "delta": -1.0,
+          "is_outlier": true
+        },
+        {
+          "sample_ref": "pbc-change-001",
+          "baseline": 2.0,
+          "assisted": 0.0,
+          "delta": 2.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "canadabuys-001",
+          "baseline": 3.0,
+          "assisted": 1.0,
+          "delta": 2.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ggzy-00314",
+          "baseline": 6.0,
+          "assisted": 1.0,
+          "delta": 5.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "pbc-067GSF2026091",
+          "baseline": 4.0,
+          "assisted": 1.0,
+          "delta": 3.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ccgp-001",
+          "baseline": 3.0,
+          "assisted": 0.0,
+          "delta": 3.0,
+          "is_outlier": false
+        }
+      ]
+    },
+    "false_satisfied": {
+      "sample_count": 6,
+      "unit": "项",
+      "baseline_sum": 12.0,
+      "assisted_sum": 3.0,
+      "delta_sum": 9.0,
+      "reduction_rate": 0.75,
+      "baseline_median": 2.0,
+      "assisted_median": 0.0,
+      "median_delta": 2.0,
+      "baseline_range": {
+        "min": 2.0,
+        "max": 2.0
+      },
+      "assisted_range": {
+        "min": 0.0,
+        "max": 3.0
+      },
+      "delta_range": {
+        "min": -1.0,
+        "max": 2.0
+      },
+      "paired_values": [
+        {
+          "sample_ref": "ggzy-outlier-001",
+          "baseline": 2.0,
+          "assisted": 3.0,
+          "delta": -1.0,
+          "is_outlier": true
+        },
+        {
+          "sample_ref": "pbc-change-001",
+          "baseline": 2.0,
+          "assisted": 0.0,
+          "delta": 2.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "canadabuys-001",
+          "baseline": 2.0,
+          "assisted": 0.0,
+          "delta": 2.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ggzy-00314",
+          "baseline": 2.0,
+          "assisted": 0.0,
+          "delta": 2.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "pbc-067GSF2026091",
+          "baseline": 2.0,
+          "assisted": 0.0,
+          "delta": 2.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ccgp-001",
+          "baseline": 2.0,
+          "assisted": 0.0,
+          "delta": 2.0,
+          "is_outlier": false
+        }
+      ]
+    },
+    "rework": {
+      "sample_count": 6,
+      "unit": "次",
+      "baseline_sum": 12.0,
+      "assisted_sum": 8.0,
+      "delta_sum": 4.0,
+      "reduction_rate": 0.3333,
+      "baseline_median": 2.0,
+      "assisted_median": 1.0,
+      "median_delta": 1.0,
+      "baseline_range": {
+        "min": 2.0,
+        "max": 2.0
+      },
+      "assisted_range": {
+        "min": 1.0,
+        "max": 3.0
+      },
+      "delta_range": {
+        "min": -1.0,
+        "max": 1.0
+      },
+      "paired_values": [
+        {
+          "sample_ref": "ggzy-outlier-001",
+          "baseline": 2.0,
+          "assisted": 3.0,
+          "delta": -1.0,
+          "is_outlier": true
+        },
+        {
+          "sample_ref": "pbc-change-001",
+          "baseline": 2.0,
+          "assisted": 1.0,
+          "delta": 1.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "canadabuys-001",
+          "baseline": 2.0,
+          "assisted": 1.0,
+          "delta": 1.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ggzy-00314",
+          "baseline": 2.0,
+          "assisted": 1.0,
+          "delta": 1.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "pbc-067GSF2026091",
+          "baseline": 2.0,
+          "assisted": 1.0,
+          "delta": 1.0,
+          "is_outlier": false
+        },
+        {
+          "sample_ref": "ccgp-001",
+          "baseline": 2.0,
+          "assisted": 1.0,
+          "delta": 1.0,
+          "is_outlier": false
+        }
+      ]
+    }
+  },
+  "formulas": [
+    {
+      "key": "total_time",
+      "label": "总耗时降低率",
+      "formula": "(人工基线合计 - 系统辅助合计) ÷ 人工基线合计",
+      "numerator": 121.0,
+      "denominator": 250.0,
+      "result": 0.484,
+      "unit": "分钟",
+      "sample_count": 6
+    },
+    {
+      "key": "active_time",
+      "label": "人工有效时间降低率",
+      "formula": "(人工基线合计 - 系统辅助合计) ÷ 人工基线合计",
+      "numerator": 133.0,
+      "denominator": 238.0,
+      "result": 0.5588,
+      "unit": "分钟",
+      "sample_count": 6
+    },
+    {
+      "key": "machine_wait",
+      "label": "机器等待时间变化率",
+      "formula": "(人工基线合计 - 系统辅助合计) ÷ 人工基线合计",
+      "numerator": -231.0,
+      "denominator": 0.0,
+      "result": null,
+      "unit": "秒",
+      "sample_count": 6
+    },
+    {
+      "key": "omissions",
+      "label": "关键要求遗漏降低率",
+      "formula": "(人工基线合计 - 系统辅助合计) ÷ 人工基线合计",
+      "numerator": 14.0,
+      "denominator": 20.0,
+      "result": 0.7,
+      "unit": "项",
+      "sample_count": 6
+    },
+    {
+      "key": "false_satisfied",
+      "label": "错误满足判断降低率",
+      "formula": "(人工基线合计 - 系统辅助合计) ÷ 人工基线合计",
+      "numerator": 9.0,
+      "denominator": 12.0,
+      "result": 0.75,
+      "unit": "项",
+      "sample_count": 6
+    },
+    {
+      "key": "rework",
+      "label": "返工次数降低率",
+      "formula": "(人工基线合计 - 系统辅助合计) ÷ 人工基线合计",
+      "numerator": 4.0,
+      "denominator": 12.0,
+      "result": 0.3333,
+      "unit": "次",
+      "sample_count": 6
+    }
+  ],
+  "proofs": {
+    "percentages_recomputable": true,
+    "participants_samples_conditions_explicit": true,
+    "quality_from_human_gold": true,
+    "failed_sample_visible": true,
+    "outlier_visible_and_included": true,
+    "negative_sample_not_hidden": true,
+    "generalization_forbidden": true,
+    "all_eighteen_directions_mapped": true,
+    "history_preserved": true
+  }
+}

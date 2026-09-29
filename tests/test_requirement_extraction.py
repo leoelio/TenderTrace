@@ -12,6 +12,23 @@ from tendertrace.opportunity_requirements import list_requirements, upsert_requi
 
 
 class RequirementExtractionTests(unittest.TestCase):
+    def test_unreadable_notice_requires_ocr_or_manual_input_without_fabrication(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            with connection(settings) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO notices(id, source_site, source_url, canonical_url, title)
+                    VALUES ('scan-only', 'ccgp', 'https://example.com/scan', 'https://example.com/scan', '扫描件项目')
+                    """
+                )
+
+            result = extract_and_save_requirements(settings, "scan-only")
+
+            self.assertEqual(result["status"], "needs_manual_input")
+            self.assertEqual(result["fallback"], "ocr_or_manual_required")
+            self.assertEqual(list_requirements(settings, "scan-only"), [])
+
     def test_rules_extract_five_requirement_types_with_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = _settings(Path(tmp))

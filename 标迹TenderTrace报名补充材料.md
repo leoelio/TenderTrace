@@ -1,6 +1,6 @@
 # 标迹 TenderTrace 报名补充材料
 
-材料版本：v1.0
+材料版本：v1.1
 项目方向：飞书平台企业命题赛道 / 超聚变 / 招投标信息聚合工具
 配套文件：《标迹 TenderTrace 多 Agent 招投标情报系统总体技术架构与分步实现方案》
 
@@ -358,3 +358,61 @@ LLM 擅长理解意图和改写摘要，但不适合在没有证据约束的情�
 ## 12. 可直接放入报名表的摘要
 
 标迹 TenderTrace 是一套面向企业持续情报场景的多 Agent 招投标信息聚合系统。用户输入自然语言后，系统将需求编译为 BidQL，自动识别主题、地区、时间窗口和发送频率；随后规划多个招投标数据源，使用 HTTP 与浏览器双引擎完成采集，支持公开站点和免费会员登录站点；采集结果经过正文清洗、条件过滤、三层去重和跨站项目归并后，生成包含标题、发布时间、来源链接、核心内容和附件链接的 Word 报告。对于定时订阅，系统维护簇级增量账本，只推送新增项目。方案重点解决网页结构复杂、信息重复、事实可追溯和反硬编码自证问题：所有字段与摘要均需回指原文快照，执行过程保存 trace，支持现场随机出题和离线回放验证。
+
+## 13. 自由展示区：英文项目表达与国际化产品思考
+
+本节可直接粘贴到飞书报名表的“自由展示区”。其中英文项目介绍对应当前已实现、可验证的能力；英国用户段落为明确标注的假设性产品场景，用于展示团队的国际化产品思考，不构成真实用户评价，也不声称项目已接入英国数据源。
+
+### 13.1 English Project Snapshot
+
+**TenderTrace: Evidence-First Tender Intelligence for Continuous Opportunity Discovery**
+
+TenderTrace is a runnable tender-intelligence application for teams that need more than one-off web searches. Users describe an opportunity-monitoring need in natural language. The system compiles it into a structured query, collects notices from multiple sources, removes duplicates, verifies key facts against source evidence, and produces a traceable Word report.
+
+What makes TenderTrace different is its evidence-first workflow. A title, date, amount, project number, source URL, and attachment link are not treated as generated facts: they must be traceable to the source page or saved snapshot before they enter a report. For recurring subscriptions, TenderTrace maintains a cluster-level delivery ledger so that each run delivers only newly discovered opportunities rather than repeating the same project.
+
+**Current, demonstrable capabilities**
+
+- Natural-language intent parsing for topic, region, time window, and delivery schedule.
+- Multi-source collection with public-source and compliant login-state workflows.
+- Three-layer deduplication: URL canonicalisation, near-duplicate detection, and project-level clustering.
+- Evidence-linked Word reports with source and attachment links.
+- Scheduled incremental delivery, execution traces, replayable samples, Web UI, CLI, and API entry points.
+- Optional Feishu Bitable opportunity ledger for collaborative follow-up.
+
+**Design principle:** use AI where language understanding helps; use deterministic rules and source evidence where factual reliability matters.
+
+### 13.2 Illustrative UK User Journey (fictional scenario, not a testimonial)
+
+The following is a product-design scenario rather than feedback from a real person. It assumes that UK public-procurement adapters, such as Find a Tender and Contracts Finder, are added in a future localisation phase. Those adapters are not part of the current submitted implementation.
+
+**Persona:** Alex Morgan, Bid Manager at a UK SME supplying EV-charging equipment and related installation services.
+
+**Monday, 08:30 Europe/London**
+
+Alex enters: *“Show public-sector EV charging opportunities in Greater Manchester published in the last 30 days. Include supply-and-install lots, notify me on weekdays at 08:30, and exclude award notices.”*
+
+Before running, the system presents the parsed scope for confirmation: region, rolling date window, weekday schedule, notice exclusion, and timezone. This avoids a common procurement mistake: treating a relative period as a fixed date range, or missing a deadline because the schedule was interpreted in the wrong timezone during BST/GMT changes.
+
+**What Alex expects to inspect**
+
+| Procurement concern | Product response in the proposed UK localisation |
+| --- | --- |
+| Is this an opportunity or an award notice? | Make notice type visible and allow exclusion of awards, cancellations, and prior-information notices. |
+| Is the contract genuinely relevant? | Show CPV codes, buyer organisation, delivery geography, estimated value in GBP, contract duration, and eligibility evidence where the source provides it. |
+| Are multiple notices the same procurement? | Cluster linked notices, framework updates, and mirrored listings while retaining every original source link. |
+| Can the team act before the deadline? | Surface submission deadline, timezone, lots, clarification deadline, and source attachment links in one reviewable report. |
+| Can a colleague trust the summary? | Keep source URLs, excerpts, extraction evidence, and run trace available for audit rather than asking users to trust a generated paragraph. |
+| Can the workflow fit the team? | Deliver only new clusters into a shared Feishu ledger or report workflow, preserving the team's follow-up status. |
+
+**Illustrative experience statement (fictional):**
+
+> “The useful part is not that the system gives me a long list. It separates new opportunities from notices we have already reviewed, keeps the original evidence beside the summary, and makes the deadline and lot structure easy to check. I would still open the source documents before bidding, but I would spend far less time reconciling duplicates across procurement portals.”
+>
+> — Alex Morgan, fictional UK bid-manager persona created solely for this product-design scenario
+
+### 13.3 Why this internationalisation lens matters
+
+The scenario demonstrates a transferable product method rather than an unsupported claim of overseas deployment. TenderTrace separates intent, source adapters, evidence validation, deduplication, scheduling, and delivery. That separation makes localisation a bounded engineering task: add compliant local sources and local field rules while preserving the same evidence-first and incremental-delivery core.
+
+For a UK-oriented extension, the team would validate source permissions and terms of use, adopt `Europe/London` scheduling, preserve GBP values and notice classifications, support CPV and lot-level filtering, and test accessibility and plain-English reporting with real users before representing any feedback as genuine.

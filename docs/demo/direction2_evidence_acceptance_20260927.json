@@ -1,0 +1,701 @@
+{
+  "report": "TenderTrace 提升方向二验收证据",
+  "generated_at": "2026-09-27T02:05:22+08:00",
+  "notice_id": "pbc_procurement:04b40d52-b636-11f1-88d4-b4055dfb2cc6",
+  "title": "成方金融科技有限公司成方金科2026年ARM服务器采购项目招标公告",
+  "endpoint_elapsed_ms": 913,
+  "summary": {
+    "claim_count": 46,
+    "source_count": 30,
+    "verified_count": 9,
+    "pending_count": 21,
+    "expired_count": 0,
+    "conflict_count": 0,
+    "unavailable_count": 0,
+    "recheck_claim_count": 0,
+    "definitive_without_valid_evidence": 0,
+    "audit_complete": true
+  },
+  "selected_claim": {
+    "id": "226d3f4860191f51242dfe701dc29bfa",
+    "claim_type": "requirement",
+    "claim_type_label": "招标要求",
+    "claim_key": "TECH-ARM-01",
+    "title": "采购 ARM 架构服务器",
+    "conclusion": "项目名称：成方金科2026年ARM服务器采购项目",
+    "status": "supported",
+    "status_label": "证据充分",
+    "created_at": "2026-09-26 17:58:36",
+    "updated_at": "2026-09-26 18:05:22",
+    "evidence": [
+      {
+        "id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+        "source_type": "webpage",
+        "source_id": "requirement:eb8da85a1c6ef89fe11a198e",
+        "source_site": "pbc_procurement",
+        "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+        "file_name": "c5aa93f712ad46d08100a76b09b5514b.html",
+        "page_number": null,
+        "section_path": "公告正文 / 一、项目基本情况 / 项目名称",
+        "paragraph_index": null,
+        "selector": "document.body",
+        "text_coordinates": {},
+        "quote": "项目名称：成方金科2026年ARM服务器采购项目",
+        "context_before": "",
+        "context_after": "",
+        "content_hash": "f649f011315ae6d60fe3c20cf5443e1c86bf0b53d9996fb25a17a236025fa7f6",
+        "parent_content_hash": "",
+        "revision_id": "",
+        "captured_at": "2026-09-26 17:58:22",
+        "extraction_method": "requirement_extraction",
+        "locator_confidence": 100,
+        "verified_status": "verified",
+        "verified_status_label": "已验证",
+        "confirmed_by": "方向二验收",
+        "confirmed_at": "2026-09-26 18:00:38",
+        "created_at": "2026-09-26 17:58:36",
+        "updated_at": "2026-09-26 18:00:38",
+        "highlights": [],
+        "stance": "supports",
+        "stance_label": "支持",
+        "link_rationale": "要求结论来自该原文片段"
+      }
+    ],
+    "comparison": {
+      "status": "single_source",
+      "items": []
+    }
+  },
+  "capability_matches": [
+    {
+      "id": "2904ecc91d520a08289b4bfabc19f51f",
+      "claim_type": "agent_opinion",
+      "claim_type_label": "Agent 意见",
+      "claim_key": "direction2-real-commercial",
+      "title": "商务评审 · TECH-ARM-01",
+      "conclusion": "商务审阅：FusionOS官方页证明软件支持Arm生态，但缺少对应ARM服务器硬件规格，建议补充产品证明后再决策。",
+      "status": "supported",
+      "status_label": "证据充分",
+      "created_at": "2026-09-26 17:58:36",
+      "updated_at": "2026-09-26 18:05:22",
+      "evidence": [
+        {
+          "id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+          "source_type": "webpage",
+          "source_id": "requirement:eb8da85a1c6ef89fe11a198e",
+          "source_site": "pbc_procurement",
+          "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+          "file_name": "c5aa93f712ad46d08100a76b09b5514b.html",
+          "page_number": null,
+          "section_path": "公告正文 / 一、项目基本情况 / 项目名称",
+          "paragraph_index": null,
+          "selector": "document.body",
+          "text_coordinates": {},
+          "quote": "项目名称：成方金科2026年ARM服务器采购项目",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "f649f011315ae6d60fe3c20cf5443e1c86bf0b53d9996fb25a17a236025fa7f6",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "requirement_extraction",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "方向二验收",
+          "confirmed_at": "2026-09-26 18:00:38",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 18:00:38",
+          "highlights": [],
+          "stance": "context",
+          "stance_label": "上下文",
+          "link_rationale": "Agent 审阅的招标原文"
+        },
+        {
+          "id": "a92e945bd3dbd9fc44e63c5f24051f44",
+          "source_type": "enterprise_material",
+          "source_id": "capability:cd3712e8589c9126c12cf883",
+          "source_site": "企业材料库",
+          "source_url": "https://www-beta-static.xfusion.com/cn/product/operating-system/fusionos",
+          "file_name": "fusionos",
+          "page_number": null,
+          "section_path": "官方产品页 / 技术参数 / FusionOS 26",
+          "paragraph_index": null,
+          "selector": "",
+          "text_coordinates": {},
+          "quote": "官方技术参数显示：FusionOS 26 的CPU支持x86、Arm、LoongArch、SW64、MIPS架构，内存不小于4GB，建议不小于8GB。",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "62401a7bf3f4df2d82c8d90bbc448f441a4ebb02a289fff2b677eac45dbe105a",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "enterprise_material",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "",
+          "confirmed_at": "",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 17:58:36",
+          "highlights": [
+            {
+              "kind": "parameter",
+              "value": "4GB",
+              "start": 62,
+              "end": 65
+            },
+            {
+              "kind": "parameter",
+              "value": "8GB",
+              "start": 71,
+              "end": 74
+            }
+          ],
+          "stance": "context",
+          "stance_label": "上下文",
+          "link_rationale": "Agent 审阅的企业材料"
+        }
+      ],
+      "comparison": {
+        "status": "aligned",
+        "items": [
+          {
+            "field": "参数",
+            "values": [
+              {
+                "evidence_id": "a92e945bd3dbd9fc44e63c5f24051f44",
+                "value": "4GB"
+              },
+              {
+                "evidence_id": "a92e945bd3dbd9fc44e63c5f24051f44",
+                "value": "8GB"
+              }
+            ],
+            "distinct_values": [
+              "4GB",
+              "8GB"
+            ],
+            "conflict": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "356182c86ef626f0b391342681848945",
+      "claim_type": "agent_opinion",
+      "claim_type_label": "Agent 意见",
+      "claim_key": "direction2-real-technical",
+      "title": "技术评审 · TECH-ARM-01",
+      "conclusion": "技术审阅：2288 V8 官方页明确采用英特尔至强6处理器，与公告中的ARM服务器要求不一致。",
+      "status": "supported",
+      "status_label": "证据充分",
+      "created_at": "2026-09-26 17:58:36",
+      "updated_at": "2026-09-26 18:05:22",
+      "evidence": [
+        {
+          "id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+          "source_type": "webpage",
+          "source_id": "requirement:eb8da85a1c6ef89fe11a198e",
+          "source_site": "pbc_procurement",
+          "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+          "file_name": "c5aa93f712ad46d08100a76b09b5514b.html",
+          "page_number": null,
+          "section_path": "公告正文 / 一、项目基本情况 / 项目名称",
+          "paragraph_index": null,
+          "selector": "document.body",
+          "text_coordinates": {},
+          "quote": "项目名称：成方金科2026年ARM服务器采购项目",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "f649f011315ae6d60fe3c20cf5443e1c86bf0b53d9996fb25a17a236025fa7f6",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "requirement_extraction",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "方向二验收",
+          "confirmed_at": "2026-09-26 18:00:38",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 18:00:38",
+          "highlights": [],
+          "stance": "contradicts",
+          "stance_label": "反驳",
+          "link_rationale": "Agent 审阅的招标原文"
+        },
+        {
+          "id": "c2ecde5153970c8db79c699102720527",
+          "source_type": "enterprise_material",
+          "source_id": "capability:9d5b56083d3db9eb88c31a28",
+          "source_site": "企业材料库",
+          "source_url": "https://www.xfusion.com/cn/product/rack-server/fusionserver-2288-v8",
+          "file_name": "fusionserver-2288-v8",
+          "page_number": null,
+          "section_path": "官方产品页 / 技术规格 / 处理器与内存",
+          "paragraph_index": null,
+          "selector": "",
+          "text_coordinates": {},
+          "quote": "官方技术规格显示：FusionServer 2288 V8 为2U2路机架服务器，支持2个英特尔至强6处理器；配置32个DDR5内存插槽，最高6400MT/s，支持MRDIMM最高8000MT/s。",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "cbabf5268857f9eac77868ea9d691aed44021f14ea6c5431947a1eda037b798e",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "enterprise_material",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "",
+          "confirmed_at": "",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 17:58:36",
+          "highlights": [
+            {
+              "kind": "parameter",
+              "value": "2个",
+              "start": 43,
+              "end": 45
+            }
+          ],
+          "stance": "contradicts",
+          "stance_label": "反驳",
+          "link_rationale": "Agent 审阅的企业材料"
+        }
+      ],
+      "comparison": {
+        "status": "aligned",
+        "items": [
+          {
+            "field": "参数",
+            "values": [
+              {
+                "evidence_id": "c2ecde5153970c8db79c699102720527",
+                "value": "2个"
+              }
+            ],
+            "distinct_values": [
+              "2个"
+            ],
+            "conflict": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "04c4a20b423838485a4d36256cfaf9d2",
+      "claim_type": "capability_match",
+      "claim_type_label": "能力匹配",
+      "claim_key": "direction2-real-gap",
+      "title": "TECH-ARM-01 · FusionServer 2288 V8 官方产品规格",
+      "conclusion": "公告要求ARM服务器，而该产品页明确为英特尔至强6处理器，不能作为ARM硬件符合性证明。",
+      "status": "supported",
+      "status_label": "证据充分",
+      "created_at": "2026-09-26 17:58:36",
+      "updated_at": "2026-09-26 18:05:22",
+      "evidence": [
+        {
+          "id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+          "source_type": "webpage",
+          "source_id": "requirement:eb8da85a1c6ef89fe11a198e",
+          "source_site": "pbc_procurement",
+          "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+          "file_name": "c5aa93f712ad46d08100a76b09b5514b.html",
+          "page_number": null,
+          "section_path": "公告正文 / 一、项目基本情况 / 项目名称",
+          "paragraph_index": null,
+          "selector": "document.body",
+          "text_coordinates": {},
+          "quote": "项目名称：成方金科2026年ARM服务器采购项目",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "f649f011315ae6d60fe3c20cf5443e1c86bf0b53d9996fb25a17a236025fa7f6",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "requirement_extraction",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "方向二验收",
+          "confirmed_at": "2026-09-26 18:00:38",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 18:00:38",
+          "highlights": [],
+          "stance": "context",
+          "stance_label": "上下文",
+          "link_rationale": "招标要求原文"
+        },
+        {
+          "id": "c2ecde5153970c8db79c699102720527",
+          "source_type": "enterprise_material",
+          "source_id": "capability:9d5b56083d3db9eb88c31a28",
+          "source_site": "企业材料库",
+          "source_url": "https://www.xfusion.com/cn/product/rack-server/fusionserver-2288-v8",
+          "file_name": "fusionserver-2288-v8",
+          "page_number": null,
+          "section_path": "官方产品页 / 技术规格 / 处理器与内存",
+          "paragraph_index": null,
+          "selector": "",
+          "text_coordinates": {},
+          "quote": "官方技术规格显示：FusionServer 2288 V8 为2U2路机架服务器，支持2个英特尔至强6处理器；配置32个DDR5内存插槽，最高6400MT/s，支持MRDIMM最高8000MT/s。",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "cbabf5268857f9eac77868ea9d691aed44021f14ea6c5431947a1eda037b798e",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "enterprise_material",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "",
+          "confirmed_at": "",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 17:58:36",
+          "highlights": [
+            {
+              "kind": "parameter",
+              "value": "2个",
+              "start": 43,
+              "end": 45
+            }
+          ],
+          "stance": "contradicts",
+          "stance_label": "反驳",
+          "link_rationale": "企业材料与要求的对照依据"
+        }
+      ],
+      "comparison": {
+        "status": "aligned",
+        "items": [
+          {
+            "field": "参数",
+            "values": [
+              {
+                "evidence_id": "c2ecde5153970c8db79c699102720527",
+                "value": "2个"
+              }
+            ],
+            "distinct_values": [
+              "2个"
+            ],
+            "conflict": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "d0ec995d645f4b12337085841faa072c",
+      "claim_type": "capability_match",
+      "claim_type_label": "能力匹配",
+      "claim_key": "direction2-real-needs-evidence",
+      "title": "TECH-ARM-01 · FusionOS 26 ARM 生态兼容性",
+      "conclusion": "FusionOS官方页能证明软件支持Arm生态，但不能单独证明投标服务器硬件满足ARM要求。",
+      "status": "supported",
+      "status_label": "证据充分",
+      "created_at": "2026-09-26 17:58:36",
+      "updated_at": "2026-09-26 18:05:22",
+      "evidence": [
+        {
+          "id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+          "source_type": "webpage",
+          "source_id": "requirement:eb8da85a1c6ef89fe11a198e",
+          "source_site": "pbc_procurement",
+          "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+          "file_name": "c5aa93f712ad46d08100a76b09b5514b.html",
+          "page_number": null,
+          "section_path": "公告正文 / 一、项目基本情况 / 项目名称",
+          "paragraph_index": null,
+          "selector": "document.body",
+          "text_coordinates": {},
+          "quote": "项目名称：成方金科2026年ARM服务器采购项目",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "f649f011315ae6d60fe3c20cf5443e1c86bf0b53d9996fb25a17a236025fa7f6",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "requirement_extraction",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "方向二验收",
+          "confirmed_at": "2026-09-26 18:00:38",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 18:00:38",
+          "highlights": [],
+          "stance": "context",
+          "stance_label": "上下文",
+          "link_rationale": "招标要求原文"
+        },
+        {
+          "id": "a92e945bd3dbd9fc44e63c5f24051f44",
+          "source_type": "enterprise_material",
+          "source_id": "capability:cd3712e8589c9126c12cf883",
+          "source_site": "企业材料库",
+          "source_url": "https://www-beta-static.xfusion.com/cn/product/operating-system/fusionos",
+          "file_name": "fusionos",
+          "page_number": null,
+          "section_path": "官方产品页 / 技术参数 / FusionOS 26",
+          "paragraph_index": null,
+          "selector": "",
+          "text_coordinates": {},
+          "quote": "官方技术参数显示：FusionOS 26 的CPU支持x86、Arm、LoongArch、SW64、MIPS架构，内存不小于4GB，建议不小于8GB。",
+          "context_before": "",
+          "context_after": "",
+          "content_hash": "62401a7bf3f4df2d82c8d90bbc448f441a4ebb02a289fff2b677eac45dbe105a",
+          "parent_content_hash": "",
+          "revision_id": "",
+          "captured_at": "2026-09-26 17:58:22",
+          "extraction_method": "enterprise_material",
+          "locator_confidence": 100,
+          "verified_status": "verified",
+          "verified_status_label": "已验证",
+          "confirmed_by": "",
+          "confirmed_at": "",
+          "created_at": "2026-09-26 17:58:36",
+          "updated_at": "2026-09-26 17:58:36",
+          "highlights": [
+            {
+              "kind": "parameter",
+              "value": "4GB",
+              "start": 62,
+              "end": 65
+            },
+            {
+              "kind": "parameter",
+              "value": "8GB",
+              "start": 71,
+              "end": 74
+            }
+          ],
+          "stance": "supports",
+          "stance_label": "支持",
+          "link_rationale": "企业材料与要求的对照依据"
+        }
+      ],
+      "comparison": {
+        "status": "aligned",
+        "items": [
+          {
+            "field": "参数",
+            "values": [
+              {
+                "evidence_id": "a92e945bd3dbd9fc44e63c5f24051f44",
+                "value": "4GB"
+              },
+              {
+                "evidence_id": "a92e945bd3dbd9fc44e63c5f24051f44",
+                "value": "8GB"
+              }
+            ],
+            "distinct_values": [
+              "4GB",
+              "8GB"
+            ],
+            "conflict": false
+          }
+        ]
+      }
+    }
+  ],
+  "disagreements": [
+    {
+      "review_id": "direction2-real-review",
+      "requirement_key": "TECH-ARM-01",
+      "opinions": [
+        {
+          "agent_role": "commercial",
+          "agent_label": "商务评审",
+          "decision": "escalate",
+          "confidence": 85,
+          "rationale": "商务审阅：FusionOS官方页证明软件支持Arm生态，但缺少对应ARM服务器硬件规格，建议补充产品证明后再决策。",
+          "model_status": "rule_grounded",
+          "claim_id": "2904ecc91d520a08289b4bfabc19f51f",
+          "evidence": [
+            {
+              "id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+              "source_type": "webpage",
+              "source_id": "requirement:eb8da85a1c6ef89fe11a198e",
+              "source_site": "pbc_procurement",
+              "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+              "file_name": "c5aa93f712ad46d08100a76b09b5514b.html",
+              "page_number": null,
+              "section_path": "公告正文 / 一、项目基本情况 / 项目名称",
+              "paragraph_index": null,
+              "selector": "document.body",
+              "text_coordinates": {},
+              "quote": "项目名称：成方金科2026年ARM服务器采购项目",
+              "context_before": "",
+              "context_after": "",
+              "content_hash": "f649f011315ae6d60fe3c20cf5443e1c86bf0b53d9996fb25a17a236025fa7f6",
+              "parent_content_hash": "",
+              "revision_id": "",
+              "captured_at": "2026-09-26 17:58:22",
+              "extraction_method": "requirement_extraction",
+              "locator_confidence": 100,
+              "verified_status": "verified",
+              "verified_status_label": "已验证",
+              "confirmed_by": "方向二验收",
+              "confirmed_at": "2026-09-26 18:00:38",
+              "created_at": "2026-09-26 17:58:36",
+              "updated_at": "2026-09-26 18:00:38",
+              "highlights": [],
+              "stance": "context",
+              "stance_label": "上下文",
+              "link_rationale": "Agent 审阅的招标原文"
+            },
+            {
+              "id": "a92e945bd3dbd9fc44e63c5f24051f44",
+              "source_type": "enterprise_material",
+              "source_id": "capability:cd3712e8589c9126c12cf883",
+              "source_site": "企业材料库",
+              "source_url": "https://www-beta-static.xfusion.com/cn/product/operating-system/fusionos",
+              "file_name": "fusionos",
+              "page_number": null,
+              "section_path": "官方产品页 / 技术参数 / FusionOS 26",
+              "paragraph_index": null,
+              "selector": "",
+              "text_coordinates": {},
+              "quote": "官方技术参数显示：FusionOS 26 的CPU支持x86、Arm、LoongArch、SW64、MIPS架构，内存不小于4GB，建议不小于8GB。",
+              "context_before": "",
+              "context_after": "",
+              "content_hash": "62401a7bf3f4df2d82c8d90bbc448f441a4ebb02a289fff2b677eac45dbe105a",
+              "parent_content_hash": "",
+              "revision_id": "",
+              "captured_at": "2026-09-26 17:58:22",
+              "extraction_method": "enterprise_material",
+              "locator_confidence": 100,
+              "verified_status": "verified",
+              "verified_status_label": "已验证",
+              "confirmed_by": "",
+              "confirmed_at": "",
+              "created_at": "2026-09-26 17:58:36",
+              "updated_at": "2026-09-26 17:58:36",
+              "highlights": [
+                {
+                  "kind": "parameter",
+                  "value": "4GB",
+                  "start": 62,
+                  "end": 65
+                },
+                {
+                  "kind": "parameter",
+                  "value": "8GB",
+                  "start": 71,
+                  "end": 74
+                }
+              ],
+              "stance": "context",
+              "stance_label": "上下文",
+              "link_rationale": "Agent 审阅的企业材料"
+            }
+          ]
+        },
+        {
+          "agent_role": "technical",
+          "agent_label": "技术评审",
+          "decision": "reject",
+          "confidence": 99,
+          "rationale": "技术审阅：2288 V8 官方页明确采用英特尔至强6处理器，与公告中的ARM服务器要求不一致。",
+          "model_status": "rule_grounded",
+          "claim_id": "356182c86ef626f0b391342681848945",
+          "evidence": [
+            {
+              "id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+              "source_type": "webpage",
+              "source_id": "requirement:eb8da85a1c6ef89fe11a198e",
+              "source_site": "pbc_procurement",
+              "source_url": "https://jzcg.pbc.gov.cn/freecms/site/rmyh/ggxx/info/2026/c5aa93f712ad46d08100a76b09b5514b.html?noticeId=04b40d52-b636-11f1-88d4-b4055dfb2cc6&noticeType=001011&Type=jzcggg",
+              "file_name": "c5aa93f712ad46d08100a76b09b5514b.html",
+              "page_number": null,
+              "section_path": "公告正文 / 一、项目基本情况 / 项目名称",
+              "paragraph_index": null,
+              "selector": "document.body",
+              "text_coordinates": {},
+              "quote": "项目名称：成方金科2026年ARM服务器采购项目",
+              "context_before": "",
+              "context_after": "",
+              "content_hash": "f649f011315ae6d60fe3c20cf5443e1c86bf0b53d9996fb25a17a236025fa7f6",
+              "parent_content_hash": "",
+              "revision_id": "",
+              "captured_at": "2026-09-26 17:58:22",
+              "extraction_method": "requirement_extraction",
+              "locator_confidence": 100,
+              "verified_status": "verified",
+              "verified_status_label": "已验证",
+              "confirmed_by": "方向二验收",
+              "confirmed_at": "2026-09-26 18:00:38",
+              "created_at": "2026-09-26 17:58:36",
+              "updated_at": "2026-09-26 18:00:38",
+              "highlights": [],
+              "stance": "contradicts",
+              "stance_label": "反驳",
+              "link_rationale": "Agent 审阅的招标原文"
+            },
+            {
+              "id": "c2ecde5153970c8db79c699102720527",
+              "source_type": "enterprise_material",
+              "source_id": "capability:9d5b56083d3db9eb88c31a28",
+              "source_site": "企业材料库",
+              "source_url": "https://www.xfusion.com/cn/product/rack-server/fusionserver-2288-v8",
+              "file_name": "fusionserver-2288-v8",
+              "page_number": null,
+              "section_path": "官方产品页 / 技术规格 / 处理器与内存",
+              "paragraph_index": null,
+              "selector": "",
+              "text_coordinates": {},
+              "quote": "官方技术规格显示：FusionServer 2288 V8 为2U2路机架服务器，支持2个英特尔至强6处理器；配置32个DDR5内存插槽，最高6400MT/s，支持MRDIMM最高8000MT/s。",
+              "context_before": "",
+              "context_after": "",
+              "content_hash": "cbabf5268857f9eac77868ea9d691aed44021f14ea6c5431947a1eda037b798e",
+              "parent_content_hash": "",
+              "revision_id": "",
+              "captured_at": "2026-09-26 17:58:22",
+              "extraction_method": "enterprise_material",
+              "locator_confidence": 100,
+              "verified_status": "verified",
+              "verified_status_label": "已验证",
+              "confirmed_by": "",
+              "confirmed_at": "",
+              "created_at": "2026-09-26 17:58:36",
+              "updated_at": "2026-09-26 17:58:36",
+              "highlights": [
+                {
+                  "kind": "parameter",
+                  "value": "2个",
+                  "start": 43,
+                  "end": 45
+                }
+              ],
+              "stance": "contradicts",
+              "stance_label": "反驳",
+              "link_rationale": "Agent 审阅的企业材料"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "audit_event": {
+    "id": "d0f8219c-6704-4331-9325-feaec981690d",
+    "evidence_id": "565b754404ac11e5fc36a5a8c6ab7ebe",
+    "claim_id": "356182c86ef626f0b391342681848945",
+    "action": "confirm",
+    "actor": "方向二验收",
+    "reason": "已逐字核对央行采购公告项目名称中的 ARM 服务器要求",
+    "previous_status": "verified",
+    "new_status": "verified",
+    "created_at": "2026-09-26 18:00:38"
+  },
+  "tests": {
+    "pytest": "477 passed",
+    "subtests": "522 passed",
+    "ruff": "passed",
+    "javascript_syntax": "passed",
+    "acceptance": "34 passed, 0 warn, 0 fail"
+  }
+}

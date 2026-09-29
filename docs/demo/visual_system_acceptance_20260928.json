@@ -1,0 +1,181 @@
+{
+  "direction": 15,
+  "name": "统一视觉、状态语言与业务动效",
+  "verified_at": "2026-09-28T23:19:52+08:00",
+  "base_url": "http://127.0.0.1:8000",
+  "direct_url": "http://127.0.0.1:8000/?view=demoConsoleView",
+  "main_case": {
+    "label": "成方金融科技有限公司成方金科2026年ARM服务器采购项目招标公告",
+    "source_type": "opportunity",
+    "source_id": "pbc_procurement:04b40d52-b636-11f1-88d4-b4055dfb2cc6",
+    "source_version": "27e6ea80e5e1e4e21b74b62a6574058f7a80efe3f99a6af3b996260fd7badd9a",
+    "data_as_of": "2026-09-26 00:44:12",
+    "evidence_kind": "public_record"
+  },
+  "audits": [
+    {
+      "profile": "projector_1440",
+      "viewport_width": 1440,
+      "viewport_height": 900,
+      "notice_id": "pbc_procurement:04b40d52-b636-11f1-88d4-b4055dfb2cc6",
+      "scroll_width": 1425,
+      "critical_overflows": [],
+      "checks": {
+        "state_words_with_symbols": true,
+        "conclusion_titles_visible": true,
+        "identity_consistent": true,
+        "focus_visible": true,
+        "motion_can_be_disabled": true,
+        "presentation_preserves_content": true,
+        "editors_hidden_in_presentation": true,
+        "min_status_font_px": 16.0,
+        "critical_component_count": 4,
+        "conclusion_title_count": 4,
+        "focus_target_found": true,
+        "focus_rule_count": 4,
+        "focus_outline_px": 2.4
+      },
+      "status": "passed",
+      "measurement": "same_origin_browser_dom",
+      "user_agent_present": true,
+      "created_at": "2026-09-28 15:18:40"
+    },
+    {
+      "profile": "full_hd_1920",
+      "viewport_width": 1920,
+      "viewport_height": 1080,
+      "notice_id": "pbc_procurement:04b40d52-b636-11f1-88d4-b4055dfb2cc6",
+      "scroll_width": 1905,
+      "critical_overflows": [],
+      "checks": {
+        "state_words_with_symbols": true,
+        "conclusion_titles_visible": true,
+        "identity_consistent": true,
+        "focus_visible": true,
+        "motion_can_be_disabled": true,
+        "presentation_preserves_content": true,
+        "editors_hidden_in_presentation": true,
+        "min_status_font_px": 16.0,
+        "critical_component_count": 4,
+        "conclusion_title_count": 4,
+        "focus_target_found": true,
+        "focus_rule_count": 4,
+        "focus_outline_px": 2.4
+      },
+      "status": "passed",
+      "measurement": "same_origin_browser_dom",
+      "user_agent_present": true,
+      "created_at": "2026-09-28 15:18:45"
+    }
+  ],
+  "state_language": [
+    {
+      "key": "verified",
+      "symbol": "✓",
+      "label": "有据满足"
+    },
+    {
+      "key": "review",
+      "symbol": "!",
+      "label": "待确认"
+    },
+    {
+      "key": "gap",
+      "symbol": "×",
+      "label": "缺口或失效"
+    },
+    {
+      "key": "system",
+      "symbol": "i",
+      "label": "系统信息"
+    },
+    {
+      "key": "human",
+      "symbol": "人",
+      "label": "人工裁决"
+    }
+  ],
+  "motion": {
+    "productive_ms": 320,
+    "expressive_ms": 480,
+    "can_disable": true,
+    "respects_reduced_motion": true
+  },
+  "environment": {
+    "status": "ready",
+    "critical_ready": true,
+    "checks": [
+      {
+        "key": "service",
+        "label": "本地服务",
+        "status": "ready",
+        "detail": "API运行中，静态页面可由当前进程提供"
+      },
+      {
+        "key": "database",
+        "label": "SQLite数据库",
+        "status": "ready",
+        "detail": "quick_check=ok"
+      },
+      {
+        "key": "local_index",
+        "label": "本地证据索引",
+        "status": "ready",
+        "detail": "57 条公告 · 最近索引 2026-09-28 04:22:31"
+      },
+      {
+        "key": "sources",
+        "label": "公开数据源",
+        "status": "ready",
+        "detail": "健康 15 · 降级 1 · 异常 1 · 未观测 0"
+      },
+      {
+        "key": "feishu",
+        "label": "飞书连接",
+        "status": "ready",
+        "detail": "消息应用与长连接运行中"
+      },
+      {
+        "key": "browser",
+        "label": "浏览器网络",
+        "status": "client_check",
+        "detail": "等待浏览器上报在线状态"
+      }
+    ],
+    "summary": "核心检查 通过；外部依赖异常时可降级到本地回放",
+    "source_health_counts": {
+      "healthy": 15,
+      "degraded": 1,
+      "unhealthy": 1,
+      "unknown": 0
+    },
+    "checked_at": "2026-09-28T23:19:52+08:00"
+  },
+  "checks": {
+    "service_healthy": true,
+    "schema_version_52_active": true,
+    "direct_page_http_200": true,
+    "visual_controls_present": true,
+    "visual_acceptance_console_present": true,
+    "two_target_viewports_passed": true,
+    "measurements_are_real_browser_dom": true,
+    "no_horizontal_or_component_overflow": true,
+    "all_required_behavior_checks_passed": true,
+    "state_keywords_at_least_16px": true,
+    "four_critical_components_and_titles_visible": true,
+    "main_case_is_real_opportunity": true,
+    "main_case_identity_matches_audits": true,
+    "semantic_state_contract_present": true,
+    "motion_contract_present": true,
+    "target_breakpoints_present": true,
+    "critical_local_environment_ready": true,
+    "feishu_connection_ready": true,
+    "source_health_reported_honestly": true
+  },
+  "passed": true,
+  "notes": [
+    "两种视口均由内置浏览器中的同源 iframe 加载真实主案例后测量，不使用手工填写结果。",
+    "主案例验收同时打开数字孪生、证据显微镜、公告变更影响和飞书战情室。",
+    "数据源降级或异常会继续保留在环境状态中，不因视觉验收而改写。"
+  ]
+}

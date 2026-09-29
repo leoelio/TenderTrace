@@ -1,0 +1,68 @@
+{
+  "feature": "可质询多角色会审",
+  "plan_reference": "提升方向六",
+  "date": "2026-09-27",
+  "status": "passed",
+  "schema_version": 43,
+  "automated_tests": {
+    "pytest_passed": 495,
+    "pytest_subtests_passed": 540,
+    "warnings": 1,
+    "elapsed_seconds": 84.69,
+    "focused_tests_passed": 27
+  },
+  "runtime": {
+    "base_url": "http://127.0.0.1:8000/",
+    "health": "ok",
+    "review_board_response_ms": 829,
+    "evidence_open_response_ms": 324,
+    "five_second_target_passed": true,
+    "unresolved_role_failures": 0
+  },
+  "acceptance": {
+    "real_disagreement_case": true,
+    "role_failure_recovery_case": true,
+    "all_opinions_link_evidence_and_revision": true,
+    "human_decision_not_overwritten": true,
+    "one_role_failure_keeps_other_results": true,
+    "affected_roles_only_after_revision": true,
+    "disagreement_evidence_under_five_seconds": true
+  },
+  "demo": {
+    "notice_id": "demo-review-opponent",
+    "title": "政务云投标专业对手盘",
+    "primary_review_id": "2f47214514cce18fd352ce72",
+    "notice_revision_id": "review-opponent-rev-1",
+    "first_run": {
+      "opinion_count": 4,
+      "failed_count": 1
+    },
+    "retry": {
+      "opinion_count": 1,
+      "failed_count": 0
+    },
+    "final_opinion_count": 5,
+    "human_decision": "returned",
+    "human_decision_note": "技术参数满足，但认证证书已过期；退回补证后再进入终审。",
+    "rerun_after_decision_scanned": 0,
+    "affected_role_run_ids": [
+      "70283fa6-8144-475a-aaaa-809688e5feed"
+    ],
+    "run_count": 6,
+    "digital_twin_disagreements": 2,
+    "proof": {
+      "real_disagreement": true,
+      "conclusion_conflict": true,
+      "evidence_linked": true,
+      "failure_preserved_other_results": true,
+      "single_role_retry_succeeded": true,
+      "human_decision_preserved": true,
+      "affected_roles_only": true
+    }
+  },
+  "naming_correction": {
+    "capability_passport_display_title": "政务云企业能力护照与逐项匹配矩阵",
+    "direction_number_visible_in_product_ui": false
+  },
+  "known_limit": "当前 Codex 内置浏览器控制组件路径缺失，无法生成自动页面截图；已完成静态入口、JavaScript、真实 HTTP/API 与服务验证。"
+}
